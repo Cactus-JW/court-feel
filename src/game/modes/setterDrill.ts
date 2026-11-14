@@ -189,10 +189,11 @@ export class SetterDrill extends Mode {
   }
 
   frame(dt: number): void {
-    // the floor rings: each hitter's spot for their call; the one your set goes to lit
+    // the floor rings (Settings: Hitter spots on the floor): each hitter's spot for their call; the one your set goes to lit
     const g = this.g;
     const lit = this.setTo();
     for (const [k, m] of this.markers) {
+      m.visible = g.settings.hitterSpots;
       const spot = callSpot(this.calls, k, this.outOfSystem);
       m.position.set(spot.x, 0.011, spot.z + 0.15);
       const mat = m.material as THREE.MeshBasicMaterial;

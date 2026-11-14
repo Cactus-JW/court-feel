@@ -21,11 +21,13 @@ import { isModeId, MODE_INFO, type ModeId } from '../game/modes/mode';
 import { athleteStats } from './athleteStats';
 import { ALL_CONTROLS, COMING_FORMATS, DRILL_INFO, HITTERS, PLAY_MODES, SETTER_CALLS, TRAIN_MODES, type KeyHint } from './drillInfo';
 import { ICONS, type IconName } from './icons';
+import { buildPlayDesigner } from './playDesigner';
 
 /** the start screen's sections */
 type View = 'home' | 'train' | 'play' | 'learn';
 /** the full-screen sheets that open over the start screen or the pause menu */
-type SheetId = 'settings' | 'athlete';
+type SheetId = 'settings' | 'athlete' | 'plays';
+const SHEET_NAME: Record<SheetId, string> = { settings: 'Settings', athlete: 'Athlete', plays: 'Plays' };
 
 const NAV: readonly { id: View; label: string }[] = [
   { id: 'home', label: 'Home' },
@@ -310,7 +312,12 @@ export class Menu {
     set.type = 'button';
     set.setAttribute('aria-label', 'Settings');
     set.onclick = () => this.openSettings(set);
-    right.append(athlete, set);
+    // your own plays for the play wheel (when you set)
+    const plays = h('button', 'pill', `${ICONS.court}<span>Plays</span>`);
+    plays.type = 'button';
+    plays.setAttribute('aria-label', 'Plays: design your own for the play wheel');
+    plays.onclick = () => this.openSheet('plays', plays);
+    right.append(plays, athlete, set);
     bar.append(brand, nav, right);
     return bar;
   }
@@ -873,8 +880,8 @@ export class Menu {
     // switching between the two sheets keeps the button that opened the first
     if (!this.settingsOpen) this.settingsOpener = opener ?? null;
     this.sheet.dataset.sheet = id;
-    this.sheet.setAttribute('aria-label', id === 'settings' ? 'Settings' : 'Athlete');
-    this.sheet.replaceChildren(id === 'settings' ? this.buildSettings() : this.buildAthlete());
+    this.sheet.setAttribute('aria-label', SHEET_NAME[id]);
+    this.sheet.replaceChildren(id === 'settings' ? this.buildSettings() : id === 'athlete' ? this.buildAthlete() : this.buildPlays());
     this.sheet.style.display = 'flex';
     this.settingsOpen = true;
     // the screens underneath are out of reach while it is open (Tab stays in the sheet)
@@ -905,7 +912,7 @@ export class Menu {
   /** a sheet's top row: its name, the way to the other sheet, and DONE */
   private sheetHead(title: string, other: SheetId): HTMLElement {
     const head = h('div', 'sheet-head');
-    const swap = btn('ghost-btn', other === 'athlete' ? 'Athlete' : 'Settings');
+    const swap = btn('ghost-btn', SHEET_NAME[other]);
     swap.onclick = () => this.openSheet(other);
     const done = btn('play-btn', 'DONE');
     done.onclick = () => this.closeSettings();
@@ -1072,6 +1079,7 @@ export class Menu {
       sw('Set slow-mo', 'setSlowmo'),
       sw('Set ring and bar', 'setRing'),
       sw('Keep my pick', 'keepSetPick', 'When you set: the hitter you picked stays picked for the next ball.'),
+      sw('Hitter spots on the floor', 'hitterSpots', 'When you set: a ring on the floor where each hitter hits from.'),
       sw('Landing marker', 'landingMarker'),
       sw('Hints', 'showHints', 'The key hint at the bottom, and the timing collar around the charge ring.'),
     ]);
@@ -1120,6 +1128,13 @@ export class Menu {
     main.append(panels, foot);
     body.append(rail, main);
     box.append(this.sheetHead('Settings', 'athlete'), body);
+    return box;
+  }
+
+  /** Plays: design your own play and put it on the play wheel (src/ui/playDesigner.ts) */
+  private buildPlays(): HTMLElement {
+    const box = h('div', 'sheet-box');
+    box.append(this.sheetHead('Plays', 'settings'), buildPlayDesigner());
     return box;
   }
 

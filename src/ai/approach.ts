@@ -20,6 +20,12 @@ export interface ApproachPlan {
   from: THREE.Vector3;
   total: number;
   bend: number;
+  /** a pin hitter going inside (AI.insideRun): a broad jump along the run, and the swing goes with it */
+  inside: boolean;
+  /** fraction of the run's speed kept through the plant */
+  carry: number;
+  /** the turn of a curved run is done over this much of the way (the rest is the plant and the jump) */
+  ground: number;
   /** body yaw during the run and in the air */
   runYaw: number;
   airYaw: number;
@@ -54,15 +60,26 @@ export function bendFor(dir: THREE.Vector3, side: 1 | -1, total: number): number
   return bend > 0 ? -Math.sign(alpha) * bend : 0;
 }
 
+/** is a run along `dir` (unit) a pin hitter's run inside? Far off square to the net, and long enough to be at speed */
+export function isInsideRun(dir: THREE.Vector3, side: 1 | -1, total: number): boolean {
+  const I = AI.insideRun;
+  return total >= I.minRun && Math.abs(Math.atan2(side * dir.x, -side * dir.z)) > I.angle;
+}
+
+/** how much of a curved run is on the floor, where it turns: less when the jump is a broad jump (AI.insideRun) */
+function groundFor(carry: number): number {
+  return carry > PLAYER.plantCarry ? AI.insideRun.ground : AI.approach.ground;
+}
+
 /** the direction to run at `pos` on a plan's (curved) run: turns from one side of `dir` to the other as the run goes */
 export function runDir(
-  p: { dir: THREE.Vector3; from: THREE.Vector3; total: number; bend: number },
+  p: { dir: THREE.Vector3; from: THREE.Vector3; total: number; bend: number; ground?: number },
   pos: { x: number; z: number },
   out: THREE.Vector3,
 ): THREE.Vector3 {
   if (!p.bend || p.total <= 0) return out.copy(p.dir);
   // the turn is finished by the plant: the last part of the way to the ball is flown, straight
-  const along = ((pos.x - p.from.x) * p.dir.x + (pos.z - p.from.z) * p.dir.z) / (p.total * AI.approach.ground);
+  const along = ((pos.x - p.from.x) * p.dir.x + (pos.z - p.from.z) * p.dir.z) / (p.total * (p.ground ?? AI.approach.ground));
   const phi = p.bend * (2 * Math.min(1, Math.max(0, along)) - 1);
   const c = Math.cos(phi);
   const s = Math.sin(phi);
@@ -86,6 +103,7 @@ export function simulateApproach(
   tc: number,
   bend = 0,
   total = 0,
+  carry = me.plantCarry,
 ): Athlete {
   const key = me.role + me.side;
   let a = _sim.get(key);
@@ -102,11 +120,13 @@ export function simulateApproach(
   a.onStep = a.onLand = a.onTakeoff = null;
   a.airNudge.set(0, 0, 0);
   a.copyBody(me);
+  a.plantCarry = carry;
   const dt = 1 / SIM.hz;
   let t = now;
   let pressed = false;
   let released = false;
-  const run = { dir, from: me.pos, total, bend };
+  // (a broad jump leaves the floor sooner: the turn is done sooner too)
+  const run = { dir, from: me.pos, total, bend, ground: groundFor(carry) };
   while (t < tc - 1e-9) {
     const running = t >= tStart && !pressed;
     if (running) runDir(run, a.pos, _d);
@@ -172,6 +192,8 @@ function planTo(
     const dir = new THREE.Vector3();
     let total = 0;
     let bend = 0;
+    let inside = false;
+    let carry = PLAYER.plantCarry;
     let lo = now;
     let r = me;
     for (let k = 0; k < 4; k++) {
@@ -180,16 +202,21 @@ function planTo(
       if (total > 1e-4) dir.normalize();
       else dir.set(0, 0, -me.side);
       bend = curved ? bendFor(dir, me.side, total) : 0;
+      // (decided on the first line to the feet: the aim corrections must not flip it)
+      if (k === 0) {
+        inside = curved && isInsideRun(dir, me.side, total);
+        carry = inside ? AI.insideRun.carry : PLAYER.plantCarry;
+      }
       lo = now;
       let hi = tPress;
       for (let i = 0; i < 11; i++) {
         const mid = (lo + hi) / 2;
-        const s = simulateApproach(me, now, mid, tPress, hold, dir, runYaw, airYaw, tc, bend, total);
+        const s = simulateApproach(me, now, mid, tPress, hold, dir, runYaw, airYaw, tc, bend, total, carry);
         const along = (s.pos.x - me.pos.x) * dir.x + (s.pos.z - me.pos.z) * dir.z;
         if (along > total) lo = mid;
         else hi = mid;
       }
-      r = simulateApproach(me, now, lo, tPress, hold, dir, runYaw, airYaw, tc, bend, total);
+      r = simulateApproach(me, now, lo, tPress, hold, dir, runYaw, airYaw, tc, bend, total, carry);
       const mx = r.pos.x - feet.x;
       const mz = r.pos.z - feet.z;
       if (!bend || Math.hypot(mx, mz) < 0.04) break;
@@ -205,6 +232,9 @@ function planTo(
       from: me.pos.clone(),
       total,
       bend,
+      inside,
+      carry,
+      ground: groundFor(carry),
       runYaw,
       airYaw,
       contact,
@@ -325,6 +355,7 @@ export function predictJump(me: Athlete, now: number, releaseAt = now, minT = 0)
   a.loadRelease = me.loadRelease;
   a.jumpH = me.jumpH;
   a.copyBody(me);
+  a.plantCarry = me.plantCarry;
   a.takeoffT = me.takeoffT;
   a.takeoffY = me.takeoffY;
   a.takeoffYaw = me.takeoffYaw;

@@ -4,7 +4,7 @@ import { clamp, yawFromDir } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
 import type { Game } from '../game/game';
 import { attackHeight, quickSpot, type AttackLane } from '../game/plays';
-import { planApproach, planQuick, planToPoint, riseTime, runDir, type ApproachPlan } from './approach';
+import { bendFor, isInsideRun, planApproach, planQuick, planToPoint, riseTime, runDir, type ApproachPlan } from './approach';
 import { moveTo, netYaw, stop, type Brain } from './brain';
 import { blockHands, ContactSystem, type SetResult } from '../game/contact';
 import { netClearance, solveSpeedToFloor } from '../physics/solve';
@@ -64,6 +64,38 @@ export class HitterBrain implements Brain {
     this.pendingRun = null;
     this.missedRun = false;
     this.tempo = false;
+    this.settle();
+  }
+
+  /** back to an ordinary plant and swing (after a run inside: AI.insideRun) */
+  private settle(): void {
+    this.athlete.plantCarry = PLAYER.plantCarry;
+    this.athlete.swingCarry = 0;
+  }
+
+  /** this approach is on: a run inside keeps its speed through the plant, and the swing goes with it */
+  private take(plan: ApproachPlan): void {
+    this.plan = plan;
+    this.athlete.plantCarry = plan.carry;
+    this.athlete.swingCarry = plan.inside ? AI.insideRun.swing : 0;
+  }
+
+  /**
+   * Where the body faces in the air on a run to a ball met over (x, z): on a run inside
+   * (AI.insideRun), where the run is going as it ends, so the swing goes with it. Null: not one.
+   */
+  private insideYaw(x: number, z: number): number | null {
+    const a = this.athlete;
+    const d = _run.set(x - a.pos.x, 0, z - a.pos.z);
+    const total = d.length();
+    if (total < 1e-3) return null;
+    d.normalize();
+    if (!isInsideRun(d, a.side, total)) return null;
+    // the run arrives `bend` nearer to square than the line it is on (runDir)
+    const bend = bendFor(d, a.side, total);
+    const c = Math.cos(bend);
+    const s = Math.sin(bend);
+    return yawFromDir(d.x * c - d.z * s, d.x * s + d.z * c);
   }
 
   /**
@@ -83,7 +115,7 @@ export class HitterBrain implements Brain {
 
   /** run an approach planned before the set: a second-tempo call (on the last steps as the setter touches it) */
   runPlan(plan: ApproachPlan, g: Game): void {
-    this.plan = plan;
+    this.take(plan);
     this.phase = 'approach';
     this.swung = false;
     this.err = g.rng.gauss() * (0.012 + (1 - this.skill) * 0.06);
@@ -145,7 +177,8 @@ export class HitterBrain implements Brain {
           this.missedRun = g.ball.active;
         } else if (run && a.state === 'ground' && this.readyToRun(spot, now, run.tc - riseTime(a.jumpMax))) {
           this.pendingRun = null;
-          const plan = planToPoint(a, now, run.contact, run.tc, face, face, undefined, true);
+          const air = this.insideYaw(run.contact.x, run.contact.z) ?? face;
+          const plan = planToPoint(a, now, run.contact, run.tc, face, air, undefined, true);
           if (plan && plan.error < 0.6) {
             this.runPlan(plan, g);
             break;
@@ -167,10 +200,10 @@ export class HitterBrain implements Brain {
             const plan = this.lane.quick
               ? planQuick(a, now, quickSpot(ps.x, a.side, this.inFront), ps.t, face, face, undefined, true)
               : fast
-                ? planToPoint(a, now, contact, ps.t + AI.tempo.flight, face, face, undefined, true)
+                ? planToPoint(a, now, contact, ps.t + AI.tempo.flight, face, this.insideYaw(contact.x, contact.z) ?? face, undefined, true)
                 : null;
             if (plan && plan.error < 0.6) {
-              this.plan = plan;
+              this.take(plan);
               this.tempo = !this.lane.quick;
               this.phase = 'approach';
               this.swung = false;
@@ -182,9 +215,11 @@ export class HitterBrain implements Brain {
         if (g.ball.active && this.isMySet(g) && a.state === 'ground') {
           const pred = g.ball.ensurePrediction(g.env, now);
           const aim = this.chooseAim(g, pred.land.x);
-          const airYaw = yawFromDir(aim.x - this.lane.x, aim.z - this.lane.z);
-          this.plan = planApproach(a, pred, now, face, airYaw, undefined, true);
-          if (this.plan) {
+          // (a run inside faces where it is going: the swing goes with the run)
+          const airYaw = this.insideYaw(pred.land.x, pred.land.z) ?? yawFromDir(aim.x - this.lane.x, aim.z - this.lane.z);
+          const plan = planApproach(a, pred, now, face, airYaw, undefined, true);
+          if (plan) {
+            this.take(plan);
             this.tempo = false;
             this.phase = 'approach';
             this.swung = false;
@@ -261,6 +296,7 @@ export class HitterBrain implements Brain {
           if (a.action?.kind === 'swing' && a.action.resolved) a.endAction();
           this.phase = 'ready';
           this.plan = null;
+          this.settle();
         }
         break;
       }
@@ -271,15 +307,16 @@ export class HitterBrain implements Brain {
    * Off your green set: the bounce. A full swing as steep as the net allows: of the spots a
    * full-speed spike from `from` brings down inside the court and over the tape (straight ahead
    * or across, at AI.greenBounce.depths from the net), the nearest one that does not cross the
-   * net over a blocker's hands. Null when no such shot exists (a ball hit from too deep, a block
-   * across everything).
+   * net over a blocker's hands. A pin hitter going inside (AI.insideRun) bounces it where the run
+   * is going, if that is clear: the swing is along the run, with the body's speed in it. Null
+   * when no such shot exists (a ball hit from too deep, a block across everything).
    */
   private bounce(g: Game, from: V3, hitX: number): THREE.Vector3 | null {
     const a = this.athlete;
     const B = AI.greenBounce;
     const opp = -a.side;
     const hw = COURT.halfWidth;
-    const speed = CONTACT.spikePerfect * a.stats.power;
+    const full = CONTACT.spikePerfect * a.stats.power;
     // the hands that will be there: blockers up or going up now (one still standing can't get up in time)
     const hands = this.blockers()
       .filter((b) => Math.abs(b.pos.z) < 1.4 && (b.state === 'air' || b.state === 'load' || b.action?.kind === 'block'))
@@ -287,6 +324,28 @@ export class HitterBrain implements Brain {
     const out = { x: 0, y: 0, z: 0 };
     const w = { x: 0, y: 0, z: 0 };
     const land = { x: 0, y: 0, z: 0 };
+    /** can a full swing put it down at (x, z): in, over the tape, and not over a blocker's hands? */
+    const ok = (x: number, z: number): boolean => {
+      const dx = x - from.x;
+      const dz = z - from.z;
+      // (hit on the move, the body's speed along the shot is in the ball: see ContactSystem)
+      const speed = full + a.swingCarry * Math.max(0, (a.vel.x * dx + a.vel.z * dz) / (Math.hypot(dx, dz) || 1));
+      solveSpeedToFloor(from, x, z, speed, CONTACT.spikeSpinPerfect, out, w, land);
+      // a full swing can't bring it down there, or it would not clear the tape
+      if (Math.hypot(land.x - x, land.z - z) > 0.5 || Math.abs(land.x) > hw - 0.3) return false;
+      const c = netClearance(from, out, w);
+      if (!c || c.y < g.env.netTop + BALL.radius + B.clear) return false;
+      // past the block: not over a blocker's hands
+      return !hands.some((bx) => Math.abs(c.x - bx) < CONTACT.blockHalfWidth + BALL.radius + B.hands);
+    };
+    // going inside: with the run, where the body is already going
+    const run = this.runsInside();
+    if (run !== null)
+      for (const depth of B.depths) {
+        const z = opp * depth;
+        const x = clamp(from.x + run * Math.abs(z - from.z), -hw + 0.9, hw - 0.9);
+        if (ok(x, z)) return new THREE.Vector3(x, 0, z);
+      }
     // straight ahead, and across the court either way
     const xs = [clamp(hitX, -hw + 0.9, hw - 0.9), -hw + 0.9, -hw * 0.5, 0, hw * 0.5, hw - 0.9];
     let best: THREE.Vector3 | null = null;
@@ -296,19 +355,23 @@ export class HitterBrain implements Brain {
         const z = opp * depth;
         // the steepest one wins: the shortest way to the floor
         const far = Math.hypot(x - from.x, z - from.z);
-        if (far >= bestD) continue;
-        solveSpeedToFloor(from, x, z, speed, CONTACT.spikeSpinPerfect, out, w, land);
-        // a full swing can't bring it down there, or it would not clear the tape
-        if (Math.hypot(land.x - x, land.z - z) > 0.5 || Math.abs(land.x) > hw - 0.3) continue;
-        const c = netClearance(from, out, w);
-        if (!c || c.y < g.env.netTop + BALL.radius + B.clear) continue;
-        // past the block: not over a blocker's hands
-        if (hands.some((bx) => Math.abs(c.x - bx) < CONTACT.blockHalfWidth + BALL.radius + B.hands)) continue;
+        if (far >= bestD || !ok(x, z)) continue;
         bestD = far;
         best = new THREE.Vector3(x, 0, z);
       }
     }
     return best;
+  }
+
+  /**
+   * On a run inside (AI.insideRun), in the air and still moving with it: how far the body goes
+   * along the net for each metre towards it (signed, x per z). Null otherwise.
+   */
+  private runsInside(): number | null {
+    const a = this.athlete;
+    const toNet = -a.side * a.vel.z;
+    if (!this.plan?.inside || toNet < 0.5) return null;
+    return a.vel.x / toNet;
   }
 
   /**
@@ -407,6 +470,11 @@ export class HitterBrain implements Brain {
           { x: crossX * 0.92, z: opp * 2.8, w: 0.22, name: 'cut' },
           { x: hitX * 0.15, z: opp * 6.5, w: 0.6, name: 'seam' },
         ];
+    // going inside, the swing goes with the run more often than anywhere else (off your green set
+    // that is the bounce above, or nothing: a green set never swings into the block)
+    const run = from && !green ? this.runsInside() : null;
+    if (run !== null && from)
+      options.push({ x: clamp(from.x + run * (Math.abs(from.z) + 6), -hw + 0.8, hw - 0.8), z: opp * 6, w: 2, name: 'with the run' });
     // from behind the 3 m line (a pipe) the ball is hit deep: the short angles cannot come down
     // that soon (the spike would carry deep, over a different part of the net)
     if (Math.abs(a.pos.z) > COURT.attackLine - 0.5)

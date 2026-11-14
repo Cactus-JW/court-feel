@@ -467,6 +467,12 @@ export class ContactSystem {
       const base = serve ? CONTACT.serveJumpSpeed : rank === 3 ? CONTACT.spikePerfect : rank === 2 ? CONTACT.spikeGood : CONTACT.spikeOk;
       const gradeK = serve ? (rank === 3 ? 1.1 : rank === 2 ? 1 : 0.8) : 1;
       speed = base * gradeK * pos.power * lerp(0.88, 1.0, hf) * (dc > reach ? 0.86 : 1) * power;
+      // hit on the move (an AI pin hitter going inside): the body's speed along the shot is in the hand too
+      if (!serve && a.swingCarry) {
+        const dx = target.x - bp.x;
+        const dz = target.z - bp.z;
+        speed += a.swingCarry * Math.max(0, (a.vel.x * dx + a.vel.z * dz) / (Math.hypot(dx, dz) || 1));
+      }
       // a serve's topspin comes from the same arm speed as its pace: a slower, mistimed swing spins it less
       const spin = serve
         ? CONTACT.serveJumpSpin * Math.min(1, speed / CONTACT.serveJumpSpeed)

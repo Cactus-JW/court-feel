@@ -152,14 +152,19 @@ describe('picking the hitter (1-4) and their set (the same key again)', () => {
     expect(c.play('MB').short).toBe(SETTER_PLAYS.MB[0].short);
     expect(c.play('OPP').short).toBe(SETTER_PLAYS.OPP[0].short);
   });
-  it('the pipe has two: the pipe and the bic, the fast pipe', () => {
+  it('the pipe has three: the pipe, the bic (the fast pipe) and the pipe right behind the setter', () => {
     const c = new SetterCalls();
     c.press('PIPE');
     expect(c.label('PIPE')).toBe('Pipe');
     c.press('PIPE');
     expect(c.label('PIPE')).toBe('Bic');
-    expect(c.step('PIPE')).toEqual({ i: 1, n: 2 });
+    expect(c.step('PIPE')).toEqual({ i: 1, n: 3 });
     expect(c.play('PIPE').lane.apexAbove).toBeLessThan(SETTER_PLAYS.PIPE[0].lane.apexAbove);
+    c.press('PIPE');
+    expect(c.label('PIPE')).toBe('Behind');
+    // behind the setter's back (they face the outside), and a back-row ball like the pipe
+    expect(c.play('PIPE').lane.x).toBeGreaterThan(SETTER_SPOT.x);
+    expect(c.play('PIPE').lane.z).toBe(SETTER_PLAYS.PIPE[0].lane.z);
   });
   it('once the pass is played the calls are locked: the picked key again only asks for a high ball (again: back to the call)', () => {
     const c = new SetterCalls();
@@ -223,7 +228,7 @@ describe('picking the hitter (1-4) and their set (the same key again)', () => {
     const row = (k: SetterKey) => strip.items.find((i) => i.id === k)!;
     expect(row('OH')).toMatchObject({ lit: true, picked: false, step: 0, steps: SETTER_PLAYS.OH.length });
     expect(row('MB')).toMatchObject({ call: 'Shoot', step: 1, off: true, lit: false });
-    expect(row('PIPE')).toMatchObject({ call: '', steps: 2 });
+    expect(row('PIPE')).toMatchObject({ call: '', steps: 3 });
     c.press('OPP');
     expect(callSheet(c, SETTER_KEYS, c.target()).items.find((i) => i.id === 'OPP')).toMatchObject({ lit: true, picked: true });
   });

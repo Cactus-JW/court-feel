@@ -258,7 +258,7 @@ export class MiniRally extends Mode {
       const late = this.userSetter && this.outOfSystem && noMiddle && !canAskFast(g, g.me, c, 'MB');
       g.hud.setCallSheet(callSheet(c, keys, lit, late ? ['MB'] : []));
       // the spot you are setting to, in the hitter's colour, while the ball is yours to set
-      const show = yours;
+      const show = yours && g.settings.hitterSpots;
       this.pickRing.visible = show;
       if (show) {
         const spot = callSpot(c, lit, oos);

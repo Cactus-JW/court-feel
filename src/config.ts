@@ -1182,6 +1182,36 @@ export const AUDIO = {
   setLoad: { f0: 392, f1: 784, gain: 0.035, start: 0.35, over: 0.4 },
 };
 
+/**
+ * The play designer (start screen, Plays): what a hitter's route may be, so that every play you
+ * can save is one the hitters can run and the setter can set. Metres, home side (x: left - /
+ * right +, z: from the net).
+ * - `hitX` / `pipeX`: how far from the middle of the net a front-row / back-row hitter is set.
+ * - `quickX`: where a quick can be hit: within a quick set's reach of the setter (in front, or behind the back).
+ * - A run starts within `startX` of the middle; `frontZ` / `quickZ` / `pipeZ` are how far off the
+ *   net it starts (a quick's run is short, a back-row hitter takes off behind the 3 m line), and a
+ *   quick or a back-row run starts within `startOff` m along the net of where it is hit.
+ * - Tempos: a set peaking less than `fastBelow` m above the contact is fast, from `highFrom` m a
+ *   high ball, between them medium. A designed fast / medium set peaks `apex` m above the contact
+ *   and is met `fastZ` m off the net (a high ball is the position's own).
+ * - `nameMax`: the longest name that fits the wheel.
+ */
+export const PLAYBOOK = {
+  hitX: 4.1,
+  pipeX: 3.2,
+  quickX: [-1.8, 2.8],
+  startX: 5.2,
+  frontZ: [3.0, 5.0],
+  quickZ: [2.6, 3.2],
+  pipeZ: [5.0, 6.0],
+  startOff: 1.5,
+  fastBelow: 0.6,
+  highFrom: 1.0,
+  apex: { fast: 0.45, mid: 0.8 },
+  fastZ: 0.8,
+  nameMax: 16,
+} as const;
+
 export const AI = {
   reactionTime: 0.18,
   /**
@@ -1536,6 +1566,18 @@ export const AI = {
    * in on an X or a 2; a straight diagonal line at the spot is what nobody does.
    */
   approach: { straight: 0.35, share: 0.8, maxBend: 0.42, minRun: 1.5, ground: 0.6 },
+  /**
+   * A pin hitter going inside (the 3, the 2, the X, the back 2): a run more than `angle` rad off
+   * square to the net, at least `minRun` m long. They wait where their pin sets start and break
+   * inside as late as the sprint allows, and they do not brake for the jump: `carry` of the run's
+   * speed is kept through the plant (a standing plant keeps PLAYER.plantCarry), so the jump is a
+   * broad jump along the run and the ball is met on the move. They hit where they are going: the
+   * swing is along the run, and `swing` of the body's speed along the shot goes into the ball (a
+   * hand moves with the body it is on). Off your green set that is the bounce, along the run.
+   * A broad jump leaves the floor sooner, so the run's turn (`approach`) is done over the first
+   * `ground` of the way.
+   */
+  insideRun: { angle: 0.7, minRun: 2.5, carry: 0.62, swing: 1, ground: 0.45 },
   greenBlockGuess: 2.2,
   greenBite: { maxOff: 4.5, runSpeed: 2, runPenalty: 3, lead: 0.2 },
   greenBounce: { depths: [2.4, 2.9, 3.4, 4.0, 4.8, 5.8], clear: 0.05, hands: 0.35 },
@@ -1566,6 +1608,8 @@ export interface Settings {
   setLevel: SetLevel;
   /** when you set: the hitter you picked stays picked for the next ball (off: back to the outside) */
   keepSetPick: boolean;
+  /** when you set: rings on the floor where your hitters hit from (off by default: the marker over the hitter and the arc say it) */
+  hitterSpots: boolean;
   aimAssist: number;
   landingMarker: boolean;
   replays: boolean;
@@ -1595,6 +1639,7 @@ export const DEFAULT_SETTINGS: Settings = {
   setRing: true,
   setLevel: 'easy',
   keepSetPick: false,
+  hitterSpots: false,
   aimAssist: ASSIST.aim,
   landingMarker: true,
   replays: true,

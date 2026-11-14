@@ -254,11 +254,25 @@ describe('a run across the court loops in (AI hitters)', () => {
     expect(curved.error).toBeLessThan(0.12);
     // run both: how square to the net is each when the feet leave the floor?
     const heading = (p: typeof curved) => {
-      const a = simulateApproach(opp, 0, p.tStart, p.tPress, p.hold, p.dir, p.runYaw, p.airYaw, p.tPress + p.hold + 0.03, p.bend, p.total);
+      const a = simulateApproach(
+        opp,
+        0,
+        p.tStart,
+        p.tPress,
+        p.hold,
+        p.dir,
+        p.runYaw,
+        p.airYaw,
+        p.tPress + p.hold + 0.03,
+        p.bend,
+        p.total,
+        p.carry,
+      );
       return offSquare(a.vel);
     };
     expect(heading(curved)).toBeLessThan(heading(straight) - 8);
-    expect(heading(curved)).toBeLessThan(40);
+    // (a run inside is a broad jump along the run, AI.insideRun: squarer than the line, not square)
+    expect(heading(curved)).toBeLessThan(45);
   });
 });
 

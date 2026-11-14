@@ -93,7 +93,7 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
     keys: [
       { k: 'W A S D', a: 'Get under the ball' },
       { k: '1 to 4', a: 'Pick a hitter. Again: their next set' },
-      { k: 'C', a: 'Hold: the play wheel. Let go on a play' },
+      { k: 'C', a: 'Hold: the play wheel. Let go on a play. Plays (top bar) makes your own' },
       { k: 'G', a: 'Front row: the opposite hits the D, and 5 is your dump' },
       { k: 'Right mouse', a: 'Set: press as it reaches your hands, release in the green' },
     ],
@@ -212,7 +212,10 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       rows: [
         { k: '1  2  3', a: 'Call your set (Spike Drill, Mini Rally; hitters)' },
         { k: '1 to 4', a: 'Pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
-        { k: 'C', a: 'The play wheel when you set: hold, move to a play, let go (Setter Drill, Mini Rally)' },
+        {
+          k: 'C',
+          a: 'The play wheel when you set: hold, move to a play, let go (Setter Drill, Mini Rally). Plays in the top bar makes your own',
+        },
         { k: 'G   5', a: 'Front row, and your dump there (Setter Drill)' },
         { k: 'H', a: "Help: you can't get to the second ball (Mini Rally)" },
         { k: 'B', a: 'Opposing block: off, single, double (Spike Drill)' },

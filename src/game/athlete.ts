@@ -144,6 +144,10 @@ export class Athlete {
   ballVel: { x: number; y: number; z: number } | null = null;
   /** assist nudge velocity in air */
   readonly airNudge = new THREE.Vector3();
+  /** fraction of the run's speed kept through the plant (an AI pin hitter going inside keeps more: AI.insideRun) */
+  plantCarry: number = PLAYER.plantCarry;
+  /** how much of the body's speed along the shot goes into a spike (an AI pin hitter going inside: AI.insideRun) */
+  swingCarry = 0;
   jersey = 0;
   name = '';
   number = 0;
@@ -377,7 +381,7 @@ export class Athlete {
     } else if (this.state === 'load') {
       this.loadT += dt;
       // plant: brake hard down to the carried fraction of approach speed
-      const target = this.loadApproach * PLAYER.plantCarry;
+      const target = this.loadApproach * this.plantCarry;
       const sp = this.speed;
       if (sp > target) {
         const ns = Math.max(target, sp - 24 * dt);

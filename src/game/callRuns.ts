@@ -17,6 +17,7 @@ import {
   setterTouchY,
   type AttackLane,
 } from './plays';
+import { wheelPlays } from './playbook';
 import { SET_PICKS, SETTER_KEYS, type SetPick, type SetterCalls, type SetterKey } from './setterCalls';
 
 /**
@@ -250,7 +251,7 @@ export function callSheet(calls: SetterCalls, keys: readonly SetPick[], shown: S
     }),
     locked: calls.locked,
     /** the combination the calls make, if they are one */
-    play: calls.canCall ? (calls.combo()?.name ?? '') : '',
+    play: calls.canCall ? (calls.combo(wheelPlays())?.name ?? '') : '',
   };
 }
 export type CallSheetView = ReturnType<typeof callSheet>;

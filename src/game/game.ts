@@ -20,7 +20,7 @@ import type { BallEnv } from '../physics/ball';
 import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
 import type { Kit } from '../character/rig';
-import { COMBOS } from './combos';
+import { wheelPlays } from './playbook';
 import { setStepAssist } from './setAssist';
 import { aimTargetFromLook, ContactSystem, type ContactEvent, type IdealInfo, type SetPreview } from './contact';
 import { SetGuide } from '../fx/setGuide';
@@ -787,17 +787,18 @@ export class Game {
     }
     if (!w.open) {
       if (!pressed) return false;
-      w.show(calls.combo());
+      w.show(calls.combo(wheelPlays()));
     } else if (pressed) {
       w.hide();
       return false;
     }
     w.move(dx, dy);
     let pick = -1;
-    for (let i = 0; i < COMBOS.length; i++) if (this.input.consumePress('Digit' + (i + 1))) pick = i;
+    const plays = wheelPlays();
+    for (let i = 0; i < plays.length; i++) if (this.input.consumePress('Digit' + (i + 1))) pick = i;
     if (pick < 0 && w.sel >= 0 && (released || this.input.consumePress('Mouse0'))) pick = w.sel;
     if (pick < 0) return true;
-    if (calls.setCombo(COMBOS[pick])) this.hud.message(`Play · ${COMBOS[pick].name}`, 1.4);
+    if (calls.setCombo(plays[pick])) this.hud.message(`Play · ${plays[pick].name}`, 1.4);
     w.hide();
     return false;
   }

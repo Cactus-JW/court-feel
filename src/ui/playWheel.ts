@@ -1,7 +1,8 @@
 import { FX } from '../config';
 import { CALL_COLOR } from '../game/callRuns';
-import { COMBOS, type Combo } from '../game/combos';
-import { SETTER_PLAYS, SETTER_SPOT } from '../game/plays';
+import { comboPlay, COMBOS, type Combo } from '../game/combos';
+import { wheelPlays } from '../game/playbook';
+import { SETTER_SPOT } from '../game/plays';
 import { SETTER_KEYS } from '../game/setterCalls';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -14,8 +15,8 @@ export function wheelSlice(x: number, y: number, n: number, dead: number): numbe
 }
 
 /**
- * The play wheel: the setter's combinations (COMBOS), called before the pass like a hand signal
- * behind the back. Hold C and move the mouse towards a play, let go to call it (or press its
+ * The play wheel: the setter's combinations (COMBOS, or your own play where you saved one: the
+ * start screen's Plays), called before the pass like a hand signal behind the back. Hold C and move the mouse towards a play, let go to call it (or press its
  * number; on touch, tap PLAY and then the play). The centre shows what the play is: every
  * hitter's run on a little court, and their calls. It only sets the calls: who gets the ball is
  * still yours to choose at the touch.
@@ -28,6 +29,8 @@ export class PlayWheel {
   private y = 0;
   private el: HTMLDivElement;
   private slices: SVGPathElement[] = [];
+  private labels: SVGTextElement[] = [];
+  private plays: readonly Combo[] = COMBOS;
   private name: HTMLDivElement;
   private idea: HTMLDivElement;
   private court: SVGSVGElement;
@@ -48,7 +51,7 @@ export class PlayWheel {
     this.el.style.width = this.el.style.height = `${W.size}px`;
     const svg = document.createElementNS(SVG, 'svg');
     svg.setAttribute('viewBox', `0 0 ${W.size} ${W.size}`);
-    COMBOS.forEach((combo, i) => {
+    COMBOS.forEach((_, i) => {
       const a0 = (i - 0.5) / n;
       const a1 = (i + 0.5) / n;
       const p = document.createElementNS(SVG, 'path');
@@ -73,7 +76,7 @@ export class PlayWheel {
       t.setAttribute('x', x);
       t.setAttribute('y', String(+y + 8));
       t.setAttribute('class', 'pw-label');
-      t.textContent = combo.name;
+      this.labels.push(t);
       svg.append(num, t);
     });
     const mid = document.createElement('div');
@@ -97,7 +100,7 @@ export class PlayWheel {
     const py = (z: number) => (6 + z * 8.6).toFixed(1);
     let s = `<line x1="4" y1="6" x2="116" y2="6" class="pw-net"/><circle cx="${px(SETTER_SPOT.x)}" cy="${py(SETTER_SPOT.z)}" r="2.6" class="pw-setter"/>`;
     for (const k of SETTER_KEYS) {
-      const lane = SETTER_PLAYS[k].find((p) => p.short === combo.calls[k])?.lane;
+      const lane = comboPlay(combo, k)?.lane;
       if (!lane) continue;
       const col = `#${CALL_COLOR[k].toString(16).padStart(6, '0')}`;
       s += `<line x1="${px(lane.sx)}" y1="${py(lane.sz)}" x2="${px(lane.x)}" y2="${py(lane.z)}" stroke="${col}" class="pw-run"/>`;
@@ -111,7 +114,10 @@ export class PlayWheel {
     this.open = true;
     this.x = this.y = 0;
     this.sel = -1;
-    this.on = current ? COMBOS.indexOf(current) : -1;
+    // (your plays can change between two openings)
+    this.plays = wheelPlays();
+    this.labels.forEach((t, i) => (t.textContent = this.plays[i].name));
+    this.on = current ? this.plays.indexOf(current) : -1;
     this.shown = -2;
     this.el.style.display = 'block';
     this.draw();
@@ -142,7 +148,7 @@ export class PlayWheel {
     if (show === this.shown) return;
     this.shown = show;
     this.slices.forEach((p, i) => p.setAttribute('class', `pw-slice${i === this.sel ? ' sel' : i === this.on ? ' on' : ''}`));
-    const combo = show >= 0 ? COMBOS[show] : null;
+    const combo = show >= 0 ? this.plays[show] : null;
     this.name.textContent = combo ? combo.name : 'Call a play';
     this.idea.textContent = combo ? combo.idea : 'Move towards a play, or press its number';
     this.court.innerHTML = combo ? PlayWheel.runs(combo) : '';

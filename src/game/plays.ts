@@ -182,7 +182,7 @@ export const SET_PLAYS: Partial<Record<PositionId, SetPlay[]>> = {
     {
       name: 'Back 2 (behind the setter)',
       short: 'Back 2',
-      lane: { ...LANES.OPP, x: 2.45, z: 0.8, apexAbove: 0.6, sx: 3.7, sz: 3.2, label: 'Opposite back 2' },
+      lane: { ...LANES.OPP, x: 2.45, z: 0.8, apexAbove: 0.6, sx: 4.4, sz: 3.4, label: 'Opposite back 2' },
     },
   ],
 };
@@ -211,7 +211,9 @@ export const D_PLAY: SetPlay = {
  * - Middle: the push 1, a quick pushed a little further along the net than the 1.
  * - Opposite: the X (crossing in front of the setter to hit a 2 behind the middle's quick) and
  *   the back 1 (a quick behind the setter: with the middle's 1 it is the double quick).
- * - Pipe: the bic, the fast pipe.
+ * - Pipe: the bic, the fast pipe, and the pipe behind the setter (the "C": a back set to the back row).
+ * A pin hitter's inside calls (the 3, the 2, the X, the back 2) start where their pin sets start,
+ * or as near as the run allows: nothing gives the play away before they break inside (AI.insideRun).
  * A slide is not here: it needs a one-foot take-off off a curved run, which hitters can't do yet.
  */
 export const SETTER_PLAYS: Record<'OH' | 'MB' | 'OPP' | 'PIPE', SetPlay[]> = {
@@ -221,7 +223,7 @@ export const SETTER_PLAYS: Record<'OH' | 'MB' | 'OPP' | 'PIPE', SetPlay[]> = {
     {
       name: '2 (inside, behind the quick)',
       short: '2',
-      lane: { ...LANES.OH, x: -0.75, z: 0.8, apexAbove: 0.8, sx: -3.3, sz: 4.3, label: 'Outside 2 (tandem)' },
+      lane: { ...LANES.OH, x: -0.75, z: 0.8, apexAbove: 0.8, sx: -4.3, sz: 4.0, label: 'Outside 2 (tandem)' },
     },
   ],
   MB: [
@@ -233,8 +235,8 @@ export const SETTER_PLAYS: Record<'OH' | 'MB' | 'OPP' | 'PIPE', SetPlay[]> = {
     {
       name: 'X (crossing for a 2)',
       short: 'X',
-      // from further back than a pin approach, so the loop in ends squarer to the net (AI.approach)
-      lane: { ...LANES.OPP, x: -0.6, z: 0.8, apexAbove: 0.8, sx: 3.0, sz: 4.4, label: 'Opposite X' },
+      // from a step behind the pin approach's start, so the loop in ends squarer to the net (AI.approach)
+      lane: { ...LANES.OPP, x: -0.6, z: 0.8, apexAbove: 0.8, sx: 3.8, sz: 4.6, label: 'Opposite X' },
     },
     {
       name: 'Back 1 (quick behind)',
@@ -246,6 +248,8 @@ export const SETTER_PLAYS: Record<'OH' | 'MB' | 'OPP' | 'PIPE', SetPlay[]> = {
   PIPE: [
     { name: 'Pipe', short: 'Pipe', lane: LANES.L },
     { name: 'Bic (fast pipe)', short: 'Bic', lane: { ...LANES.L, apexAbove: 0.8, label: 'Back-row bic' } },
+    // right behind the setter's back: a short back set, met 2 m off the net like the pipe
+    { name: 'Pipe behind you (C)', short: 'Behind', lane: { ...LANES.L, x: 1.7, sx: 1.7, label: 'Back-row pipe behind the setter' } },
   ],
 };
 

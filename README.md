@@ -210,6 +210,7 @@ Settings → Hints, which is on by default.
 | 1 / 2 / 3 / 4 | When you set (Setter Drill, Mini Rally as the setter or libero): pick the hitter (outside, middle, opposite, pipe). No key: the outside. Press the picked one again for their next set: before the pass it steps through their calls (the pass locks them); once the pass is played it asks for a high ball (again: back to their call), unless they are already on a fast run. Off a pass far off the net everyone gets a high ball, and the key again asks that hitter for their fast set instead (picking the middle is the ask); they must hear it in time. |
 | 5 | Setter Drill, front row: your dump (again: short behind the block, or the deep corner). |
 | C | When you set: the play wheel. Hold C, move the mouse towards a play and let go (or press C, then the play's number or click). It calls a combination for all your hitters at once; before the pass only. |
+| Plays (start screen, top bar) | Design your own play (each hitter's route and tempo), name it, and put it on the play wheel in place of one of the built-in ones. |
 | G | Setter Drill: front row or back row. Front row, the opposite hits the D from the back row and you may dump. |
 | H | Mini Rally, when the second ball is yours and you can't get to it: HELP. The libero sets it if it can, else a team-mate bumps it up. |
 | B | Spike Drill: opposing block off / single / double, with its shadow drawn on their floor (see below) |
@@ -331,9 +332,9 @@ screen show them. Only your player uses them; AI players keep the defaults.
    green setter target. Passes are rated 0–3; your setter and hitter finish
    good passes.
 5. **Setter Drill** — passes come in. Pick a hitter with **1 / 2 / 3 / 4**
-   (outside, middle, opposite, pipe; the floor ring lights up, a marker sits
-   over the hitter and the call strip at the bottom shows who you are
-   setting). With no key the set goes to the outside: you never pick by
+   (outside, middle, opposite, pipe; a marker sits over the hitter and the
+   call strip at the bottom shows who you are setting; Settings can add a
+   ring on the floor where each hitter hits from). With no key the set goes to the outside: you never pick by
    looking, your eyes stay on the ball. Press the picked hitter's key again
    to step through their calls, or hold **C** for the play wheel and call a
    whole combination (see "Calls, plays and the dump"); the pass locks them
@@ -451,8 +452,9 @@ screen show them. Only your player uses them; AI players keep the defaults.
    while the other team has the ball (the serve waits for you). After
    blocking, they back off the net to the start of their run before they go;
    a hitter who can't make their fast run from there waits for a high ball,
-   and the call strip says so. Once the pass is up, a ring on the floor in
-   the hitter's colour shows the spot you are setting to. Off a pass far off
+   and the call strip says so. With **Hitter spots on the floor** on in
+   Settings, once the pass is up a ring in the hitter's colour shows the spot
+   you are setting to. Off a pass far off
    the net everything goes up high, unless you ask a hitter for their fast
    set in time. If you can't get to the ball at all, **H** calls for help: the
    libero sets it if it can, else a team-mate bumps it up.
@@ -544,7 +546,7 @@ calls (the names are the common ones from coaching glossaries; teams differ):
 | Outside (1) | High · Go (fast to the pin) · 3 (inside) · Hut (a lower outside) · 2 (inside, right behind the quick) |
 | Middle (2) | 1 (quick in front) · Shoot (31) · Back 1 · Push (a quick pushed further along the net) |
 | Opposite (3) | Back (the pin) · Fast · Back 2 · X (crossing in front of you for a 2 behind the quick) · Back 1 (a quick behind you) |
-| Pipe (4) | Pipe · Bic (the fast pipe) |
+| Pipe (4) | Pipe · Bic (the fast pipe) · Behind (the pipe right behind your back) |
 
 The **play wheel** (C) calls one for every hitter at once, before the pass, like
 a hand signal behind the back:
@@ -565,6 +567,28 @@ a one-foot take-off off a curved run. AI hitters running across the court (the
 X, the 2, the 3, a shoot) loop in: they start flatter along the net and turn
 towards it, so the last steps and the jump go into the court (`AI.approach`).
 
+**A pin hitter going inside** (the 3, the 2, the X, the back 2) waits within a
+step or two of where their pin sets start, so nothing gives the play away, and
+breaks inside as late as a sprint allows. They do not brake for the jump: it is
+a broad jump along the run (they keep 62% of the run's speed through the plant,
+38% off any other approach, and fly about 1.8 m to the ball on the X). They hit
+where they are going: the swing is along the run and the body's speed is in the
+ball, so off your green set the bounce goes with the run, some 15 km/h harder
+than the same hitter's standing swing (`AI.insideRun`).
+
+**Your own plays** (start screen: **Plays**, in the top bar). Pick the place on
+the wheel your play takes, then give every hitter a route on the little court:
+drag the ring to where their run starts and the dot to where they hit (or move
+them with the arrow keys; Shift for bigger steps), and choose the tempo of
+their set: Quick (in the air as you touch it), Fast, Mid or High. A hitter's own
+calls are one tap. Name it and save: it replaces the play in that place on the
+wheel (and shows as "Yours") until you put the built-in one back, and it is kept
+in this browser. Routes are kept to what the hitters can run and you can set
+(`PLAYBOOK`): a quick is hit within reach of the setter off a short run, a
+back-row hitter takes off behind the 3 m line and has no quick. On court a
+designed set joins that hitter's calls (their key again still steps through
+them) until you call another play.
+
 **Out of system** (a pass more than 1.6 m from your spot) everyone waits for a
 high ball. You can still ask a hitter for their fast set with their key again
 (the outside's go, the opposite's fast back, the middle's quick, or the fast
@@ -581,7 +605,9 @@ the tape and lands on its spot, an early or late one comes off the hands low and
 may find the net, and their block and back row play it as a tip.
 
 Settings: **Keep my pick** keeps the hitter you picked for the next ball
-(otherwise each ball starts on the outside).
+(otherwise each ball starts on the outside). **Hitter spots on the floor**
+(off by default) draws a ring where each hitter hits from; without it the
+marker over the hitter and the set's arc say who gets the ball.
 
 ### Replays
 
@@ -750,10 +776,11 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 | `ARENA` | The hall: floor mirror (size, strength, blur), the stands (`bowl`: tiers, rows, seats, how brightly the crowd is lit), how the net mesh goes in with a ball that is in it and settles after, lights, the final grade |
 | `VENUES` | The five venues: floor colours and how much the floor mirrors, the sky, the lights, haze, grade, the athletes' rim light, the crowd's light and sound, the boards, and whether the sky is open (`openSky`: no ceiling) |
 | `BALL_LOOK` | How deep the ball's seams look and how much it glows by itself |
-| `AI` | Your green set: who their middle bites on (`greenBite`, `greenBlockGuess`) and your hitter's bounce (`greenBounce`); how much an AI hitter's run across the court curves (`approach`); how late a hitter can still be asked for a fast set out of system (`oosAsk`); Reaction time and skill of hitters, blockers, defenders, setter accuracy; the Mini Rally middle blocker (`middle`: its reaction and read of the set, how often it commits on the quick or cheats to a pin, how close it closes on the pin blocker, how late it still jumps and how far it reaches sideways); how much room team-mates give each other (`giveWay`) and when the defence split-steps (`splitStep`); who the setter sets (`setWeight`) and how often the pipe (`pipe`); an overpass (`overpass`), an AI hitter misreading the user's block (`userBlockMisread`), who takes a ball (`pick`: first there takes it, the seam goes to the libero or you, the setter only when nobody else is close, a ball off a block or a second ball the libero gets to is the libero's); where an AI free ball over goes (`freeOver`: a deep corner or short, wherever they aren't); perimeter defence read spots and reaction times (`defence`), early transition and the front row's transition off the net after a block (`transition`, `approachOff`: no quick from the net) and covering our hitter in the real 3-2 spots (`cover`: when, the middle at the net, the setter on the 3 m line, the back row behind and deep, how fast a coverer reads a ball off the block); when the setter calls the pass (`setterRead`), how far off the net is out of system (`outOfSystem`) and how much higher an out-of-system set goes (`outOfSystemApex`); the AI's serves (`serve`: jump share, run-up, toss, error, where they aim); the attack: swing timing error (`attackErr`), the open spot (`openShot*`, `digReach`, `digTop`, `blockReachBand`), where a quick goes (`quickShot`), how often the setter goes to the middle (`quickWeight`), fast sets to the pins (`tempo`), tool, roll and recycle shots (`toolShot`, `rollShot`, `recycleShot`); the libero's set off a hard ball (`backupSet`: how much it misses, when it bumps instead; never a set to the user), what an AI dive does with the ball (`diveUp`: a bit up, toward the middle) and when a free ball is aimed (`freeOver.aimSpeed`), a setter too late for the hands digging it (`lateSet`); how far out a ball must land before a receiver lets it go (`outJudge`) and how much a hard ball rushes an AI passer's timing (`passPressure`); first balls overhand (`overhand`), dives (`dive`, `stretch`: a last-ditch dive at a ball just past the hands) and a second player running at a ball the first may not reach (`scramble`); your green set as a point (their middle's wrong guess, the wings' late read, the diggers' late start: `greenSet*`, `greenBlockGuess`) and how much harder your bad set is to hit (`badSetErr`, `badSetTip`); when a hitter backing off the net is ready for a called tempo run (`transitionReady`, `transitionLatest`) |
+| `PLAYBOOK` | The play designer: what a hitter's route may be (where it is hit, where the run starts, the tempos), and the longest name |
+| `AI` | A pin hitter going inside: how far off square the run is, how much speed is kept through the plant and how much of it goes into the ball (`insideRun`); Your green set: who their middle bites on (`greenBite`, `greenBlockGuess`) and your hitter's bounce (`greenBounce`); how much an AI hitter's run across the court curves (`approach`); how late a hitter can still be asked for a fast set out of system (`oosAsk`); Reaction time and skill of hitters, blockers, defenders, setter accuracy; the Mini Rally middle blocker (`middle`: its reaction and read of the set, how often it commits on the quick or cheats to a pin, how close it closes on the pin blocker, how late it still jumps and how far it reaches sideways); how much room team-mates give each other (`giveWay`) and when the defence split-steps (`splitStep`); who the setter sets (`setWeight`) and how often the pipe (`pipe`); an overpass (`overpass`), an AI hitter misreading the user's block (`userBlockMisread`), who takes a ball (`pick`: first there takes it, the seam goes to the libero or you, the setter only when nobody else is close, a ball off a block or a second ball the libero gets to is the libero's); where an AI free ball over goes (`freeOver`: a deep corner or short, wherever they aren't); perimeter defence read spots and reaction times (`defence`), early transition and the front row's transition off the net after a block (`transition`, `approachOff`: no quick from the net) and covering our hitter in the real 3-2 spots (`cover`: when, the middle at the net, the setter on the 3 m line, the back row behind and deep, how fast a coverer reads a ball off the block); when the setter calls the pass (`setterRead`), how far off the net is out of system (`outOfSystem`) and how much higher an out-of-system set goes (`outOfSystemApex`); the AI's serves (`serve`: jump share, run-up, toss, error, where they aim); the attack: swing timing error (`attackErr`), the open spot (`openShot*`, `digReach`, `digTop`, `blockReachBand`), where a quick goes (`quickShot`), how often the setter goes to the middle (`quickWeight`), fast sets to the pins (`tempo`), tool, roll and recycle shots (`toolShot`, `rollShot`, `recycleShot`); the libero's set off a hard ball (`backupSet`: how much it misses, when it bumps instead; never a set to the user), what an AI dive does with the ball (`diveUp`: a bit up, toward the middle) and when a free ball is aimed (`freeOver.aimSpeed`), a setter too late for the hands digging it (`lateSet`); how far out a ball must land before a receiver lets it go (`outJudge`) and how much a hard ball rushes an AI passer's timing (`passPressure`); first balls overhand (`overhand`), dives (`dive`, `stretch`: a last-ditch dive at a ball just past the hands) and a second player running at a ball the first may not reach (`scramble`); your green set as a point (their middle's wrong guess, the wings' late read, the diggers' late start: `greenSet*`, `greenBlockGuess`) and how much harder your bad set is to hit (`badSetErr`, `badSetTip`); when a hitter backing off the net is ready for a called tempo run (`transitionReady`, `transitionLatest`) |
 
 Player-facing settings (sensitivity, FOV, invert Y, net height, aim assist,
-slow-mo assist, set difficulty, set slow-mo, set ring and bar, keep my pick, landing marker, replays, camera shake, volume, hints, the venue, your
+slow-mo assist, set difficulty, set slow-mo, set ring and bar, keep my pick, hitter spots on the floor, landing marker, replays, camera shake, volume, hints, the venue, your
 hitting hand, and your custom height / vert / spike power per position) are in the pause menu and
 persist in `localStorage`. Camera shake also scales the
 impact FOV punch and camera kick (0 turns them off). Stored settings are
@@ -791,7 +818,11 @@ and **e2e** (below). Both should be required checks for merging into `main`.
   on your hands), the setter's keys (the picked key again steps their calls,
   after the pass only a high ball; out of system the key again asks for the
   fast set, in time), the plays (every play calls sets the hitters have; the
-  X crosses; the wheel's slices), the dump and the front row, their middle
+  X crosses; the wheel's slices), your own plays (an untouched route is the
+  hitter's call, a moved one a new set at its tempo; a quick stays within
+  reach of the setter; a saved play gives the hitters its routes; stored plays
+  are clamped), a pin hitter going inside (which runs are, the faster take-off
+  and the longer flight, the start near the pin start), the dump and the front row, their middle
   going up with a hitter you did not set, the bounce (steep, in, clear of the
   block's hands), runs across the court looping in, a hitter who can't make
   their run waiting for a high ball, a green set is a point (the
