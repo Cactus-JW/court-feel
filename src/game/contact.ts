@@ -85,6 +85,8 @@ export interface SetOption {
   dump?: boolean;
   /** a quick or a second-tempo set: harder to put exactly on the spot */
   fast?: boolean;
+  /** a high ball off a pass out of system: there is nothing to hide, everyone in the gym knows where it is going */
+  outOfSystem?: boolean;
 }
 
 /** the set coming down onto a setter's hands, then loading in them (see ContactSystem.setPreview) */
@@ -1119,7 +1121,9 @@ export class ContactSystem {
       out.x = bv.x * 0.15 + (h.rand() * 2 - 1) * 0.8;
       out.y = lerp(2.6, 4.2, h.rand());
       out.z = -a.side * lerp(1.2, 2.6, h.rand());
-    } else if (rank >= 2 && !edge && roll < stuffP) {
+    } else if (rank >= 2 && !edge && roll < stuffP && !lt.green) {
+      // (an attack off the user's green set is never stuffed: a perfect set lets the hitter see the
+      // block and swing high off the hands, so it comes off them soft or wide)
       // stuff: driven down into their court, close to the net
       kind = 'stuff';
       const sp = Math.max(9, incoming * (rank === 3 ? 0.62 : 0.45));

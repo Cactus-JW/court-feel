@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { AI, BALL, CONTACT, COURT, SIM } from '../src/config';
 import { bendFor, planToPoint, runDir, simulateApproach } from '../src/ai/approach';
-import { decoyFor, userGreen } from '../src/ai/greenBite';
+import { decoyFor, greenFools, userGreen } from '../src/ai/greenBite';
 import { HitterBrain } from '../src/ai/hitter';
 import { MiddleBlocker } from '../src/ai/middle';
 import { Athlete } from '../src/game/athlete';
 import type { Touch } from '../src/game/ballEntity';
 import { syncRuns, type CallHitters } from '../src/game/callRuns';
-import type { SetResult } from '../src/game/contact';
+import { blockHands, ContactSystem, type ContactHost, type SetResult } from '../src/game/contact';
 import type { Game } from '../src/game/game';
 import { attackHeight, laneFor, LANES, SETTER_PLAYS, SETTER_TARGET } from '../src/game/plays';
 import { SetterCalls } from '../src/game/setterCalls';
@@ -192,11 +192,23 @@ describe('your green set: the hitter bounces it', () => {
     expect(s.cross.y).toBeGreaterThan(env.netTop + BALL.radius);
   });
   it('it goes where the block is not: clear of a pin blocker’s hands, whichever shot they took away', () => {
-    for (const x of [-4.2, -3.6, -3.0]) {
+    const w0 = CONTACT.blockHalfWidth + BALL.radius;
+    // a blocker outside the hitter (the line taken away) or well inside (the cross): there is a bounce past them
+    for (const x of [-4.2, -3.0]) {
       const s = shot([pinBlocker(x)]);
       expect(s.brain.lastShot).toBe('bounce');
-      expect(Math.abs(s.cross.x - x)).toBeGreaterThan(CONTACT.blockHalfWidth + BALL.radius + AI.greenBounce.hands - 1e-6);
+      expect(Math.abs(s.cross.x - x)).toBeGreaterThan(w0 + AI.greenBounce.hands - 1e-6);
     }
+    // wherever the blocker is, the ball misses the hands at the tape and where they reach either
+    // side of it (a sharp cross from the pin runs along the net, past the hands before the tape).
+    // A blocker just inside the hitter leaves no bounce at all: the hitter takes another shot
+    for (const x of [-4.2, -3.6, -3.0]) {
+      const s = shot([pinBlocker(x)]);
+      const k = AI.blockReachBand / LANES.OH.z;
+      const along = (s.cross.x - LANES.OH.x) * k;
+      for (const px of [s.cross.x, s.cross.x - along, s.cross.x + along]) expect(Math.abs(px - x), `blocker at ${x}`).toBeGreaterThan(w0);
+    }
+    expect(shot([pinBlocker(-3.6)]).brain.lastShot).not.toBe('bounce');
   });
   it('a blocker still standing at the net is no block: only hands that are up count', () => {
     const standing = new Athlete('MB', -1);
@@ -205,6 +217,61 @@ describe('your green set: the hitter bounces it', () => {
     const s = shot([standing]);
     expect(s.aim.x).toBeCloseTo(free.aim.x, 6);
     expect(s.aim.z).toBeCloseTo(free.aim.z, 6);
+  });
+});
+
+describe('out of system: a high ball to a pin fools nobody', () => {
+  it('their middle reads your green high ball to a pin off a pass out of system, and is fooled by the same set in system', () => {
+    const { g, set } = pinSet(true, []);
+    const lane = laneFor('OH', 1);
+    const contact = g.contact as { lastSet: object };
+    contact.lastSet = { hitter: null, target: { x: lane.x, y: 3.2, z: lane.z }, outOfSystem: true };
+    expect(greenFools(g as unknown as Game, set)).toBe(false);
+    contact.lastSet = { hitter: null, target: { x: lane.x, y: 3.2, z: lane.z } };
+    expect(greenFools(g as unknown as Game, set)).toBe(true);
+    // off the net to the pipe, in the middle of the court, it still has to guess
+    contact.lastSet = { hitter: null, target: { x: LANES.L.x, y: 3.2, z: LANES.L.z }, outOfSystem: true };
+    expect(greenFools(g as unknown as Game, set)).toBe(true);
+  });
+
+  /** their middle, at the top of a block jump with the arms up, meets a hard spike in the middle of its hands */
+  function block(green: boolean) {
+    const b = new Athlete('MB', -1);
+    b.place(0, -0.4, Math.PI);
+    b.jumpPress();
+    let t = 0;
+    for (let i = 0; i < SIM.hz && !(b.state === 'air' && b.vel.y <= 0.4); i++) b.step(DT, (t += DT));
+    const hands = blockHands(b);
+    const state = makeBall();
+    Object.assign(state.p, { x: hands.x, y: hands.top - 0.12, z: -0.05 });
+    Object.assign(state.v, { x: 0, y: -5, z: -21 });
+    state.rest = false;
+    const ball = {
+      state,
+      active: true,
+      pos: state.p,
+      vel: state.v,
+      lastTouch: { athlete: new Athlete('OH', 1), kind: 'spike', t: 0, side: 1, green } as Touch,
+      hit(v: V3) {
+        Object.assign(state.v, v);
+      },
+    };
+    // (the dice at their kindest to the block)
+    const host = { ball, simTime: t, env, aimAssist: () => 0, rand: () => 0, emitContact: () => {} };
+    const act = { kind: 'block', t0: t - 1, note: '', contactPoint: new THREE.Vector3() };
+    const touched = new ContactSystem(host as unknown as ContactHost).tryBlock(b, act as never);
+    return { touched, note: act.note, vz: state.v.z };
+  }
+  it('a block can touch an attack off your green set, not stuff it: it comes off the hands soft, into their court', () => {
+    const usual = block(false);
+    expect(usual.touched).toBe(true);
+    expect(usual.note).toBe('Stuff!');
+    // (driven back down onto the hitter's side)
+    expect(usual.vz).toBeGreaterThan(0);
+    const green = block(true);
+    expect(green.touched).toBe(true);
+    expect(green.note).not.toBe('Stuff!');
+    expect(green.vz).toBeLessThan(0);
   });
 });
 

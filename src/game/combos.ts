@@ -12,13 +12,11 @@ export interface Combo {
   /** what it does to the block, in a line (the wheel's centre) */
   idea: string;
   calls: Record<SetterKey, string>;
-  /** a play you designed (src/game/playbook.ts): each hitter's set itself, which need not be one of their calls */
-  routes?: Record<SetterKey, SetPlay>;
 }
 
 /** the set a play gives a hitter */
 export function comboPlay(c: Combo, k: SetterKey): SetPlay | undefined {
-  return c.routes?.[k] ?? SETTER_PLAYS[k].find((p) => p.short === c.calls[k]);
+  return SETTER_PLAYS[k].find((p) => p.short === c.calls[k]);
 }
 
 /** in wheel order, clockwise from the top */

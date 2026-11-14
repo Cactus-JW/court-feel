@@ -4,83 +4,63 @@ import { isInsideRun, planToPoint, simulateApproach } from '../src/ai/approach';
 import { AI, PLAYBOOK, PLAYER } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import { callSheet } from '../src/game/callRuns';
-import { comboPlay, COMBOS } from '../src/game/combos';
-import { clampRoute, routeOf, routePlay, routesOf, sanitizePlaybook, toCombo, type Route, type SavedPlay } from '../src/game/playbook';
-import { attackHeight, isQuick, needsGoodPass, SETTER_PLAYS, SETTER_SPOT, SETTER_TARGET } from '../src/game/plays';
+import { COMBOS } from '../src/game/combos';
+import { callsOf, clashes, clashWith, hitX, sanitizePlaybook, toCombo, type SavedPlay } from '../src/game/playbook';
+import { attackHeight, SETTER_PLAYS, SETTER_SPOT } from '../src/game/plays';
 import { SETTER_KEYS, SetterCalls } from '../src/game/setterCalls';
 
-/** the X with the outside moved inside on a medium set, and the middle's quick pushed along the net */
+/** the X with the outside on a 3 and the bic behind it */
 function myPlay(): SavedPlay {
-  const routes = routesOf(COMBOS.find((c) => c.name === 'X')!);
-  routes.OH = { x: -2.0, sx: -4.85, sz: 3.5, tempo: 'mid' };
-  routes.MB = { ...routes.MB, x: -1.0 };
-  return { name: 'Inside out', routes };
+  return { name: 'Inside out', calls: { ...callsOf(COMBOS.find((c) => c.name === 'X')!), OH: '3', PIPE: 'Bic' } };
 }
 
 describe('your own plays (start screen, Plays)', () => {
-  it('a route that is one of the hitter’s own calls is that call: an untouched play keeps every name', () => {
-    for (const k of SETTER_KEYS) for (const p of SETTER_PLAYS[k]) expect(routePlay(k, routeOf(p)), `${k} ${p.short}`).toBe(p);
-    for (const c of COMBOS) {
-      const same = toCombo({ name: c.name, routes: routesOf(c) });
-      expect(SETTER_KEYS.map((k) => same.calls[k])).toEqual(SETTER_KEYS.map((k) => c.calls[k]));
-    }
+  it('a play is one set for each hitter, from the sets their key steps through: a built-in play read back is itself', () => {
+    for (const c of COMBOS) expect(callsOf(c)).toEqual(c.calls);
+    expect(toCombo(myPlay()).calls).toEqual({ OH: '3', MB: '1', OPP: 'X', PIPE: 'Bic' });
   });
-  it('a moved route is a new set: hit where you put it, at the tempo you chose', () => {
-    const p = routePlay('OH', { x: -2.0, sx: -4.85, sz: 3.5, tempo: 'mid' });
-    expect(SETTER_PLAYS.OH).not.toContain(p);
-    expect(p.lane.x).toBe(-2.0);
-    expect(p.lane.sx).toBe(-4.85);
-    expect(p.lane.apexAbove).toBe(PLAYBOOK.apex.mid);
-    // faster than a high ball: the hitter runs before the set, so it needs a good pass
-    expect(needsGoodPass(p)).toBe(true);
-    expect(isQuick(p)).toBe(false);
-    // a high ball is the position's own high ball
-    expect(routePlay('OH', { x: -3.0, sx: -4.85, sz: 3.7, tempo: 'high' }).lane.apexAbove).toBe(SETTER_PLAYS.OH[0].lane.apexAbove);
-  });
-  it('a quick is hit within a quick set’s reach of the setter, off a short run from close behind it', () => {
-    const r = clampRoute('OH', { x: -4.0, sx: -4.9, sz: 4.5, tempo: 'quick' });
-    expect(r.x).toBe(PLAYBOOK.quickX[0]);
-    expect(Math.abs(r.sx - r.x)).toBeLessThanOrEqual(PLAYBOOK.startOff);
-    expect(r.sz).toBe(PLAYBOOK.quickZ[1]);
-    const p = routePlay('OH', r);
-    expect(isQuick(p)).toBe(true);
-    // (the set meets them `inFront` of where the setter takes the pass)
-    expect(SETTER_TARGET.x - p.inFront!).toBeCloseTo(r.x);
-  });
-  it('a back-row hitter has no quick and takes off behind the 3 m line', () => {
-    const r = clampRoute('PIPE', { x: 2.0, sx: 2.0, sz: 3.2, tempo: 'quick' });
-    expect(r.tempo).not.toBe('quick');
-    expect(r.sz).toBeGreaterThanOrEqual(PLAYBOOK.pipeZ[0]);
-    expect(routePlay('PIPE', r).lane.z).toBe(SETTER_PLAYS.PIPE[0].lane.z);
-  });
-  it('a saved play takes its place on the wheel’s list of calls: the hitters get its routes, and the strip names it', () => {
+  it('a saved play is called like any other: every hitter gets its set, and the strip names it', () => {
     const mine = toCombo(myPlay());
+    const wheel = COMBOS.map((b, i) => (i === 1 ? mine : b));
     const c = new SetterCalls();
     expect(c.setCombo(mine)).toBe(true);
-    expect(c.play('OH')).toBe(mine.routes!.OH);
-    expect(c.play('OH').lane.x).toBe(-2.0);
-    expect(c.play('OPP').short).toBe('X');
-    const wheel = COMBOS.map((b, i) => (i === 1 ? mine : b));
+    expect(SETTER_KEYS.map((k) => c.play(k).short)).toEqual(['3', '1', 'X', 'Bic']);
     expect(c.combo(wheel)).toBe(mine);
-    expect(callSheet(c, SETTER_KEYS, c.target()).items.find((i) => i.id === 'OH')).toMatchObject({ call: 'Mid' });
-    // the hitter's key again still steps through their calls: the designed set is one more, after their own
-    expect(c.step('OH')).toEqual({ i: SETTER_PLAYS.OH.length, n: SETTER_PLAYS.OH.length + 1 });
+    expect(callSheet(c, SETTER_KEYS, c.target()).items.find((i) => i.id === 'OH')).toMatchObject({ call: '3' });
+    // the hitter's key again still steps through their sets, and then it is no longer that play
     c.press('OH');
     c.press('OH');
-    expect(c.play('OH')).toBe(SETTER_PLAYS.OH[0]);
     expect(c.combo(wheel)).not.toBe(mine);
-    // calling a built-in play again drops it
-    expect(c.setCombo(COMBOS[0])).toBe(true);
-    expect(c.step('OH').n).toBe(SETTER_PLAYS.OH.length);
-    expect(SETTER_KEYS.map((k) => c.play(k))).toEqual(SETTER_KEYS.map((k) => comboPlay(COMBOS[0], k)));
   });
-  it('stored plays are untrusted: one per place on the wheel, junk dropped, routes clamped to what can be run', () => {
-    const wild = { x: 99, sx: -99, sz: 0, tempo: 'warp' } as unknown as Route;
+  it('two front-row hitters are never sent to the same spot at the net: a back quick for the middle and the opposite, a 2 and an X', () => {
+    const base = callsOf(COMBOS[0]);
+    expect(clashWith({ ...base, MB: 'Back 1' }, 'OPP', 'Back 1')).toBe('MB');
+    expect(clashWith({ ...base, MB: 'Back 1' }, 'OPP', 'Back 2')).toBe('MB');
+    expect(clashWith({ ...base, OPP: 'X' }, 'OH', '2')).toBe('OPP');
+    expect(clashWith({ ...base, OH: '2' }, 'MB', 'Push')).toBe('OH');
+    expect(clashes({ ...base, MB: 'Back 1', OPP: 'Back 1' })).toBe(true);
+    // with room between them it is a play: the opposite's back set behind the middle's back quick
+    expect(clashWith({ ...base, MB: 'Back 1' }, 'OPP', 'Back')).toBeNull();
+    // the pipe is hit 2 m off the net, behind them: the pipe behind the quick is a play
+    expect(clashWith({ ...base, MB: '1' }, 'PIPE', 'Pipe')).toBeNull();
+    expect(clashes({ ...base, MB: 'Back 1', PIPE: 'Behind' })).toBe(false);
+  });
+  it('every built-in play leaves each front-row hitter their own spot (the tandem and the X hit beside the quick, not on it)', () => {
+    for (const c of COMBOS) expect(clashes(c.calls), c.name).toBe(false);
+    const quick = hitX(SETTER_PLAYS.MB[0]);
+    for (const [k, short] of [
+      ['OH', '2'],
+      ['OPP', 'X'],
+    ] as const)
+      expect(Math.abs(hitX(SETTER_PLAYS[k].find((p) => p.short === short)!) - quick)).toBeGreaterThanOrEqual(PLAYBOOK.minGap);
+  });
+  it('stored plays are untrusted: one per place on the wheel; no name, or two hitters on one spot, and it is dropped', () => {
     const book = sanitizePlaybook([
       null,
-      { name: '   A   very long name for a play that goes on  ', routes: { OH: wild, MB: 'nope', OPP: null } },
-      { name: '', routes: myPlay().routes },
-      { routes: myPlay().routes },
+      { name: '   A   very long name for a play that goes on  ', calls: { OH: 'Go', MB: 'Warp', OPP: 7 } },
+      { name: '', calls: myPlay().calls },
+      { calls: myPlay().calls },
+      { name: 'Crash', calls: { ...myPlay().calls, MB: 'Back 1', OPP: 'Back 1' } },
       'junk',
     ]);
     expect(book.length).toBe(COMBOS.length);
@@ -88,12 +68,8 @@ describe('your own plays (start screen, Plays)', () => {
     const p = book[1]!;
     expect(p.name.length).toBeLessThanOrEqual(PLAYBOOK.nameMax);
     expect(p.name.startsWith('A very')).toBe(true);
-    expect(p.routes.OH.x).toBe(PLAYBOOK.hitX);
-    expect(p.routes.OH.sx).toBe(-PLAYBOOK.startX);
-    expect(p.routes.OH.sz).toBe(PLAYBOOK.frontZ[0]);
-    // nothing usable: the hitter's first call
-    expect(routePlay('MB', p.routes.MB)).toBe(SETTER_PLAYS.MB[0]);
-    expect(routePlay('PIPE', p.routes.PIPE)).toBe(SETTER_PLAYS.PIPE[0]);
+    // a set the hitter does not have: their first one
+    expect(p.calls).toEqual({ OH: 'Go', MB: SETTER_PLAYS.MB[0].short, OPP: SETTER_PLAYS.OPP[0].short, PIPE: SETTER_PLAYS.PIPE[0].short });
     expect(sanitizePlaybook('nope').every((e) => e === null)).toBe(true);
   });
 });

@@ -17,6 +17,18 @@ export function userGreen(g: Game, lt: Touch | null | undefined): boolean {
 }
 
 /**
+ * Does the user's green set `lt` fool their block? Not a high ball to a pin off a pass out of
+ * system: with the setter off the net there is one place that ball can go, so their middle reads
+ * it and closes the block as on any set. The hitter still has your perfect set to swing at: a
+ * full, well-timed swing that the block can touch but not stuff (CONTACT: a green attack).
+ */
+export function greenFools(g: Game, lt: Touch | null | undefined): boolean {
+  if (!userGreen(g, lt)) return false;
+  const set = g.contact.lastSet;
+  return !(set?.outOfSystem && Math.abs(set.target.x) > AI.middle.pinX);
+}
+
+/**
  * The hitter their middle bites on: one the setter did not set, near the net and either up
  * (planting or in the air: a quick) or running in. The one up comes first (a middle's eyes go
  * to the first tempo), then the nearest along the net. Null when nobody else is going: the

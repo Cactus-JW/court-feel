@@ -1,4 +1,4 @@
-import { comboPlay, COMBOS, type Combo } from './combos';
+import { COMBOS, type Combo } from './combos';
 import { D_PLAY, isQuick, LANES, needsGoodPass, SETTER_PLAYS, type AttackLane, type SetPlay } from './plays';
 
 /** the hitters a setter can pick, in key order: 1 outside, 2 middle, 3 opposite, 4 pipe */
@@ -53,12 +53,9 @@ export class SetterCalls {
   private high = new Set<SetterKey>();
   private fast = new Set<SetterKey>();
   private late: SetterKey | null = null;
-  /** a hitter's calls with the set a play you designed gave them, after their own */
-  private designed: Partial<Record<SetterKey, readonly SetPlay[]>> = {};
-
-  /** every call this hitter has (front row: the opposite only has the D); a set from a play you designed comes last */
+  /** every call this hitter has (front row: the opposite only has the D) */
   plays(k: SetterKey): readonly SetPlay[] {
-    return k === 'OPP' && this.frontRow ? [D_PLAY] : (this.designed[k] ?? SETTER_PLAYS[k]);
+    return k === 'OPP' && this.frontRow ? [D_PLAY] : SETTER_PLAYS[k];
   }
 
   press(k: SetPick): void {
@@ -204,13 +201,8 @@ export class SetterCalls {
   setCombo(c: Combo): boolean {
     if (this.locked || !this.canCall) return false;
     for (const k of SETTER_KEYS) {
-      const p = comboPlay(c, k);
-      if (!p) continue;
-      const own = SETTER_PLAYS[k].indexOf(p);
-      // a set of your own design joins the hitter's calls, after their own, until another play is called
-      if (own < 0) this.designed[k] = [...SETTER_PLAYS[k], p];
-      else delete this.designed[k];
-      this.call[k] = own < 0 ? SETTER_PLAYS[k].length : own;
+      const i = this.plays(k).findIndex((p) => p.short === c.calls[k]);
+      if (i >= 0) this.call[k] = i;
     }
     return true;
   }
@@ -218,7 +210,7 @@ export class SetterCalls {
   /** the play (of `plays`: the wheel's) the calls make right now, if they are one */
   combo(plays: readonly Combo[] = COMBOS): Combo | null {
     return (
-      plays.find((c) => SETTER_KEYS.every((k) => this.plays(k).length === 1 || this.plays(k)[this.step(k).i] === comboPlay(c, k))) ?? null
+      plays.find((c) => SETTER_KEYS.every((k) => this.plays(k).length === 1 || this.plays(k)[this.step(k).i].short === c.calls[k])) ?? null
     );
   }
 }

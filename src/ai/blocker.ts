@@ -4,6 +4,7 @@ import type { Athlete } from '../game/athlete';
 import type { Game } from '../game/game';
 import type { V3 } from '../physics/ball';
 import { moveTo, netYaw, stop, type Brain } from './brain';
+import { greenFools } from './greenBite';
 
 /**
  * AI blocker: when the other team sets, predicts where the hitter will meet
@@ -87,10 +88,9 @@ export class BlockerBrain implements Brain {
       this.fooled = g.rng.next() < 0.35 - this.skill * 0.25;
       // a green set from the user's setter: exact, at the called tempo, nothing given away early.
       // A middle guesses wrong and commits a lane away. A pin blocker blocks it like any other set:
-      // the hitter beats one block, not an empty net
-      const us = g.contact.lastSetResult;
-      const green = !!us?.green && lt.athlete === us.athlete && lt.t === us.t;
-      this.wrongGuess = green && this.guessOnGreen;
+      // the hitter beats one block, not an empty net. (Off a pass out of system a high ball to a
+      // pin fools nobody: greenFools.)
+      this.wrongGuess = this.guessOnGreen && greenFools(g, lt);
     }
     // the middle's whole job is the read: it reacts sooner than the wings
     const react = this.closer ? 0.08 + (1 - this.skill) * 0.15 : 0.12 + (1 - this.skill) * 0.25;

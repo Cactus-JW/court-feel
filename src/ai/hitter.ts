@@ -311,16 +311,19 @@ export class HitterBrain implements Brain {
    * is going, if that is clear: the swing is along the run, with the body's speed in it. Null
    * when no such shot exists (a ball hit from too deep, a block across everything).
    */
-  private bounce(g: Game, from: V3, hitX: number): THREE.Vector3 | null {
+  private bounce(g: Game, from: V3, hitX: number, tHit: number): THREE.Vector3 | null {
     const a = this.athlete;
     const B = AI.greenBounce;
     const opp = -a.side;
     const hw = COURT.halfWidth;
     const full = CONTACT.spikePerfect * a.stats.power;
-    // the hands that will be there: blockers up or going up now (one still standing can't get up in time)
+    // the hands that will be there: blockers up or going up now, and one still closing along the
+    // net (it will be up where it is running to); one standing still can't get up in time
+    const lead = Math.max(0, tHit - g.simTime) + 0.05 + Math.abs(a.pos.z) / 20;
     const hands = this.blockers()
-      .filter((b) => Math.abs(b.pos.z) < 1.4 && (b.state === 'air' || b.state === 'load' || b.action?.kind === 'block'))
-      .map((b) => b.pos.x + b.reachX + b.vel.x * (0.05 + Math.abs(a.pos.z) / 20));
+      .filter((b) => Math.abs(b.pos.z) < 1.4)
+      .filter((b) => b.state === 'air' || b.state === 'load' || b.action?.kind === 'block' || Math.abs(b.vel.x) > B.closing)
+      .map((b) => b.pos.x + b.reachX + b.vel.x * (b.state === 'ground' ? lead : 0.05 + Math.abs(a.pos.z) / 20));
     const out = { x: 0, y: 0, z: 0 };
     const w = { x: 0, y: 0, z: 0 };
     const land = { x: 0, y: 0, z: 0 };
@@ -335,8 +338,14 @@ export class HitterBrain implements Brain {
       if (Math.hypot(land.x - x, land.z - z) > 0.5 || Math.abs(land.x) > hw - 0.3) return false;
       const c = netClearance(from, out, w);
       if (!c || c.y < g.env.netTop + BALL.radius + B.clear) return false;
-      // past the block: not over a blocker's hands
-      return !hands.some((bx) => Math.abs(c.x - bx) < CONTACT.blockHalfWidth + BALL.radius + B.hands);
+      // past the block: not over a blocker's hands at the tape, nor through them where they reach,
+      // AI.blockReachBand m either side of the net (a sharp cross from the pin runs along the net:
+      // it passes the hands before the tape)
+      const k = AI.blockReachBand / Math.max(AI.blockReachBand, Math.abs(from.z));
+      const near = c.x - (c.x - from.x) * k;
+      const far = c.x + (c.x - from.x) * k;
+      const w0 = CONTACT.blockHalfWidth + BALL.radius;
+      return !hands.some((bx) => Math.abs(c.x - bx) < w0 + B.hands || Math.min(Math.abs(near - bx), Math.abs(far - bx)) < w0 + B.reach);
     };
     // going inside: with the run, where the body is already going
     const run = this.runsInside();
@@ -430,7 +439,7 @@ export class HitterBrain implements Brain {
     const misread = userUp && g.rng.next() < AI.userBlockMisread;
     // off your green set: bounce it, straight down past the one block that is left
     if (green && from) {
-      const b = this.bounce(g, from, hitX);
+      const b = this.bounce(g, from, hitX, tHit);
       if (b) {
         this.lastShot = 'bounce';
         return b;

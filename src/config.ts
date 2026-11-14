@@ -1183,34 +1183,12 @@ export const AUDIO = {
 };
 
 /**
- * The play designer (start screen, Plays): what a hitter's route may be, so that every play you
- * can save is one the hitters can run and the setter can set. Metres, home side (x: left - /
- * right +, z: from the net).
- * - `hitX` / `pipeX`: how far from the middle of the net a front-row / back-row hitter is set.
- * - `quickX`: where a quick can be hit: within a quick set's reach of the setter (in front, or behind the back).
- * - A run starts within `startX` of the middle; `frontZ` / `quickZ` / `pipeZ` are how far off the
- *   net it starts (a quick's run is short, a back-row hitter takes off behind the 3 m line), and a
- *   quick or a back-row run starts within `startOff` m along the net of where it is hit.
- * - Tempos: a set peaking less than `fastBelow` m above the contact is fast, from `highFrom` m a
- *   high ball, between them medium. A designed fast / medium set peaks `apex` m above the contact
- *   and is met `fastZ` m off the net (a high ball is the position's own).
- * - `nameMax`: the longest name that fits the wheel.
+ * The play designer (start screen, Plays). Two front-row hitters can't be given sets hit less
+ * than `minGap` m apart along the net (a back quick for the middle and the opposite, a 2 and an
+ * X): they would run into each other. The tandem and the X leave 0.75-0.9 m, at two tempos.
+ * `nameMax`: the longest name that fits the wheel.
  */
-export const PLAYBOOK = {
-  hitX: 4.1,
-  pipeX: 3.2,
-  quickX: [-1.8, 2.8],
-  startX: 5.2,
-  frontZ: [3.0, 5.0],
-  quickZ: [2.6, 3.2],
-  pipeZ: [5.0, 6.0],
-  startOff: 1.5,
-  fastBelow: 0.6,
-  highFrom: 1.0,
-  apex: { fast: 0.45, mid: 0.8 },
-  fastZ: 0.8,
-  nameMax: 16,
-} as const;
+export const PLAYBOOK = { minGap: 0.6, nameMax: 16 } as const;
 
 export const AI = {
   reactionTime: 0.18,
@@ -1554,7 +1532,12 @@ export const AI = {
    * hitter has one block to beat, and bounces it past them (`greenBounce`): a full swing, as
    * steep as the net allows (the nearest spot, at one of `depths` m from the net, that a
    * full-speed spike brings down and that clears the tape by `clear` m), crossing the net at
-   * least `hands` m clear of a blocker's hands. Their diggers start `greenSetDigDelay` s late (the hitter hid
+   * least `hands` m clear of a blocker's hands (`reach` m clear of them where they reach over the
+   * net or hang behind it; a blocker still running along the net faster than `closing` m/s counts
+   * as up where it is going). Off a pass out of system a high ball to a pin fools nobody: their
+   * middle closes the block and your hitter has two blockers to beat: not every one of those is
+   * a kill, but it is always a full swing, and no block stuffs an attack off a green set (it
+   * comes off the hands soft or wide: ContactSystem.tryBlock). Their diggers start `greenSetDigDelay` s late (the hitter hid
    * the shot until the hand).
    */
   /**
@@ -1580,7 +1563,7 @@ export const AI = {
   insideRun: { angle: 0.7, minRun: 2.5, carry: 0.62, swing: 1, ground: 0.45 },
   greenBlockGuess: 2.2,
   greenBite: { maxOff: 4.5, runSpeed: 2, runPenalty: 3, lead: 0.2 },
-  greenBounce: { depths: [2.4, 2.9, 3.4, 4.0, 4.8, 5.8], clear: 0.05, hands: 0.35 },
+  greenBounce: { depths: [2.4, 2.9, 3.4, 4.0, 4.8, 5.8], clear: 0.05, hands: 0.35, reach: 0.2, closing: 1 },
   greenSetDigDelay: 0.5,
   /**
    * A bad set (your early / late push) is harder to hit: your hitter's timing error grows by up

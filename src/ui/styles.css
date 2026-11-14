@@ -378,16 +378,13 @@ body.touchmode .set-row.only-tc { display: grid !important; }
 .pd-slot .row-s { font-size: 12px; }
 .pd-num { flex: none; width: 14px; font: 700 12px/1 ui-monospace, Menlo, monospace; color: var(--text3); }
 .pd-mid { flex: 1 1 380px; min-width: 0; max-width: 640px; display: flex; flex-direction: column; gap: 12px; }
-.pd-court { display: block; width: 100%; height: auto; border-radius: 12px; background: rgba(14,17,26,0.9); border: 1px solid var(--line); touch-action: none; user-select: none; -webkit-user-select: none; }
+.pd-court { display: block; width: 100%; height: auto; border-radius: 12px; background: rgba(14,17,26,0.9); border: 1px solid var(--line); }
 .pd-floor { fill: rgba(79,209,255,0.06); stroke: rgba(255,255,255,0.45); stroke-width: 1.5; }
 .pd-net { stroke: #f2f2f2; stroke-width: 4; stroke-linecap: round; }
 .pd-line { stroke: rgba(255,255,255,0.3); stroke-dasharray: 5 5; }
 .pd-setter { fill: #e9edf5; }
-.pd-run { fill: none; stroke-width: 3; stroke-linecap: round; opacity: 0.85; pointer-events: none; }
-.pd-start { fill: rgba(11,13,20,0.92); stroke-width: 3; cursor: grab; }
-.pd-hit { stroke: transparent; stroke-width: 3; cursor: grab; }
-.pd-start:active, .pd-hit:active { cursor: grabbing; }
-.pd-start:focus-visible, .pd-hit:focus-visible { outline: none; stroke: #fff; stroke-width: 4; }
+.pd-run { fill: none; stroke-width: 3; stroke-linecap: round; opacity: 0.85; }
+.pd-start { fill: rgba(11,13,20,0.92); stroke-width: 3; }
 .pd-key { fill: #0b0d14; font: 800 13px/1 system-ui, sans-serif; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .pd-note { margin: 0; min-height: 18px; font-size: 13px; line-height: 1.4; color: var(--text2); }
 .pd-save { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
@@ -400,16 +397,20 @@ body.touchmode .set-row.only-tc { display: grid !important; }
 .pd-who { display: flex; align-items: center; gap: 8px; font-weight: 800; }
 .pd-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
 .pd-set { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--text2); text-align: right; }
-.pd-row { display: flex; align-items: center; gap: 10px; }
-.pd-lab { flex: none; width: 48px; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); }
 .pd-hitter .chip { min-width: 40px; min-height: 36px; padding: 0 12px; font-size: 13px; }
+.pd-hitter .chip:disabled { opacity: 0.4; border-style: dashed; cursor: not-allowed; }
 body.touchmode .pd-hitter .chip { min-height: 44px; }
 /* three pills in the top bar: names give way to the icons sooner */
 @media (max-width: 1000px) { .top-right .pill span { display: none; } }
-@media (max-width: 720px) {
+/* not wide enough for three columns: the wheel's places in rows on top, then the court, then the hitters side by side */
+@media (max-width: 1100px) {
   .pd-slots { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; }
-  .pd-slots .eyebrow { flex: 1 1 100%; }
+  .pd-slots .eyebrow, .pd-hitters .eyebrow { flex: 1 1 100%; }
   .pd-slot { flex: 1 1 150px; }
+  .pd-mid { max-width: none; }
+  .pd-court { max-height: 38vh; }
+  .pd-hitters { flex: 1 1 100%; max-width: none; flex-direction: row; flex-wrap: wrap; }
+  .pd-hitter { flex: 1 1 240px; }
 }
 .athlete-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .pos-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }

@@ -6,7 +6,7 @@ import type { Game } from '../game/game';
 import { laneFor, SETTER_SPOT } from '../game/plays';
 import type { V3 } from '../physics/ball';
 import { predictJump } from './approach';
-import { decoyFor, userGreen } from './greenBite';
+import { decoyFor, greenFools } from './greenBite';
 import { moveTo, netYaw, stop, type Brain } from './brain';
 import { BallRead } from './read';
 
@@ -168,8 +168,9 @@ export class MiddleBlocker implements Brain {
     const now = g.simTime;
     if (this.setRead.look(lt, now, g.rng)) {
       this.tc = -1;
-      // your green set: it has gone with a hitter you did not set, at once (there was nothing to read)
-      this.bite = userGreen(g, lt) ? { who: decoyFor(g, a, lt) } : null;
+      // your green set: it has gone with a hitter you did not set, at once (there was nothing to read);
+      // not off a pass out of system to a pin, which it reads and closes on like any set
+      this.bite = greenFools(g, lt) ? { who: decoyFor(g, a, lt) } : null;
     }
     if (this.bite) {
       this.goWith(g, lt, this.bite.who);

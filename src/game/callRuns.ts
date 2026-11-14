@@ -194,6 +194,7 @@ export function callOptions(g: Game, hitters: CallHitters, calls: SetterCalls, o
       label,
       key: k,
       fast: !high && needsGoodPass(p),
+      outOfSystem: oos && high,
     });
   }
   return out;
