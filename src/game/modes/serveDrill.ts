@@ -86,6 +86,7 @@ export class ServeDrill extends Mode {
     g.placeUser(this.start.x, this.start.z, 0);
     if (!g.settings.firstPerson) g.rig.pitch = aimPitchFor(SERVE_DRILL.lookDepth, false);
     this.reset();
+    g.hud.gradeAside = true;
     g.hud.setTitle('Serve Drill');
     this.updateScore();
     // (on touch the key names become the buttons': "toss: Q" reads "toss: TOSS")
@@ -179,6 +180,11 @@ export class ServeDrill extends Mode {
   restartRep(): void {
     this.reset();
     this.toStart();
+  }
+
+  teardown(): void {
+    this.g.hud.gradeAside = false;
+    super.teardown();
   }
 
   frame(dt: number): void {

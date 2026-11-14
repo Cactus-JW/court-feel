@@ -69,8 +69,68 @@ export const BALL = {
   antennaRestitution: 0.55,
   postRestitution: 0.5,
   wallRestitution: 0.4,
-  /** if knuckle > 0, low-spin serves get a slight wobble */
-  floatWobble: 0.9,
+  /**
+   * The float. A ball hit with no spin, flying near its critical speed (where the air's hold on it
+   * changes), flies true and then breaks: its seams push it hard to one side, or straight down,
+   * for a fraction of a second, and it carries on in the new direction. Once it slows below its
+   * critical speed its drag jumps and it dies. Which way and when depends on how the panels face
+   * the air, so each serve draws its own (`BallState.seed`): the server cannot choose it and
+   * nobody can read it ahead.
+   *
+   * - A break is a side force 0.5 rho A `cs` v^2 at full strength (`BallState.knuckle` 1: a clean
+   *   no-spin contact; a mishit leaves some spin on the ball and it floats less), about as hard as
+   *   gravity pulls at 20 m/s. It fades out below `speedLo` m/s and is full from `speedFull`: a
+   *   jump float (20 m/s off the hand) breaks harder than a standing float (17), a free ball not
+   *   at all.
+   * - The ball flies true for `quietMin`-`quietMax` s, then breaks for `breakMin`-`breakMax` s at
+   *   `strengthMin`-1 of that strength (coming on and letting go over `edge` s), and so on: one to
+   *   three breaks in a serve. `down` of the breaks go straight down, the rest left or right as
+   *   often as each other.
+   * - The critical speed of this serve is drawn between `crisisLo` and `crisisHi` m/s. Over the
+   *   `crisisWidth` m/s below it the drag grows by `dieDrag` (x 1.6: from this model's 0.26 to
+   *   0.42; a ball under the crisis sits at 0.4-0.5), so the ball drops short of where it looked
+   *   to be going. Only floats get this: a spinning ball passes through the crisis too, but nobody
+   *   sees it, and giving every ball it would retune every pass and set.
+   * - `read`: what anyone watching knows of a floating ball's path is where it was heading this
+   *   long ago (s, a reaction time), with no break to come. The landing marker and every AI player
+   *   use that read (docs/adr/0005), looked at again every `readSteps` simulation steps. Nothing
+   *   else makes a float hard to pass: a passer who was sent to the wrong spot is late, reaches,
+   *   or has the platform up too early for a ball that died.
+   *
+   * Critical Reynolds numbers of match volleyballs are 2.0-3.3 x 10^5 depending on the ball and on
+   * which way its panels face (Hong, Asai et al., wind tunnel, 2017-2020, read as abstracts): 14 to
+   * 24 m/s, which is where float serves fly, at a drag coefficient of 0.15-0.2 just above it. The
+   * critical speeds here sit at the low end of that, so that a float dies late in its flight, not
+   * from the hand.
+   *
+   * Bent, and why: no source read gives a side force coefficient. A first version held a weak
+   * push (`cs` 0.08) for the whole flight: the ball curved 0.2 m, smoothly, and nobody playing it
+   * saw a float. `cs` 0.45 in short breaks is at or past the top of what a ball's seams can do, and
+   * is set by what a float looks like from the court: it goes straight, then it is somewhere else.
+   * A Perfect jump float comes down 0.56 m to one side of where it was heading (0.9 m one time
+   * in ten, 1.2 m at most), a Perfect standing float 0.46 m to one side and 0.6 m short; a Good
+   * contact half of that (tests/float.test.ts, 200 serves each). The Mini Rally's receivers pass
+   * 37% of Perfect jump floats to target, where they passed 72% of the same serve without the
+   * float, and are aced by one in eight (70 serves, Outside Hitter).
+   */
+  float: {
+    cs: 0.45,
+    speedLo: 10,
+    speedFull: 14,
+    quietMin: 0.22,
+    quietMax: 0.5,
+    breakMin: 0.14,
+    breakMax: 0.22,
+    strengthMin: 0.6,
+    down: 0.25,
+    edge: 0.03,
+    crisisLo: 13,
+    crisisHi: 16.5,
+    crisisWidth: 1.2,
+    dieDrag: 0.6,
+    read: 0.2,
+    readSteps: 4,
+  },
 } as const;
 
 export const SIM = {
@@ -385,6 +445,22 @@ export const CONTACT = {
    */
   serveSafe: 0.6,
   serveSafeApex: 1.0,
+  /**
+   * How much a float serve floats (`BallState.knuckle`, see `BALL.float`), by the grade of the
+   * contact: a mishit (Early or Late), Good, Perfect. A float needs a clean hit through the middle
+   * of the ball with no spin; any spin kills it.
+   */
+  floatClean: [0, 0.2, 0.55, 1],
+  /**
+   * The AI's float still never misses (`serveSafe`): the way it breaks is drawn again, up to
+   * `floatSafeTries` times and then with `floatSafeCut` of the float each time (none once it is
+   * under `floatSafeMin`), until its real flight clears the tape by `floatSafe` m and lands that
+   * far inside the lines.
+   */
+  floatSafe: 0.15,
+  floatSafeTries: 6,
+  floatSafeCut: 0.5,
+  floatSafeMin: 0.1,
   sideReach: 0.6,
   sideErr: 1.4,
   diveLow: 0.25,
@@ -425,7 +501,8 @@ export const SERVE_KINDS: readonly ServeKind[] = ['float', 'jumpFloat', 'jump'];
  * the Serve drill stands you, m behind the end line; you may toss from anywhere behind it.
  *
  * - `float`: a low toss in front of the hitting shoulder (0.8 m over the contact, in the air
- *   0.95 s), hit with the feet on the floor.
+ *   0.95 s), hit with the feet on the floor. Both floats move in the air as cleanly as they were
+ *   hit (`BALL.float`, `CONTACT.floatClean`).
  * - `jumpFloat`: a low toss two steps ahead (0.85 m over the contact, 1.1 s), met at the top of
  *   a short run-up that starts 0.15 s after the ball leaves the hand: little time to fix anything.
  * - `jump`: the high toss far ahead that a full spike approach runs under (1.75 m over the
@@ -480,6 +557,10 @@ export const SERVE = {
  * goes: a full-power jump serve aimed shorter than about 7 m is in the net (the start screen
  * leaves the camera on mid-court, a spike's aim). In first person you look up at your toss, which
  * aims deep by itself.
+ * The grade of a serve is shown to one side of the flight, not over it: from behind the server the
+ * ball is 15 m away and a few pixels wide, and the grade text sat exactly on its path. (Tried
+ * and taken out for now: narrowing the third-person view to half its field of view while the serve
+ * is in the air, so a float's break could be seen from the end line.)
  */
 export const SERVE_DRILL = {
   x: 2,
@@ -1051,6 +1132,13 @@ export const CHARACTER = {
 };
 
 export const FX = {
+  /**
+   * A float breaking (`BALL.float`): a ring pops round the ball where it turns, as wide (m) and
+   * as bright as this for the hardest break of a Perfect float, less for a weaker one. From
+   * behind the server the ball is 15 m away and a break moves it a ball or two on the screen:
+   * the ring says when.
+   */
+  floatBreak: { size: 0.9, strength: 0.6 },
   /** where your feet go (the plant spot of an approach): ring radius (m), and the lesson's arrows towards it */
   floorSpot: {
     radius: 0.36,
