@@ -24,6 +24,10 @@ export class MiniRally extends Mode {
   scoreHome = 0;
   scoreAway = 0;
   private lastReceiverMsg: unknown = null;
+  /** the ball that was called the user's (the libero may call them off it: "MINE!") */
+  private yoursFor: unknown = null;
+  /** their jump serve has been called this rally */
+  private jumpCalled = false;
   private reason = '';
   private userTouches = 0;
   /** set calls for the user's position (keys 1-3), if it has any */
@@ -105,7 +109,9 @@ export class MiniRally extends Mode {
       sub = this.position === 'MB' ? 'out of system · no quick' : 'out of system';
     } else {
       word = 'HELP!';
-      sub = "can't get there · no set";
+      // (a HELP ball given to you says so: nobody else is going for it)
+      sub = this.yourFreeBall ? 'YOUR BALL · bump it high or set a pin' : "can't get there · no set";
+      if (this.yourFreeBall) g.hud.message('Your ball!', 0.9);
     }
     const s = r.setter;
     g.hud.call(this.setterName(s), word, sub, r.call === 'in' ? 'in' : 'out', (out) =>
@@ -154,6 +160,7 @@ export class MiniRally extends Mode {
     this.phase = 'prepare';
     this.t = 0;
     this.userTouches = 0;
+    this.jumpCalled = false;
     g.hud.clearCall();
     this.updateScore();
   }
@@ -166,6 +173,11 @@ export class MiniRally extends Mode {
   frame(_dt: number): void {
     if (!this.plays) return;
     for (let i = 0; i < this.plays.length; i++) if (this.g.input.consumePress('Digit' + (i + 1))) this.selectCall(i);
+  }
+
+  /** F3: what each team is in the middle of (the AI's situation: `AI.sit`) */
+  debugLines(): string[] {
+    return [`situation: you ${this.home.situation} · them ${this.away.situation}`];
   }
 
   passTarget(a: Athlete) {
@@ -268,6 +280,25 @@ export class MiniRally extends Mode {
     if (yours && this.lastReceiverMsg !== g.ball.lastTouch) {
       this.lastReceiverMsg = g.ball.lastTouch;
       g.hud.message(backup ? 'Your set!' : 'Your ball!', 0.9);
+    }
+    // a ball that was called yours and is now the libero's: the libero calls you off it
+    const lib = this.home.players.get('L');
+    if (this.home.receiver === g.me) this.yoursFor = g.ball.lastTouch;
+    else if (this.yoursFor === g.ball.lastTouch && lib && this.home.receiver === lib && !g.tutorial.active) {
+      this.yoursFor = null;
+      g.hud.call(
+        'LIBERO',
+        'MINE!',
+        'the libero takes it',
+        'in',
+        (out) => out.set(lib.rpos.x, lib.rpos.y + lib.height + 0.42, lib.rpos.z),
+        1.0,
+      );
+    }
+    // their server tosses for a jump serve: the passers call it and step back
+    if (this.home.jumpServe && !this.jumpCalled && this.phase === 'serve' && !g.tutorial.active) {
+      this.jumpCalled = true;
+      g.hud.message('Jump serve · step back', 1.2);
     }
     g.ball.markerColor.setRGB(...((yours ? [0.35, 1.0, 0.45] : [0.3, 0.85, 1.0]) as [number, number, number]));
     switch (this.phase) {

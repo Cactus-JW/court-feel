@@ -22,6 +22,7 @@ import { attackKind, readSpots, seamSpot } from './defence';
 import { giveWay, shoulderToShoulder, type Mate } from './giveWay';
 import { HitterBrain } from './hitter';
 import { MiddleBlocker } from './middle';
+import { situationOf, type Situation } from './situation';
 import { BallRead } from './read';
 import { ServerBrain } from './server';
 import { SetterBrain } from './setter';
@@ -117,6 +118,8 @@ export class TeamPlayer implements Brain {
   run = false;
   /** when to be set at `spot` by (the hitter's contact: see `AI.pace`); 0: as soon as they get there */
   due = 0;
+  /** this player's own habit this rally: how far off the book spot they stand (`AI.sit.personal`) */
+  personal: Spot = { x: 0, z: 0 };
   readonly setter: SetterBrain;
   readonly hitter: HitterBrain | null;
   readonly blocker: BlockerBrain | MiddleBlocker;
@@ -202,6 +205,8 @@ export class TeamPlayer implements Brain {
     // (a player running a ball down is up and going flat out, never low)
     const chasing = (this.job === 'receive' || this.job === 'free' || this.job === 'set') && a.cmd.sprint;
     a.low = !chasing && g.simTime - this.coverT < AI.cover.react + 0.3 ? 1 : 0;
+    // given the ball to play while running in for a set that isn't coming: the approach is broken off
+    if (this.hitter?.phase === 'approach' && (this.job === 'receive' || this.job === 'free')) this.hitter.reset();
     // an attack in progress always finishes, whatever the coordinator says
     if (this.hitter && this.hitter.phase !== 'ready' && this.hitter.phase !== 'recover') {
       this.hitter.step(dt, g);
@@ -229,7 +234,9 @@ export class TeamPlayer implements Brain {
         break;
       case 'attack':
         if (this.hitter) {
-          this.hitter.holdSpot = null;
+          // out of system the ball will be a high one: wait a little deeper, for a full approach
+          const lane = this.hitter.lane;
+          this.hitter.holdSpot = this.team.outOfSystem(g) ? { x: lane.sx, z: lane.sz + a.side * AI.sit.outDeep } : null;
           this.hitter.step(dt, g);
         } else moveTo(a, this.spot.x, this.spot.z, { face });
         break;
@@ -362,11 +369,14 @@ export class TeamPlayer implements Brain {
     // too far for the platform to be there in time: run at where the ball comes down low, and dive for it
     if (!hands && onFoot && !busy && dist > AI.dive.minDist && needSpeed > a.stats.approachSpeed * AI.dive.late) {
       const tLow = pred.descendThrough(CONTACT.diveLow + 0.1, now);
-      if (tLow > now) {
-        pred.posAt(tLow, this.low);
-        const dx = this.low.x - a.pos.x;
-        const dz = this.low.z - a.pos.z;
-        const dl = Math.hypot(dx, dz);
+      if (tLow > now) pred.posAt(tLow, this.low);
+      const dx = this.low.x - a.pos.x;
+      const dz = this.low.z - a.pos.z;
+      const dl = Math.hypot(dx, dz);
+      // (nobody dives backwards at a serve or a spike: that ball is played on the feet, or not at all)
+      const driven = !!lt && lt.side !== a.side && (lt.kind === 'serve' || lt.kind === 'spike');
+      const backwards = driven && dl > 1e-3 && (dz * a.side) / dl > AI.dive.back;
+      if (tLow > now && !backwards) {
         // where the hands will be when the ball gets there if the dive starts now: the slide, plus the arms' stretch
         const T = tLow - now;
         const v0 = Math.max(PLAYER.diveSpeed, a.speed);
@@ -509,8 +519,17 @@ export class TeamAI {
   secondBy: Athlete | null = null;
   /** the other team's touches since the ball was last ours */
   theirTouches = 0;
+  /** what the team is in the middle of (src/ai/situation.ts), and where the ball in flight comes down */
+  situation: Situation = 'dead';
+  focus: V3 | null = null;
+  /** how far the back row's base defence has shifted along the net with the ball (m, world x) */
+  private shadeX = 0;
+  /** their serve has been read: those it isn't going to are on their way */
+  private serveSeen = false;
   /** we have read that their third ball can only be a free ball (see `freeBallDefence`) */
   freeCall = false;
+  /** their serve is a jump serve: read off the toss (the passers step back: `AI.sit.jumpBack`) */
+  jumpServe = false;
 
   constructor(
     public side: 1 | -1,
@@ -548,7 +567,13 @@ export class TeamAI {
       const p = this.formSpot(form, slot);
       if (!a.isUser) a.place(p.x, p.z, netYaw(this.side));
     }
-    for (const b of this.brains.values()) b.reset();
+    for (const b of this.brains.values()) {
+      b.reset();
+      const P = AI.sit.personal;
+      b.personal = P > 0 ? { x: this.g.rng.gauss() * P, z: this.g.rng.gauss() * P } : { x: 0, z: 0 };
+    }
+    this.shadeX = 0;
+    this.jumpServe = false;
     this.touches = 0;
     this.setFor = null;
     this.receiver = null;
@@ -928,9 +953,18 @@ export class TeamAI {
       jobs.set(a, { job, spot: spot ?? { x: a.pos.x, z: a.pos.z }, run, due });
     };
     let form: 'receive' | 'defense' | 'offense' = 'defense';
+    this.serveSeen = false;
+    // their server's toss tells the serve (a jump server may still settle for a float under a bad toss)
+    for (const b of this.opponents?.brains.values() ?? []) {
+      const sv = b.server;
+      if (b.job === 'serve' && (sv.phase === 'toss' || sv.phase === 'approach' || sv.phase === 'load' || sv.phase === 'air'))
+        this.jumpServe = sv.jump;
+    }
     if (this.receiverFor !== lt) this.receiver = null;
     if (!live) {
       this.receiver = null;
+      this.situation = 'dead';
+      this.focus = null;
       form = this.serving ? 'defense' : 'receive';
     } else {
       const pred = ball.ensurePrediction(g.env, now);
@@ -945,6 +979,23 @@ export class TeamAI {
       const theirBall = lt && lt.side !== this.side && lt.kind !== 'block';
       const ourBall = lt && lt.side === this.side && lt.kind !== 'block';
       const ourBlock = lt && lt.side === this.side && lt.kind === 'block';
+      // what we are in the middle of, and where the ball comes down (the play the others move with)
+      const firstUp = !!ourBall && this.touches === 1 && (lt.kind === 'pass' || lt.kind === 'dig' || lt.kind === 'free');
+      this.situation = situationOf({
+        live,
+        kind: lt?.kind ?? null,
+        ours: !!lt && lt.side === this.side,
+        comingToUs: firstUp ? !this.overpass(g) : comingToUs,
+        freeCall: this.freeCall,
+        help: this.freeFor === lt && this.secondHelp,
+      });
+      this.focus = tDown > 0 ? p : null;
+      // base defence moves along the net with the ball while it is on their side; once they set it
+      // the read takes over from where the base then was; on our own ball there is none
+      const sit = this.situation;
+      if (sit === 'ourServe' || sit === 'ourAttack' || sit === 'theirFirstBall')
+        this.shadeX = clamp(ball.pos.x * AI.sit.ballSide, -AI.sit.ballSideMax, AI.sit.ballSideMax);
+      else if (sit !== 'theirSet' && sit !== 'theirHit' && sit !== 'theirFree') this.shadeX = 0;
       // a ball that will land clearly out is let go (judged where it lands, not where it is played)
       const land = pred.land;
       const inBounds = Math.abs(land.x) < COURT.halfWidth + AI.outJudge && Math.abs(land.z) < COURT.halfLength + AI.outJudge;
@@ -960,12 +1011,23 @@ export class TeamAI {
         const freeIn = !serve && !offBlock && !!lt && lt.side !== this.side && FREE_KINDS.has(lt.kind) && !!L && !L.isUser;
         const claim = offBlock || freeIn;
         const margin = freeIn ? AI.pick.liberoFree : AI.pick.libero;
+        // between the user and an AI libero, any ball the libero gets to is the libero's: called
+        // early, never taken off the user late
+        const users = !!this.receiver?.isUser && !!L && !L.isUser;
+        const late = users && !!lt && now - lt.t > AI.pick.call;
         const takeOver =
-          claim && !!L && this.receiver !== L && comingToUs && tDown > 0 && this.liberoGets(p, tDown - now, exclude, null, margin);
+          (claim || users) &&
+          !late &&
+          !!L &&
+          this.receiver !== L &&
+          comingToUs &&
+          tDown > 0 &&
+          this.liberoGets(p, tDown - now, exclude, null, margin);
         if (this.receiver && this.receiverFor === lt && !strayed && !takeOver) {
           setJob(this.receiver, 'receive');
         } else if (comingToUs && tDown > 0 && (inBounds || mustPlay)) {
-          const r = this.pickReceiver(p, serve, exclude, null, claim ? tDown - now : undefined, margin);
+          let r = this.pickReceiver(p, serve, exclude, null, claim ? tDown - now : undefined, margin);
+          if (r?.isUser && L && !L.isUser && this.liberoGets(p, tDown - now, exclude, null, margin)) r = L;
           this.receiver = r;
           this.receiverFor = lt;
           this.receiverAt = { x: p.x, z: p.z };
@@ -983,13 +1045,14 @@ export class TeamAI {
         // the other team touched it last: defend, receive if it is coming
         form = lt?.kind === 'serve' ? 'receive' : 'defense';
         receive(lt?.kind === 'serve', null);
+        if (lt?.kind === 'serve') this.serveTransition(lt, setJob);
         // a free ball over (not an attack, not a serve, not a block): an easy first ball
         const free = lt && FREE_KINDS.has(lt.kind);
         if (free && comingToUs && tDown > 0) this.earlyTransition(lt, tDown, p, setJob);
         // their second ball was no set: their third can only be a free ball, and we get ready for it
         else if (free && this.theirTouches === 2 && lt.kind !== 'set' && !onOurSide) this.freeBallDefence(lt, setJob);
-        // on their hard attack the back-row setter releases to the net once it reads the ball isn't its own to dig
-        if (lt && (lt.kind === 'spike' || lt.kind === 'tip')) this.setterRelease(lt, setJob);
+        // the setter releases to the net once it reads that the ball coming over isn't its own to play
+        if (lt && lt.kind !== 'serve') this.setterRelease(lt, jobs, setJob);
         // blockers read their set
         if (lt?.kind === 'set' && !onOurSide) {
           for (const a of this.frontRow()) setJob(a, 'block', this.formSpot('defense', this.slotOf(a)));
@@ -1011,6 +1074,7 @@ export class TeamAI {
         receive(false, lt?.athlete ?? null, true);
         // a soft block: if it comes down slowly to a passer who will get there, run the offence early
         if (lt && comingToUs && tDown > 0 && ball.speed() < AI.transition.softSpeed) this.earlyTransition(lt, tDown, p, setJob);
+        if (lt) this.setterRelease(lt, jobs, setJob);
       } else if (ourBall && (lt.kind === 'spike' || lt.kind === 'tip')) {
         // our attack: the cover holds until it is over the net, then everyone goes back to base defence
         form = 'defense';
@@ -1142,7 +1206,7 @@ export class TeamAI {
     for (const [slot, a] of this.players) {
       if (a.isUser || jobs.has(a)) continue;
       const held = attackFlying ? this.brains.get(a)?.readSpot : null;
-      const spot = held ?? this.formSpot(form, slot);
+      const spot = held ?? this.anchor(form, slot, a);
       if (form === 'offense' && (slot === 'OH1' || slot === 'MB' || slot === 'OPP' || slot === 'OH2')) setJob(a, 'attack', spot);
       else setJob(a, 'base', spot);
     }
@@ -1189,7 +1253,7 @@ export class TeamAI {
       if (spot) {
         b.readSpot = { x: spot.x * s, z: spot.z * s };
         setJob(a, 'base', b.readSpot, false, atk.t);
-      } else if (back) b.readSpot = this.formSpot('defense', slot);
+      } else if (back) b.readSpot = this.anchor('defense', slot, a);
     }
     this.readBlockSeam(set, setJob);
   }
@@ -1206,11 +1270,13 @@ export class TeamAI {
     const g = this.g;
     const now = g.simTime;
     const r = this.receiver;
-    // (a free ball we called before it was sent: the team is already on its way, and stays on it)
-    if (!this.freeCall) {
+    // (a free ball we called before it was sent: the team is already on its way, and stays on it;
+    // so does a team that has started: nobody turns back to the net half way)
+    if (!this.freeCall && this.earlyFor !== t) {
       if (!r || now - t.t < AI.transition.read) return;
       if (this.reachTime(r, p) + AI.transition.spare > tDown - now) return;
     }
+    this.earlyFor = t;
     const S = this.players.get('S');
     if (S && S !== r) setJob(S, 'base', this.formSpot('offense', 'S'), true);
     for (const slot of ['OH1', 'MB', 'OPP'] as const) {
@@ -1220,6 +1286,8 @@ export class TeamAI {
     if (this.freeCall) this.freeBack(setJob, r);
   }
 
+  private earlyFor: unknown = null;
+
   /** free-ball defence, back row: the libero and the back-row outside split the court (`FREE_BACK`) */
   private freeBack(setJob: SetJob, except: Athlete | null = null): void {
     for (const slot of ['L', 'OH2'] as const) {
@@ -1227,6 +1295,79 @@ export class TeamAI {
       const f = FREE_BACK[slot];
       if (a && a !== except) setJob(a, 'base', { x: f.x * this.side, z: f.z * this.side });
     }
+  }
+
+  /**
+   * Their serve: once it has been read (`AI.sit.serveRead` s after the contact) the players it is
+   * not going to get going before the pass is made: the setter to the target, the front row to
+   * their approach starts. (The passers beside the receiver back it up: see `anchor`.)
+   */
+  private serveTransition(t: Touch, setJob: SetJob): void {
+    const r = this.receiver;
+    if (!r || this.g.simTime - t.t < AI.sit.serveRead) return;
+    this.serveSeen = true;
+    const S = this.players.get('S');
+    if (S && S !== r) setJob(S, 'base', this.formSpot('offense', 'S'), true);
+    for (const slot of ['OH1', 'MB', 'OPP'] as const) {
+      const a = this.players.get(slot);
+      if (a && a !== r) setJob(a, 'attack', this.formSpot('offense', slot));
+    }
+  }
+
+  /** the setter has called our first ball out of system (or HELP): the set will be a high ball */
+  outOfSystem(g: Game): boolean {
+    const r = this.read;
+    return !!r && r.touch === g.ball.lastTouch && r.call !== 'in';
+  }
+
+  /**
+   * Where a player with no job of their own stands: their formation spot, moved with the play
+   * (`AI.sit`), so nobody waits on a fixed mark while the ball is somewhere else.
+   * - base defence, ball on their side: the back row shifts along the net with the ball, and a pin
+   *   blocker fronts its hitter once they have the ball;
+   * - their jump serve, read off the toss: the passers step back;
+   * - their serve, read: the passers beside the receiver step towards it to back it up (not at a
+   *   ball that is the user's);
+   * - our first ball: the back row follows the pass;
+   * - a scramble: everyone closes on where the ball comes down, without crowding whoever plays it.
+   * Each player is also a little off the book spot, their own habit for the rally.
+   */
+  anchor(form: 'receive' | 'defense' | 'offense', slot: Slot, a: Athlete): Spot {
+    const base = this.formSpot(form, slot);
+    const C = AI.sit;
+    const me = this.brains.get(a);
+    let x = base.x + (me?.personal.x ?? 0);
+    let z = base.z + (me?.personal.z ?? 0);
+    const sit = this.situation;
+    const back = slot === 'S' || slot === 'L' || slot === 'OH2';
+    // their jump serve, read off the toss: the passers start deeper
+    if (form === 'receive' && this.jumpServe && (slot === 'OH1' || slot === 'OH2' || slot === 'L')) z += this.side * C.jumpBack;
+    if (form === 'defense' && back) x += this.shadeX;
+    else if (form === 'defense' && slot !== 'MB' && sit === 'theirFirstBall') {
+      const h = this.opponents?.players.get(slot === 'OH1' ? 'OPP' : 'OH1');
+      if (h && Math.sign(h.pos.x) === Math.sign(base.x)) x = Math.sign(base.x) * clamp(Math.abs(h.pos.x), C.frontMin, C.frontMax);
+    }
+    const f = this.focus;
+    /** step towards the ball's landing: `share` of the way, at most `max` m, never nearer than `keep` m */
+    const towards = (share: number, max: number, keep: number) => {
+      if (!f) return;
+      const dx = f.x - x;
+      const dz = f.z - z;
+      const d = Math.hypot(dx, dz);
+      const m = Math.min(share * d, max, Math.max(0, d - keep));
+      if (d > 1e-3 && m > 0) {
+        x += (dx / d) * m;
+        z += (dz / d) * m;
+      }
+    };
+    if (sit === 'scramble') towards(C.chase, C.chaseMax, C.chaseKeep);
+    else if (sit === 'ourFirstBall' && form === 'offense' && back) towards(C.follow, C.followMax, C.chaseKeep);
+    else if (sit === 'theirServe' && this.serveSeen && !this.receiver?.isUser && (slot === 'OH2' || slot === 'L'))
+      towards(C.backUp, C.backUpMax, C.backUpKeep);
+    // (in our own court)
+    const W = COURT.halfWidth - 0.3;
+    const s = this.side;
+    return { x: clamp(x, -W, W), z: s * clamp(z * s, 0.5, COURT.halfLength - 0.3) };
   }
 
   /**
@@ -1248,20 +1389,26 @@ export class TeamAI {
   }
 
   /**
-   * On their hard attack (a spike or tip) the back-row setter releases to the net as soon as it can
-   * see the ball isn't its own to dig: once its read of the hit is in (`AI.defence.hitReact` ±
-   * `hitReactSd` after the contact, the same reaction every defender has to a hit) and our receiver
-   * is someone else. (The front row leaves the net on the same read, once it is back on the floor:
-   * see the transition in `step`.) A front-row setter is blocking, not releasing (the Mini Rally has
-   * no rotation, so the setter is never front row).
+   * The setter's release. On every ball coming to our side that someone else is playing (their
+   * attack, a tip, a free ball or an overpass, a ball off either block) the back-row setter goes to
+   * the net as soon as it has read the touch: its own reaction to it (`AI.defence.hitReact` ±
+   * `hitReactSd`, the same every defender has; a setter covering our hitter, low and watching the
+   * block, reads a ball off it in `AI.cover.react`). It doesn't wait to see how good the first ball
+   * will be: a setter standing in defence while the pass goes up is late to every ball. (The serve
+   * has its own read: `serveTransition`. The front row leaves the net on the same read, once it is
+   * back on the floor: see the transition in `step`.) A setter sent somewhere already (running with
+   * the player sent to a ball they may only dive for) keeps that job. A front-row setter is
+   * blocking, not releasing (the Mini Rally has no rotation, so the setter is never front row).
    */
-  private setterRelease(t: Touch, setJob: SetJob): void {
+  private setterRelease(t: Touch, jobs: Map<Athlete, unknown>, setJob: SetJob): void {
     const S = this.players.get('S');
     const b = S ? this.brains.get(S) : null;
-    if (!S || !b || this.frontRow().includes(S)) return;
-    if (this.receiverFor !== t || this.receiver === S) return;
-    b.hitRead.look(t, t.t, this.g.rng);
-    if (!b.hitRead.seen(this.g.simTime)) return;
+    if (!S || !b || jobs.has(S) || this.frontRow().includes(S)) return;
+    if (this.receiverFor !== t || !this.receiver || this.receiver === S) return;
+    const now = this.g.simTime;
+    const read = t.kind === 'block' && now - b.coverT < 0.6 ? b.coverRead : b.hitRead;
+    read.look(t, t.t, this.g.rng);
+    if (!read.seen(now)) return;
     setJob(S, 'base', this.formSpot('offense', 'S'), true);
   }
 

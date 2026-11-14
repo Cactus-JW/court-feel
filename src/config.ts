@@ -884,6 +884,29 @@ export const CHARACTER = {
    */
   idle: { breath: 0.4, chest: 0.014, sway: 0.23, bob: 0.004, lean: 0.012 },
   /**
+   * A body that isn't rigid (AI players; cosmetic only, decision record 0008: nothing here is read
+   * back by the play. Your own body is left alone: in first person your eyes ride on it).
+   * - With a ball in play nobody stands flat-footed: a player standing still sits `readyDrop` (body
+   *   heights) lower with the chest `readyLean` rad further over the knees, and bounces on the balls
+   *   of the feet, `bounce` body heights at about `bounceHz` (each player at their own tempo, within
+   *   `tempo` of it). Between rallies they stand up and breathe (`idle`).
+   * - The trunk leans into the acceleration, `accLean` rad per m/s² and at most `accMax` rad: forward
+   *   as they push off, back as they brake, into a sidestep.
+   * - The chest follows the hips into a turn `turnLag` s late (at most `turnMax` rad): the feet turn
+   *   first, the shoulders come round after.
+   */
+  loose: {
+    readyDrop: 0.03,
+    readyLean: 0.1,
+    bounce: 0.014,
+    bounceHz: 1.8,
+    tempo: 0.15,
+    accLean: 0.012,
+    accMax: 0.18,
+    turnLag: 0.08,
+    turnMax: 0.3,
+  },
+  /**
    * The two-arm swing of a jump. On the plant the arms go back behind the hips: `backStanding` (rad from
    * hanging straight down) for a standing jump, up to `backRun` after a run-up of `fullRun` (m/s) or more,
    * within `backTime` (s). From `upStart` (s) after the plant began they swing down past the hips and up in
@@ -1126,10 +1149,14 @@ export const AI = {
   /**
    * Early transition: on an easy first ball (their free ball over, or our block softening their
    * attack to under `softSpeed` m/s) that our passer reaches with `spare` s to spare, the setter
-   * releases to the net and the front row leaves it to approach, `read` s after the touch.
+   * releases to the net and the front row leaves it to approach, `read` s after the touch. Once
+   * they have started they keep going: nobody turns back to the net half way.
    *
-   * On their hard attack (a spike or tip) the back-row setter also releases to the net on its own,
-   * as soon as it has read the hit (`AI.defence.hitReact`) and our dig is assigned to someone else
+   * The back-row setter also releases to the net on its own on every ball coming over that someone
+   * else is playing (their attack, a tip, a free ball or an overpass, a ball off either block), as
+   * soon as it has read the touch (`AI.defence.hitReact`; `AI.cover.react` for a setter covering
+   * our hitter), without waiting to see how good the first ball will be (MatusGib, 2026-11-14: a
+   * setter still standing in defence when the pass is plainly going to be in system).
    * "The setter releases from their defensive position immediately to run the offense"
    * (FreeCoachingDrills, transition attack tempo drill).
    *
@@ -1159,11 +1186,14 @@ export const AI = {
    * to spare: it calls off whoever was sent (a real libero takes every one of those it can). So is
    * their free ball when an AI libero gets there with `liberoFree` s to spare: the libero takes
    * most free balls, not the middle or a pin hitter who should be getting ready to attack
-   * (MatusGib, 2026-11-14). The setter calls HELP only on a ball somebody can still get to: one
-   * that will be down more than `dive` s before the first of them arrives (a shank into the
-   * stands) is the other team's point, and nothing is called.
+   * (MatusGib, 2026-11-14). And between the user and an AI libero, any first ball the libero gets
+   * to (with `libero` s to spare) is the libero's ("if the libero can take it, it takes it":
+   * MatusGib, 2026-11-14). A ball is called early: once it has been the user's for `call` s the
+   * libero no longer takes it off them. The setter calls HELP only on a ball somebody can still
+   * get to: one that will be down more than `dive` s before the first of them arrives (a shank
+   * into the stands) is the other team's point, and nothing is called.
    */
-  pick: { seam: 0.15, setter: 0.2, shuffle: 1.5, libero: 0.1, liberoFree: 0.3, dive: 0.5 },
+  pick: { seam: 0.15, setter: 0.2, shuffle: 1.5, libero: 0.1, liberoFree: 0.3, call: 0.4, dive: 0.5 },
   /**
    * An AI free ball over (a third ball nobody can attack) goes where it is hard to play: deep to a
    * back corner (`deep` m off the net, `side` m off the middle) or short, just over the net (`short`
@@ -1305,9 +1335,55 @@ export const AI = {
    * contact system grades by how close it really got (at the edge of the platform: a scrape, up and
    * not much more). A ball further out than that (up to `anywayFar` m beyond the hands), run at
    * flat out, is dived for anyway `anyway` of the time: they don't get it, but nobody watches a
-   * ball drop (MatusGib, 2026-11-14).
+   * ball drop (MatusGib, 2026-11-14). Nobody dives backwards at a serve or a spike: a dive that
+   * would go more than `back` (the share of it pointing away from the net: 0.3 is about 17 degrees
+   * behind straight sideways) backwards isn't made, and the ball is played on the feet or not at
+   * all. Forwards and sideways only; a ball going over them is run down like any other
+   * (MatusGib, 2026-11-14).
    */
-  dive: { late: 0.9, minDist: 1.0, fit: 0.35, stretch: 0.6, anyway: 0.5, anywayFar: 2.5 },
+  dive: { late: 0.9, minDist: 1.0, fit: 0.35, stretch: 0.6, anyway: 0.5, anywayFar: 2.5, back: 0.3 },
+  /**
+   * Situations (src/ai/situation.ts; F3 shows the one each team is in). Players with no job of
+   * their own move with the play instead of waiting on a fixed formation spot:
+   * - the ball on their side (`ourServe`, `ourAttack`, `theirFirstBall`): the back row's base
+   *   defence shifts along the net by `ballSide` of the ball's distance from the middle of the
+   *   court, at most `ballSideMax` m; once they have the ball a pin blocker fronts its hitter,
+   *   standing between `frontMin` and `frontMax` m from the middle (USA Volleyball and GMS blocking
+   *   basics: "front your hitter"; the back row's shift and its size are inferred);
+   * - `theirServe`: `serveRead` s after the serve the players it is not going to are on their way:
+   *   the setter to the target and the front row to their approach starts, and the passers beside
+   *   the receiver step `backUp` of the way towards it (at most `backUpMax` m, never nearer than
+   *   `backUpKeep` m) to back it up (not when it is the user's ball: nobody steps at a ball that
+   *   is yours). Before that, their server's toss for a jump serve is read: the three passers
+   *   step `jumpBack` m back for it (a jump serve comes in hard and deep, and it is easier to
+   *   move forward to a ball than back; the size is inferred);
+   * - `ourFirstBall`: the back row follows the pass, `follow` of the way towards where it comes
+   *   down (at most `followMax` m); called out of system, the hitters wait `outDeep` m deeper for
+   *   the high ball (a full approach);
+   * - `scramble` (a ball off a block, a ball the setter calls HELP on): everyone not playing it
+   *   closes `chase` of the way on where it comes down (at most `chaseMax` m), never nearer than
+   *   `chaseKeep` m to it: the next option and the back-up, without crowding.
+   * `personal`: every player stands a little off the book spot, their own habit for the rally (m,
+   * 1 sd, rolled once a rally): no two rallies line up exactly the same. 0 turns a rule off.
+   */
+  sit: {
+    ballSide: 0.25,
+    ballSideMax: 1.2,
+    frontMin: 2.2,
+    frontMax: 3.9,
+    serveRead: 0.35,
+    jumpBack: 1.0,
+    backUp: 0.3,
+    backUpMax: 1.5,
+    backUpKeep: 1.5,
+    follow: 0.3,
+    followMax: 1.5,
+    outDeep: 0.6,
+    chase: 0.35,
+    chaseMax: 3.0,
+    chaseKeep: 2.5,
+    personal: 0.15,
+  },
   /**
    * Arriving on the cue. A defender reading their set, and a team-mate covering our hitter, has
    * to be set by the hitter's contact, not before: it shuffles there at the pace that arrives

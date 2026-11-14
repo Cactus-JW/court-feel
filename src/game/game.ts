@@ -897,6 +897,7 @@ export class Game {
       v.passZone = this.contact.platformPoint(a, v.passZone ?? new THREE.Vector3());
       v.setZone = this.contact.handsPoint(a, v.setZone ?? new THREE.Vector3());
       if (this.ball.active) a.lookAt.copy(this.ball.rpos);
+      a.alert = this.ball.active && !this.ball.state.rest ? 1 : 0;
       v.setFirstPerson(a.isUser && this.rig.mode === 'fp' && !this.inMenu);
       v.netTop = this.env.netTop;
       v.update(animDt, tr);
@@ -1034,6 +1035,7 @@ export class Game {
         `draws ${this.renderer.info.render.calls} tris ${this.renderer.info.render.triangles} mem geo ${this.renderer.info.memory.geometries} tex ${this.renderer.info.memory.textures}`,
         this.ballDebug(),
         `action ${me.action ? me.action.kind : '-'} grade ${act?.grade ?? '-'} err ${act ? (act.err * 1000).toFixed(0) : '-'} ms${lp}`,
+        ...(this.mode?.debugLines?.() ?? []),
       ],
       window,
     };

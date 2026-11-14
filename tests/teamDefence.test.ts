@@ -13,6 +13,8 @@ import { SetterBrain } from '../src/ai/setter';
 import { SLOT_ROLE, SLOTS, TeamAI, type Slot } from '../src/ai/team';
 
 const DT = 1 / SIM.hz;
+// (the book spots: each player's own habit, a little off them every rally, is tested on its own)
+AI.sit.personal = 0;
 const NO_SPIN: V3 = { x: 0, y: 0, z: 0 };
 const D = AI.defence;
 const W = COURT.halfWidth;
@@ -294,6 +296,173 @@ describe('who takes the ball (Mini Rally)', () => {
     L.place(-0.6, 3.6, 0);
     t.run(0.05);
     expect(t.team.receiver).toBe(L);
+  });
+});
+
+describe('moving with the play: the situations (Mini Rally)', () => {
+  const BACK = ['S', 'L', 'OH2'] as const;
+  const dist = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
+
+  it('a team is always in one situation, read from the ball', () => {
+    const t = homeTeam();
+    expect(t.team.situation).toBe('dead');
+    t.touch('serve', -1, { x: 2, y: 2.6, z: -9 }, { x: -1, y: 0.8, z: 6 }, 3.6);
+    t.run(0.05);
+    expect(t.team.situation).toBe('theirServe');
+    const L = t.team.players.get('L')!;
+    t.touch('pass', 1, { x: -1, y: 0.8, z: 6 }, { x: SETTER_SPOT.x, y: 2.4, z: SETTER_SPOT.z }, 4.6, L);
+    t.run(0.05);
+    expect(t.team.situation).toBe('ourFirstBall');
+    t.touch('set', 1, { x: SETTER_SPOT.x, y: 2.4, z: SETTER_SPOT.z }, { x: -3.6, y: 3.2, z: 0.8 }, 5.5, t.team.players.get('S')!);
+    t.run(0.05);
+    expect(t.team.situation).toBe('ourSet');
+    t.touch('spike', 1, { x: -3.6, y: 3.2, z: 0.8 }, { x: 2, y: 0.2, z: -6 }, 3.3, t.team.players.get('OH1')!);
+    t.run(0.05);
+    expect(t.team.situation).toBe('ourAttack');
+    t.touch('dig', -1, { x: 2, y: 0.6, z: -6 }, { x: 1, y: 2.4, z: -1 }, 4.5);
+    t.run(0.05);
+    expect(t.team.situation).toBe('theirFirstBall');
+    t.touch('set', -1, { x: 1, y: 2.4, z: -1 }, { x: 3.6, y: 3.2, z: -0.8 }, 5.5);
+    t.run(0.05);
+    expect(t.team.situation).toBe('theirSet');
+    t.spike({ x: 3.6, y: 3.2, z: -0.8 }, { x: -1.5, y: 0.1, z: 5.5 }, 22);
+    t.run(0.02);
+    expect(t.team.situation).toBe('theirHit');
+    // off our block and down on our side: ours to keep alive
+    t.touch('block', 1, { x: 3.4, y: 2.8, z: 0.3 }, { x: 1, y: 0.8, z: 5 }, 4.2, t.team.players.get('OPP')!);
+    t.run(0.05);
+    expect(t.team.situation).toBe('scramble');
+    // their ball coming over without an attack
+    t.touch('pass', -1, { x: 0, y: 1.0, z: -5 }, { x: -1.5, y: 0.8, z: 5.5 }, 5.5);
+    t.run(0.05);
+    expect(t.team.situation).toBe('theirFree');
+  });
+
+  it('base defence moves along the net with the ball while they have it, and the read starts from there when they set it', () => {
+    for (const bx of [3, -3]) {
+      const t = homeTeam();
+      t.touch('dig', -1, { x: bx, y: 0.8, z: -6 }, { x: bx, y: 2.4, z: -2 }, 4.5);
+      t.run(0.2);
+      for (const slot of BACK) {
+        const book = t.team.formSpot('defense', slot);
+        const spot = t.brain(slot).spot;
+        // towards the ball's side, a step or so, no deeper and no shallower
+        expect(Math.sign(spot.x - book.x), slot).toBe(Math.sign(bx));
+        expect(Math.abs(spot.x - book.x), slot).toBeGreaterThan(0.4);
+        expect(Math.abs(spot.x - book.x), slot).toBeLessThanOrEqual(AI.sit.ballSideMax + 1e-9);
+        expect(spot.z, slot).toBeCloseTo(book.z, 9);
+      }
+      // their set goes up: nobody steps back to the book spot before reading it
+      const before = BACK.map((slot) => ({ ...t.brain(slot).spot }));
+      t.touch('set', -1, { x: bx, y: 2.4, z: -2 }, { x: bx, y: 3.25, z: -0.8 }, 5.5);
+      t.run(0.05);
+      BACK.forEach((slot, i) => expect(dist(t.brain(slot).spot, before[i]), slot).toBeLessThan(0.05));
+    }
+  });
+
+  it('a pin blocker fronts its hitter once they have the ball', () => {
+    const t = homeTeam();
+    // their opposite (on our left) wide at its approach start, their outside (on our right) inside
+    const wide = new Athlete('OPP', -1);
+    wide.place(-4.6, -3.4, Math.PI);
+    const inside = new Athlete('OH', -1);
+    inside.place(2.4, -3.6, Math.PI);
+    (t.team as unknown as { opponents: unknown }).opponents = {
+      players: new Map([
+        ['OPP', wide],
+        ['OH1', inside],
+      ]),
+      brains: new Map(),
+      frontRow: () => [],
+    };
+    t.touch('dig', -1, { x: 0, y: 0.8, z: -6 }, { x: 0, y: 2.4, z: -2 }, 4.5);
+    t.run(0.2);
+    const left = t.brain('OH1').spot;
+    const right = t.brain('OPP').spot;
+    // out to (at most `frontMax`) the wide hitter's line, in to the inside one's; still at the net
+    expect(left.x).toBeCloseTo(-AI.sit.frontMax, 9);
+    expect(right.x).toBeCloseTo(2.4, 9);
+    expect(left.z).toBeLessThan(1);
+    expect(right.z).toBeLessThan(1);
+  });
+
+  it('their serve, once read: the setter is off to the target, the front row to their approaches, and the passer next to the receiver backs it up', () => {
+    const t = homeTeam();
+    t.team.place('receive');
+    t.touch('serve', -1, { x: 2, y: 2.6, z: -9 }, { x: -2.4, y: 0.8, z: 6.2 }, 3.6);
+    t.run(0.1);
+    // not before it is read
+    expect(t.brain('S').spot).not.toEqual(t.team.formSpot('offense', 'S'));
+    t.run(AI.sit.serveRead);
+    const got = (['OH1', 'OH2', 'L'] as const).find((slot) => t.brain(slot).job === 'receive')!;
+    expect(got).toBeDefined();
+    expect(t.brain('S').spot).toEqual(t.team.formSpot('offense', 'S'));
+    for (const slot of ['MB', 'OPP'] as const) expect(t.brain(slot).job, slot).toBe('attack');
+    const ball = t.team.focus!;
+    for (const slot of ['OH2', 'L'] as const) {
+      if (slot === got) continue;
+      const book = t.team.formSpot('receive', slot);
+      const spot = t.brain(slot).spot;
+      // nearer the ball than the book spot, but not on top of the receiver
+      expect(dist(spot, ball), slot).toBeLessThan(dist(book, ball) - 0.3);
+      expect(dist(spot, ball), slot).toBeGreaterThanOrEqual(AI.sit.backUpKeep - 1e-9);
+    }
+  });
+
+  it('our first ball called out of system: the hitters wait deeper for the high ball, and the back row follows the pass', () => {
+    const t = homeTeam();
+    t.team.place('offense');
+    const L = t.team.players.get('L')!;
+    // a pass 3 m off the net, out on the left
+    t.touch('pass', 1, { x: L.pos.x, y: 0.8, z: L.pos.z }, { x: -2.5, y: 2.4, z: 3.2 }, 4.8, L);
+    t.run(AI.setterRead + 0.2);
+    expect(t.team.read?.call).toBe('out');
+    const lane = laneFor('OPP', 1);
+    expect(t.brain('OPP').hitter!.holdSpot!.z).toBeCloseTo(lane.sz + AI.sit.outDeep, 9);
+    // in system they wait at their approach start
+    const good = homeTeam();
+    good.team.place('offense');
+    const l2 = good.team.players.get('L')!;
+    good.touch('pass', 1, { x: l2.pos.x, y: 0.8, z: l2.pos.z }, { x: SETTER_SPOT.x, y: 2.4, z: SETTER_SPOT.z }, 4.6, l2);
+    good.run(AI.setterRead + 0.2);
+    expect(good.team.read?.call).toBe('in');
+    expect(good.brain('OPP').hitter!.holdSpot).toBeNull();
+  });
+
+  it('a scramble: those not playing the ball close on where it comes down, without crowding whoever plays it', () => {
+    const t = homeTeam();
+    // off our block, down deep in our right corner
+    t.touch('block', 1, { x: 0.3, y: 2.7, z: 0.3 }, { x: 3.4, y: 0.8, z: 7.6 }, 4.4, t.team.players.get('MB')!);
+    t.run(0.1);
+    expect(t.team.situation).toBe('scramble');
+    const ball = t.team.focus!;
+    let followers = 0;
+    for (const slot of BACK) {
+      const b = t.brain(slot);
+      if (b.job !== 'base') continue;
+      const book = t.team.formSpot('defense', slot);
+      if (dist(book, ball) <= AI.sit.chaseKeep) continue;
+      followers++;
+      expect(dist(b.spot, ball), slot).toBeLessThan(dist(book, ball) - 0.3);
+      expect(dist(b.spot, ball), slot).toBeGreaterThanOrEqual(AI.sit.chaseKeep - 1e-9);
+    }
+    expect(followers).toBeGreaterThan(0);
+  });
+
+  it('every player stands a little off the book spot, their own habit for the rally: no two rallies line up the same', () => {
+    AI.sit.personal = 0.15;
+    const t = homeTeam();
+    const line = () => SLOTS.map((slot) => ({ ...t.team.anchor('defense', slot, t.team.players.get(slot)!) }));
+    const one = line();
+    t.team.place('defense');
+    const two = line();
+    AI.sit.personal = 0;
+    SLOTS.forEach((slot, i) => {
+      const book = t.team.formSpot('defense', slot);
+      expect(dist(one[i], book), slot).toBeGreaterThan(0);
+      expect(dist(one[i], book), slot).toBeLessThan(0.9);
+      expect(dist(one[i], two[i]), slot).toBeGreaterThan(0);
+    });
   });
 });
 
@@ -712,7 +881,10 @@ describe('early transition (Mini Rally)', () => {
     const theirs = new Athlete('OH', -1);
     theirs.place(0.5, -3.6, Math.PI);
     theirs.state = 'air';
-    (t.team as unknown as { opponents: { players: Map<string, Athlete> } }).opponents = { players: new Map([['OH1', theirs]]) };
+    (t.team as unknown as { opponents: unknown }).opponents = {
+      players: new Map([['OH1', theirs]]),
+      brains: new Map(),
+    };
     t.run(AI.transition.read + 0.2);
     expect(t.team.freeCall).toBe(false);
   });
@@ -977,5 +1149,193 @@ describe('the middle back reads our block as it goes up (Mini Rally)', () => {
     const { t, hold } = blockUp(3.5 - 1.2, 0.6);
     t.run(1.1, hold);
     expect(t.brain('OH2').spot.z).toBeCloseTo(D.middleBack, 1);
+  });
+});
+
+describe('the setter releases on every ball that is not its own (Mini Rally)', () => {
+  /** the setter is sent to the net `after` s after the touch, not before it has read it */
+  const releases = (t: ReturnType<typeof homeTeam>, after: number) => {
+    const S = t.brain('S');
+    const target = t.team.formSpot('offense', 'S');
+    t.run(0.05);
+    expect(t.team.receiver).not.toBeNull();
+    expect(t.team.receiver).not.toBe(t.team.players.get('S'));
+    expect(S.spot).not.toEqual(target);
+    t.run(after);
+    expect(S.job).toBe('base');
+    expect(S.spot).toEqual(target);
+    expect(S.run).toBe(true);
+  };
+
+  it('a ball off our own block coming down hard on our side, a team-mate on it: the setter is off to the net before the dig', () => {
+    const t = homeTeam();
+    const mb = t.team.players.get('MB')!;
+    // off the middle's hands at over 10 m/s (no "soft block"): down in front of the left back
+    t.put({ x: -2.0, y: 2.6, z: 0.4 }, { x: 0.5, y: -2, z: 10 }, mb, 'block', 1);
+    expect(t.ball.speed()).toBeGreaterThan(AI.transition.softSpeed);
+    releases(t, D.hitReact + 3 * D.hitReactSd + 0.05);
+  });
+
+  it('our attack coming back off their block, a team-mate on it: the setter is off to the net', () => {
+    const t = homeTeam();
+    t.touch('block', -1, { x: -1.5, y: 3.0, z: -0.2 }, { x: -1.8, y: 0.75, z: 3.0 }, 3.6);
+    releases(t, D.hitReact + 3 * D.hitReactSd + 0.05);
+  });
+
+  it('their overpass: the setter goes to the net once it has read it, and keeps going all the way down', () => {
+    const t = homeTeam();
+    // their dig flies over, high and deep to our middle back
+    t.touch('dig', -1, { x: 1, y: 0.8, z: -5 }, { x: 0.3, y: 0.75, z: 7.6 }, 6.0);
+    releases(t, D.hitReact + 3 * D.hitReactSd + 0.05);
+    const target = t.team.formSpot('offense', 'S');
+    t.run(1.0, () => expect(t.brain('S').spot).toEqual(target));
+  });
+
+  it('a front row that has left the net for an easy ball never turns back to it half way', () => {
+    const t = homeTeam();
+    t.touch('free', -1, { x: 1, y: 0.8, z: -5 }, { x: -1.0, y: 0.75, z: 6.0 }, 6.0);
+    let left = false;
+    t.run(1.5, () => {
+      const off = t.brain('MB').job === 'attack';
+      if (left) expect(off).toBe(true);
+      left ||= off;
+    });
+    expect(left).toBe(true);
+  });
+});
+
+describe("your ball or the libero's (Mini Rally)", () => {
+  it("a serve between you and the libero that the libero gets to is the libero's", () => {
+    const t = homeTeam();
+    t.team.place('receive');
+    const you = t.team.players.get('OH2')!;
+    you.isUser = true;
+    // 0.9 m from you (the middle passer), 1.6 m from the libero
+    t.touch('serve', -1, { x: 0, y: 2.8, z: -10 }, { x: 0.9, y: 0.75, z: 6.4 }, 4.0);
+    t.run(0.05);
+    expect(t.team.receiver).toBe(t.team.players.get('L'));
+  });
+
+  it('a serve at you that the libero cannot get to in time is yours, and nobody steps at it', () => {
+    const t = homeTeam();
+    t.team.place('receive');
+    const you = t.team.players.get('OH1')!;
+    you.isUser = true;
+    t.touch('serve', -1, { x: 2, y: 2.6, z: -9 }, { x: -2.6, y: 0.8, z: 6.1 }, 3.6);
+    t.run(AI.sit.serveRead + 0.1);
+    expect(t.team.receiver).toBe(you);
+    // the passers beside you hold their spots: a team-mate stepping at your ball looks like taking it
+    for (const slot of ['OH2', 'L'] as const) expect(t.brain(slot).spot, slot).toEqual(t.team.formSpot('receive', slot));
+  });
+
+  it('a ball called yours stays yours: the libero takes it early or not at all', () => {
+    const ball = (late: boolean) => {
+      const t = homeTeam();
+      t.team.place('defense');
+      const you = t.team.players.get('OH1')!;
+      const L = t.team.players.get('L')!;
+      you.isUser = true;
+      you.place(-1.9, 2.4, 0);
+      L.place(4, 8.5, 0);
+      // their free ball dropping next to you, the libero too far off to call it
+      t.touch('free', -1, { x: 0, y: 1.0, z: -4 }, { x: -1.8, y: 0.75, z: 3.0 }, 5.0);
+      t.run(0.05);
+      expect(t.team.receiver).toBe(you);
+      // the libero turns up beside the ball: at once, or only when it has long been called yours
+      if (late) t.run(AI.pick.call + 0.1);
+      L.place(-1.2, 3.4, 0);
+      t.run(0.05);
+      return t.team.receiver === L;
+    };
+    expect(ball(false)).toBe(true);
+    expect(ball(true)).toBe(false);
+  });
+});
+
+describe('a jump serve is read off the toss (Mini Rally)', () => {
+  /** our receive formation with their server tossing: for a jump serve, or a float */
+  const tossed = (jump: boolean) => {
+    const t = homeTeam();
+    t.team.place('receive');
+    t.g.ballLive = false;
+    const server = { job: 'serve', server: { phase: 'toss', jump } };
+    t.team.opponents = { brains: new Map([[t.theirs, server]]), players: new Map(), frontRow: () => [] } as unknown as TeamAI;
+    t.run(0.3);
+    return t;
+  };
+
+  it('the three passers step back for a jump serve; the setter and the front row stay', () => {
+    const t = tossed(true);
+    expect(t.team.jumpServe).toBe(true);
+    for (const slot of ['OH1', 'OH2', 'L'] as const) {
+      const book = t.team.formSpot('receive', slot);
+      expect(t.brain(slot).spot.x, slot).toBeCloseTo(book.x, 6);
+      expect(t.brain(slot).spot.z, slot).toBeCloseTo(book.z + AI.sit.jumpBack, 6);
+    }
+    for (const slot of ['S', 'MB', 'OPP'] as const) expect(t.brain(slot).spot, slot).toEqual(t.team.formSpot('receive', slot));
+  });
+
+  it('for a float they stay where they are', () => {
+    const t = tossed(false);
+    expect(t.team.jumpServe).toBe(false);
+    for (const slot of SLOTS) expect(t.brain(slot).spot, slot).toEqual(t.team.formSpot('receive', slot));
+  });
+});
+
+describe('nobody dives backwards at a serve or a spike (Mini Rally)', () => {
+  /** the libero, facing the net at (0, 6), is sent for a ball dropping (dx, dz) m from it: does it dive? */
+  const dives = (kind: TouchKind, dx: number, dz: number) => {
+    const keep = AI.dive.anyway;
+    AI.dive.anyway = 1;
+    const t = homeTeam();
+    const L = t.team.players.get('L')!;
+    const b = t.brain('L');
+    L.place(0, 6, 0);
+    t.put({ x: dx, y: 2.0, z: 6 + dz }, { x: 0, y: 0, z: 0 }, t.theirs, kind, -1);
+    // (seen a while ago: the run is what is measured here)
+    t.ball.lastTouch!.t -= 1;
+    b.job = 'receive';
+    let dived = false;
+    for (let k = 0; k < 0.9 * SIM.hz && !dived; k++) {
+      t.g.simTime += DT;
+      stepBall(t.ball.state, DT, t.g.env, []);
+      b.step(DT, t.g as unknown as Game);
+      L.step(DT, t.g.simTime);
+      dived = L.state === 'dive';
+    }
+    AI.dive.anyway = keep;
+    return dived;
+  };
+  const gaps = [2, 2.25, 2.5, 2.75];
+
+  it('a serve or a spike dropping behind them is never dived for; out to the side or in front it is', () => {
+    for (const kind of ['serve', 'spike'] as const) {
+      for (const d of gaps) expect(dives(kind, 0, d), `${kind} ${d} m behind`).toBe(false);
+      expect(
+        gaps.some((d) => dives(kind, d, 0)),
+        `${kind} to the side`,
+      ).toBe(true);
+      expect(
+        gaps.some((d) => dives(kind, 0, -d)),
+        `${kind} in front`,
+      ).toBe(true);
+    }
+  });
+
+  it('a ball that is neither (their free ball going over them) is still run down and dived for', () => {
+    expect(gaps.some((d) => dives('dig', 0, d))).toBe(true);
+  });
+});
+
+describe('given the ball (Mini Rally)', () => {
+  it('a hitter running in for a set that is not coming, sent to play the ball, breaks off the approach', () => {
+    const t = homeTeam();
+    t.team.place('offense');
+    const b = t.brain('OH1');
+    b.hitter!.phase = 'approach';
+    t.put({ x: -3, y: 3, z: 5 }, { x: 0, y: 0, z: 0 }, t.team.players.get('L')!, 'pass', 1);
+    b.job = 'free';
+    b.step(DT, t.g as unknown as Game);
+    expect(b.hitter!.phase).toBe('ready');
   });
 });
