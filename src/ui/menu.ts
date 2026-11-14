@@ -3,11 +3,14 @@ import {
   isPositionId,
   POSITIONS,
   SETTING_RANGES,
+  VENUE_IDS,
+  VENUES,
   type BodyOverride,
   type BooleanSettingKey,
   type NumericSettingKey,
   type PositionId,
   type Settings,
+  type VenueId,
 } from '../config';
 import { BUILD_LABEL } from '../core/build';
 import { defaultSettings, systemPrefersReducedMotion } from '../core/settings';
@@ -131,6 +134,10 @@ export interface MenuCallbacks {
   restart(): void;
   quit(): void;
   settingsChanged(): void;
+  /** the venue the court is standing in: a link's `venue=` can make it differ from the saved one */
+  venue(): VenueId;
+  /** a venue was picked in Settings: save it, and end a link's `venue=` */
+  pickVenue(id: VenueId): void;
 }
 
 /**
@@ -158,6 +165,8 @@ export class Menu {
   private learnDevice: 'kb' | 'touch' | null = null;
   /** every part of the screens that shows the mode, position or a setting redraws itself from here */
   private syncs: (() => void)[] = [];
+  /** puts the start screen's venue list away while it is open */
+  private closeVenues: (() => void) | null = null;
   private views = new Map<View, HTMLElement>();
   private navBtns = new Map<View, HTMLButtonElement>();
   /** each section's main button: Enter presses it, and it takes the focus when asked */
@@ -246,6 +255,12 @@ export class Menu {
         e.preventDefault();
         main.click();
       }
+      if (e.key === 'Escape' && this.closeVenues) {
+        // Esc puts the venue list away, and nothing else
+        this.closeVenues();
+        e.stopImmediatePropagation();
+        return;
+      }
       if (e.key === 'Escape' && this.settingsOpen) {
         // Esc closes the sheet only (main's Esc handler would also leave the pause menu)
         this.closeSettings();
@@ -301,9 +316,72 @@ export class Menu {
     set.type = 'button';
     set.setAttribute('aria-label', 'Settings');
     set.onclick = () => this.openSettings(set);
-    right.append(athlete, set);
+    right.append(this.venuePicker(), athlete, set);
     bar.append(brand, nav, right);
     return bar;
+  }
+
+  /**
+   * Where the court stands, on the start screen itself: a pill that names the venue and opens the five to
+   * choose from. The court behind the menu changes as soon as one is picked. It is the same pick as the
+   * Venue row in Settings (Court), which stays for a change mid-drill.
+   */
+  private venuePicker(): HTMLElement {
+    const wrap = h('div', 'venue-pick');
+    const pill = btn('pill');
+    pill.setAttribute('aria-haspopup', 'menu');
+    pill.setAttribute('aria-expanded', 'false');
+    const list = h('div', 'venue-menu');
+    list.setAttribute('role', 'menu');
+    list.setAttribute('aria-label', 'Venue');
+    list.hidden = true;
+    const opts = VENUE_IDS.map((id) => {
+      const o = btn('venue-opt', VENUES[id].name);
+      o.setAttribute('role', 'menuitemradio');
+      o.onclick = () => {
+        this.cb.pickVenue(id);
+        this.cb.settingsChanged();
+        this.sync();
+        open(false);
+        pill.focus({ preventScroll: true });
+      };
+      list.append(o);
+      return o;
+    });
+    const open = (on: boolean) => {
+      list.hidden = !on;
+      pill.setAttribute('aria-expanded', String(on));
+      this.closeVenues = on ? () => open(false) : null;
+      if (on) opts[VENUE_IDS.indexOf(this.cb.venue())].focus({ preventScroll: true });
+    };
+    pill.onclick = () => open(list.hidden);
+    // the arrows walk the list
+    list.onkeydown = (e) => {
+      const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+      if (!step) return;
+      e.preventDefault();
+      const at = opts.indexOf(document.activeElement as HTMLButtonElement);
+      opts[(at + step + opts.length) % opts.length].focus({ preventScroll: true });
+    };
+    // a press anywhere else, or the focus leaving, puts the list away
+    window.addEventListener('pointerdown', (e) => {
+      if (!list.hidden && !wrap.contains(e.target as Node)) open(false);
+    });
+    wrap.addEventListener('focusout', (e) => {
+      if (!list.hidden && e.relatedTarget && !wrap.contains(e.relatedTarget as Node)) open(false);
+    });
+    this.syncs.push(() => {
+      const now = this.cb.venue();
+      pill.innerHTML = `${ICONS.venue}<span>${VENUES[now].name}</span>`;
+      pill.setAttribute('aria-label', `Venue: ${VENUES[now].name}`);
+      opts.forEach((o, i) => {
+        const on = VENUE_IDS[i] === now;
+        o.classList.toggle('on', on);
+        o.setAttribute('aria-checked', String(on));
+      });
+    });
+    wrap.append(pill, list);
+    return wrap;
   }
 
   /** the gold button that starts play, with the key that presses it */
@@ -1064,6 +1142,14 @@ export class Menu {
         ["Men's 2.43 m", "Women's 2.24 m"],
         () => (s.womenNet ? 1 : 0),
         (i) => (s.womenNet = i === 1),
+      ),
+      seg(
+        'Venue',
+        VENUE_IDS.map((id) => VENUES[id].name),
+        // the venue the court is standing in, which a link's `venue=` can make differ from the saved one
+        () => VENUE_IDS.indexOf(this.cb.venue()),
+        (i) => this.cb.pickVenue(VENUE_IDS[i]),
+        'Where the court stands. The court and the net are the same everywhere. Outdoors there is no ceiling.',
       ),
     ]);
 
