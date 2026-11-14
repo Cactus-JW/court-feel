@@ -326,6 +326,8 @@ export const CONTACT = {
   spikeSpinGood: 55,
   spikeSpinOk: 35,
   rollSpin: 45,
+  /** a tip always goes over: however it was timed it is aimed at least this far (m) into the other court */
+  tipOver: 0.6,
   /** swing power at the shortest (just past a tap) wind-up; full charge = 1 */
   chargePowerMin: 0.7,
   serveFloatSpeed: 17,
@@ -1191,9 +1193,12 @@ export const AI = {
    * MatusGib, 2026-11-14). A ball is called early: once it has been the user's for `call` s the
    * libero no longer takes it off them. The setter calls HELP only on a ball somebody can still
    * get to: one that will be down more than `dive` s before the first of them arrives (a shank
-   * into the stands) is the other team's point, and nothing is called.
+   * into the stands) is the other team's point, and nothing is called. A serve is received in
+   * lanes: a passer's run forward, to a ball coming down in front of them, counts only `lane` of
+   * its length when choosing who takes it, so a serve short of the middle passer is theirs and not
+   * the passer's two metres to the side of it (MatusGib, 2026-11-15: "it is right in front of them").
    */
-  pick: { seam: 0.15, setter: 0.2, shuffle: 1.5, libero: 0.1, liberoFree: 0.3, call: 0.4, dive: 0.5 },
+  pick: { seam: 0.15, setter: 0.2, shuffle: 1.5, libero: 0.1, liberoFree: 0.3, call: 0.4, dive: 0.5, lane: 0.3 },
   /**
    * An AI free ball over (a third ball nobody can attack) goes where it is hard to play: deep to a
    * back corner (`deep` m off the net, `side` m off the middle) or short, just over the net (`short`
@@ -1339,9 +1344,19 @@ export const AI = {
    * would go more than `back` (the share of it pointing away from the net: 0.3 is about 17 degrees
    * behind straight sideways) backwards isn't made, and the ball is played on the feet or not at
    * all. Forwards and sideways only; a ball going over them is run down like any other
-   * (MatusGib, 2026-11-14).
+   * (MatusGib, 2026-11-14). Nor does anyone dive into the net: a ball coming down within `net` m
+   * of it, or beyond it, is not dived for or run at through the net (MatusGib, 2026-11-15: a
+   * setter diving into the net after a pass that went over).
    */
-  dive: { late: 0.9, minDist: 1.0, fit: 0.35, stretch: 0.6, anyway: 0.5, anywayFar: 2.5, back: 0.3 },
+  dive: { late: 0.9, minDist: 1.0, fit: 0.35, stretch: 0.6, anyway: 0.5, anywayFar: 2.5, back: 0.3, net: 0.6 },
+  /** a platform put out for a ball the player is no longer sent to is dropped after this long (s) */
+  passDrop: 0.35,
+  /**
+   * A pass that comes down to the setter's hands within `tightPass` m of the net's plane (or over
+   * it) is out of system whatever its place along the net: a save at the tape, no quick. (The ball
+   * is 0.1 m wide either side of its centre: at 0.3 m its edge is a hand's width off the net.)
+   */
+  tightPass: 0.3,
   /**
    * Situations (src/ai/situation.ts; F3 shows the one each team is in). Players with no job of
    * their own move with the play instead of waiting on a fixed formation spot:

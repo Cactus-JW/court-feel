@@ -5,7 +5,7 @@ import { Athlete } from '../src/game/athlete';
 import type { Touch, TouchKind } from '../src/game/ballEntity';
 import type { Game } from '../src/game/game';
 import { MiniRally } from '../src/game/modes/miniRally';
-import { laneFor, SETTER_SPOT } from '../src/game/plays';
+import { laneFor, SETTER_SPOT, setterTouchY } from '../src/game/plays';
 import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';
 import { solveApex } from '../src/physics/solve';
@@ -1337,5 +1337,129 @@ describe('given the ball (Mini Rally)', () => {
     b.job = 'free';
     b.step(DT, t.g as unknown as Game);
     expect(b.hitter!.phase).toBe('ready');
+  });
+});
+
+describe('a ball at the net (Mini Rally)', () => {
+  /** their dig drops just on our side of the net; their setter can still play it, or it is a real overpass */
+  const tightPass = (over: boolean) => {
+    const t = homeTeam();
+    t.team.opponents = {
+      touches: 1,
+      setFor: null,
+      overpass: () => over,
+      players: new Map(),
+      brains: new Map(),
+      frontRow: () => [],
+    } as unknown as TeamAI;
+    t.touch('dig', -1, { x: 0, y: 0.8, z: -6 }, { x: 1.5, y: 0.75, z: 1.5 }, 5.0);
+    t.run(0.6);
+    return t;
+  };
+
+  it('their tight pass that their setter still plays is not ours: nobody is sent to it, the blockers stay, the setter stays back', () => {
+    const t = tightPass(false);
+    expect(t.team.receiver).toBeNull();
+    expect(t.team.situation).toBe('theirFirstBall');
+    for (const slot of SLOTS) expect(t.brain(slot).job, slot).not.toBe('receive');
+    expect(t.brain('S').spot).not.toEqual(t.team.formSpot('offense', 'S'));
+    for (const slot of ['OH1', 'OPP'] as const) expect(Math.abs(t.brain(slot).spot.z), slot).toBeLessThan(1);
+  });
+
+  it('a real overpass is ours: someone is sent to it and the setter releases', () => {
+    const t = tightPass(true);
+    expect(t.team.receiver).not.toBeNull();
+    expect(t.team.situation).toBe('theirFree');
+    expect(t.brain('S').spot).toEqual(t.team.formSpot('offense', 'S'));
+  });
+
+  it('their tight set their hitter is going up for is not ours until it has crossed the net', () => {
+    const t = homeTeam();
+    t.team.opponents = {
+      touches: 2,
+      setFor: t.theirs,
+      overpass: () => false,
+      players: new Map(),
+      brains: new Map(),
+      frontRow: () => [],
+    } as unknown as TeamAI;
+    const lane = laneFor('OH', -1);
+    // a set drifting over the tape: left alone it would come down on our side
+    t.touch('set', -1, { x: -SETTER_SPOT.x, y: 2.6, z: -SETTER_SPOT.z }, { x: lane.x, y: 0.75, z: 1.2 }, 5.0);
+    t.run(0.4);
+    expect(t.team.focus!.z).toBeGreaterThan(0);
+    expect(t.team.receiver).toBeNull();
+    expect(t.team.situation).toBe('theirSet');
+    // (the blockers on that side stay up at the net for it)
+    for (const slot of ['MB', 'OPP'] as const) expect(t.brain(slot).job, slot).toBe('block');
+  });
+
+  /** our pass comes down to the setter's hands `z` m off the net, right at the setting spot */
+  const passTo = (z: number) => {
+    const t = homeTeam();
+    t.team.place('offense');
+    const L = t.team.players.get('L')!;
+    const S = t.team.players.get('S')!;
+    t.touch('pass', 1, { x: L.pos.x, y: 0.8, z: L.pos.z }, { x: SETTER_SPOT.x, y: setterTouchY(S), z }, 4.5, L);
+    t.run(AI.setterRead + 0.1);
+    return t.team.read?.call;
+  };
+
+  it('a pass coming down on the tape is called out of system, however close to the setting spot; a metre off the net it is in system', () => {
+    expect(passTo(1.0)).toBe('in');
+    expect(passTo(0.2)).toBe('out');
+  });
+
+  it('nobody dives into the net: a ball coming down at it is not dived for, the same ball out in the court is', () => {
+    /** the libero, 2.5 m behind a dropping ball that is `off` m off the net: does it dive? */
+    const dives = (off: number) => {
+      const keep = AI.dive.anyway;
+      AI.dive.anyway = 1;
+      const t = homeTeam();
+      const L = t.team.players.get('L')!;
+      const b = t.brain('L');
+      L.place(0, off + 2.5, 0);
+      t.put({ x: 0, y: 2.0, z: off }, { x: 0, y: 0, z: 0 }, t.team.players.get('OH2')!, 'pass', 1);
+      t.ball.lastTouch!.t -= 1;
+      b.job = 'free';
+      let dived = false;
+      for (let k = 0; k < 0.9 * SIM.hz && !dived; k++) {
+        t.g.simTime += DT;
+        stepBall(t.ball.state, DT, t.g.env, []);
+        b.step(DT, t.g as unknown as Game);
+        L.step(DT, t.g.simTime);
+        dived = L.state === 'dive';
+        // (and never through the net)
+        expect(L.pos.z).toBeGreaterThan(0);
+      }
+      AI.dive.anyway = keep;
+      return dived;
+    };
+    expect(dives(3.5)).toBe(true);
+    expect(dives(0.3)).toBe(false);
+  });
+});
+
+describe('after the ball (Mini Rally)', () => {
+  it('a platform put out for a ball that never came comes back in: nobody runs back to their spot in a passing crouch', () => {
+    const t = homeTeam();
+    const L = t.team.players.get('L')!;
+    L.startAction('pass', t.g.simTime);
+    t.g.ballLive = false;
+    t.run(AI.passDrop + 0.1);
+    expect(L.action).toBeNull();
+  });
+
+  it('serve receive is played in lanes: a serve short of the middle passer is theirs, not yours two metres to the side', () => {
+    const t = homeTeam();
+    t.team.place('receive');
+    const you = t.team.players.get('OH1')!;
+    const mid = t.team.players.get('OH2')!;
+    you.isUser = true;
+    // the middle passer has stepped back for a jump serve; it comes down 0.6 m to their side, 2.4 m in front
+    mid.place(0, 7.6, 0);
+    t.touch('serve', -1, { x: 0, y: 3.2, z: -9.5 }, { x: -0.6, y: 0.75, z: 5.3 }, 3.6);
+    t.run(0.05);
+    expect(t.team.receiver).toBe(mid);
   });
 });

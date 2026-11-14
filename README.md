@@ -345,7 +345,8 @@ screen show them. Only your player uses them; AI players keep the defaults.
    nearest: the call then reads "HELP! · YOUR BALL"). Between you and the
    libero, any ball the libero gets to is the libero's: it is called early
    ("MINE!"), never taken off you late, and nobody steps at a serve that is
-   yours. A ball off a block, and a second ball the setter can't get to,
+   yours. A serve is received in lanes: one coming down in front of the
+   passer beside you is theirs. A ball off a block, and a second ball the setter can't get to,
    is the libero's whenever it can get there (it calls off whoever was sent,
    you too, and sets a high ball to a pin); when the libero can't get there
    either, whoever is closest and gets under it in time sets it. Out of system
@@ -423,7 +424,12 @@ screen show them. Only your player uses them; AI players keep the defaults.
    is out of reach anyway. Nobody dives backwards at a serve or a spike (forwards and
    sideways only: a ball going by overhead is played on the feet or not at all), and
    for a jump serve, read off the toss ("Jump serve · step back"), the three passers
-   start a metre deeper. A block only ever goes up at the net: a blocker caught off it
+   start a metre deeper. Nobody dives into the net either, and a pass coming down on
+   the tape is called out of system. A ball of theirs dropping at the net is still
+   theirs while they can play it (a tight pass their setter gets to, a tight set their
+   hitter goes up for): nobody leaves the net for it, only a real overpass is yours. A
+   platform put out for a ball that never came comes back in, and a mistimed tip drops
+   short behind the tape, never into the tipper's own court. A block only ever goes up at the net: a blocker caught off it
    runs in and jumps late, or not at all. The setter calls HELP only on a ball somebody
    can still get to.
 
