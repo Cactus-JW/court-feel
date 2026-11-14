@@ -95,7 +95,9 @@ export class SetterBrain implements Brain {
     // stand so the ball drops onto the hands (or the platform)
     const sx = this.p.x - fx * reach;
     const sz = this.p.z - fz * reach;
-    moveTo(a, sx, sz, { face: this.faceYaw, arrive: 0.35, sprintDist: 1.5 });
+    // (far from it they turn and run at it; they square up to set as they get there)
+    const far = Math.hypot(sx - a.pos.x, sz - a.pos.z) > AI.chase.turn;
+    moveTo(a, sx, sz, { face: far ? undefined : this.faceYaw, arrive: 0.35, sprintDist: 1.5 });
     const until = tc - g.simTime;
     const kindNow = this.bump ? 'pass' : 'set';
     if (until < (this.bump ? TIMING.passLead : 0.4) && (!a.action || a.action.kind !== kindNow)) a.startAction(kindNow, g.simTime);

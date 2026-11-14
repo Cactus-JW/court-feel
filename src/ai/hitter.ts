@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AI, BALL, CONTACT, COURT, PLAYER } from '../config';
+import { AI, BALL, CONTACT, COURT, PLAYER, TIMING } from '../config';
 import { clamp, yawFromDir } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
 import type { Game } from '../game/game';
@@ -159,19 +159,27 @@ export class HitterBrain implements Brain {
           const lead = ContactSystem.swingLead(w ? ContactSystem.chargeFor(now - w.t0) : 1);
           // a late arm still swings (graded late through aiErr): a hitter never lets the set drop past
           if (info && now >= info.t - lead + Math.min(this.err, 0) - 1e-4) {
-            const aim = this.chooseAim(g, info.ball.x, info.ball, info.t);
+            // under the ball: never a weak swing at the deep court. The hitter either feels it and
+            // plays it off-speed, or swings through it hard (and it sails long)
+            const under = this.err < -TIMING.spikeGood;
+            const adjust = under && g.rng.next() < AI.offSpeed.adjust;
+            const aim = adjust ? this.offSpeedAim(g, info.ball.x) : this.chooseAim(g, info.ball.x, info.ball, info.t);
+            if (adjust) this.err *= AI.offSpeed.timing;
             a.aiAim.copy(aim);
             // a roll shot over a closed block is a soft swing (the contact rolls it when it goes deep)
             const roll = this.lastShot === 'roll';
-            const push = this.lastShot === 'recycle';
-            const tip = roll || push || g.rng.next() < this.tipChance;
+            const push = this.lastShot === 'recycle' || this.lastShot === 'wipe';
+            const tip = roll || push || this.lastShot === 'tip' || g.rng.next() < this.tipChance;
             if (tip && !roll && !push) {
               // tips go short, just over the block
               a.aiAim.set(clamp(aim.x * 0.5, -3.5, 3.5), aim.y, -a.side * (1.5 + g.rng.next() * 1.5));
               this.lastShot = 'tip';
             }
-            // release the wind-up (AI holds long enough for full power); no wind-up = full swing
-            if (!g.contact.releaseWindup(a, { aiErr: this.err, tip, push })) g.contact.startSwing(a, { aiErr: this.err, tip, push });
+            // release the wind-up (AI holds long enough for full power); no wind-up = full swing.
+            // (Swinging through a ball it is under is a full swing too: the early release must not
+            // make it a light one)
+            if (under && !adjust && !tip) g.contact.startSwing(a, { aiErr: this.err });
+            else if (!g.contact.releaseWindup(a, { aiErr: this.err, tip, push })) g.contact.startSwing(a, { aiErr: this.err, tip, push });
             this.swung = true;
           }
         }
@@ -224,6 +232,56 @@ export class HitterBrain implements Brain {
       });
     const opp = -a.side as 1 | -1;
     return openShot(from, CONTACT.spikePerfect * a.stats.power, CONTACT.spikeSpinPerfect, opp, g.env, diggers, blocks, () => g.rng.next());
+  }
+
+  /**
+   * A hitter under the ball doesn't take a weak swing at the deep court: it plays the ball off-speed
+   * (`AI.offSpeed`): pushed at the outer edge of the outside hand of a block in front (a wipe: off
+   * it and out), tipped short over the block, or rolled to the spot their nearest player is
+   * furthest from.
+   */
+  offSpeedAim(g: Game, hitX: number): THREE.Vector3 {
+    const a = this.athlete;
+    const opp = -a.side;
+    const hw = COURT.halfWidth;
+    const O = AI.offSpeed;
+    const up = this.blockers().filter((b) => Math.abs(b.pos.z) < 1.4 && Math.abs(blockHands(b).x - hitX) < O.blockNear);
+    let r = g.rng.next() * (O.roll + O.tip + (up.length ? O.wipe : 0));
+    if (up.length) {
+      r -= O.wipe;
+      if (r < 0) {
+        const outer = up.reduce((p, q) => (Math.abs(blockHands(q).x) > Math.abs(blockHands(p).x) ? q : p));
+        const hx = blockHands(outer).x;
+        this.lastShot = 'wipe';
+        return new THREE.Vector3(hx + Math.sign(hx || 1) * CONTACT.blockHalfWidth * O.wipeEdge, 0, opp * 0.2);
+      }
+    }
+    if (r < O.tip) {
+      // (the swing aims a tip short, just over the block)
+      this.lastShot = 'tip';
+      return new THREE.Vector3(hitX, 0, opp * 2);
+    }
+    const lineX = clamp(hitX, -hw + 0.8, hw - 0.8);
+    const crossX = -Math.sign(hitX || 1) * (hw - 1.2);
+    const spots = [
+      { x: lineX, z: O.deep },
+      { x: crossX, z: O.deep },
+      { x: hitX * 0.3, z: O.middle },
+      { x: crossX * 0.9, z: O.short },
+    ];
+    let best = spots[0];
+    let bestScore = -Infinity;
+    for (const sp of spots) {
+      let near = Infinity;
+      for (const d of this.defenders()) near = Math.min(near, Math.hypot(d.pos.x - sp.x, d.pos.z - opp * sp.z));
+      const score = (near === Infinity ? 0 : near) + g.rng.next() * O.guess;
+      if (score > bestScore) {
+        bestScore = score;
+        best = sp;
+      }
+    }
+    this.lastShot = 'roll';
+    return new THREE.Vector3(best.x, 0, opp * best.z);
   }
 
   /**

@@ -385,7 +385,16 @@ export class ContactSystem {
       if (safeServe) speed = this.overTheTape(p0, target, out, w, margin);
       ball.hit(out, { x: 0, y: 0, z: 0 }, BALL.floatWobble * (rank === 3 ? 1.2 : 0.8), h.simTime);
     } else {
-      const base = serve ? CONTACT.serveJumpSpeed : rank === 3 ? CONTACT.spikePerfect : rank === 2 ? CONTACT.spikeGood : CONTACT.spikeOk;
+      // (an AI hitter that swings through a ball it is under still swings hard: it sails long at
+      // pace, never as a light ball; an AI's light ball is a tip, a roll or a wipe: `AI.offSpeed`)
+      const throughIt = !a.isUser && !serve && grade === 'Early';
+      const base = serve
+        ? CONTACT.serveJumpSpeed
+        : rank === 3
+          ? CONTACT.spikePerfect
+          : rank === 2 || throughIt
+            ? CONTACT.spikeGood
+            : CONTACT.spikeOk;
       const gradeK = serve ? (rank === 3 ? 1.1 : rank === 2 ? 1 : 0.8) : 1;
       speed = base * gradeK * pos.power * lerp(0.88, 1.0, hf) * (dc > reach ? 0.86 : 1) * power;
       // a serve's topspin comes from the same arm speed as its pace: a slower, mistimed swing spins it less
@@ -584,11 +593,23 @@ export class ContactSystem {
     const ang = h.rand() * Math.PI * 2;
     const rad = err * Math.sqrt(h.rand());
     const target = { x: T.x + Math.cos(ang) * rad, y: T.y, z: T.z + Math.sin(ang) * rad * 0.7 };
+    // a ball off their block is a reaction touch: the share of it the coverer controls goes to the
+    // setter like any pass, the rest pops up near them, on from the way the ball came
+    let coverUp = 0;
+    const control = covered ? this.coverControl(incoming, grade, dBest / r, moving, form) : 1;
     if (covered) {
-      // a covered ball goes up high to the middle of the court, well off the net: out of system
       const C = CONTACT.covered;
-      target.x = clamp(T.x * 0.4 + (h.rand() * 2 - 1) * C.spread, -COURT.halfWidth + 1, COURT.halfWidth - 1);
-      target.z = a.side * (C.off + h.rand() * C.depth);
+      const bv = ball.vel;
+      const hv = Math.hypot(bv.x, bv.z);
+      const hx = hv > 0.5 ? bv.x / hv : 0;
+      const hz = hv > 0.5 ? bv.z / hv : a.side;
+      const turn = (h.rand() * 2 - 1) * C.turn;
+      const pop = lerp(C.pop[0], C.pop[1], h.rand());
+      const wx = bp.x + (hx * Math.cos(turn) - hz * Math.sin(turn)) * pop;
+      const wz = bp.z + (hx * Math.sin(turn) + hz * Math.cos(turn)) * pop;
+      target.x = clamp(lerp(wx, target.x, control), -COURT.halfWidth - C.wide, COURT.halfWidth + C.wide);
+      target.z = lerp(wz, target.z, control);
+      coverUp = bp.y + lerp(C.up[0], C.up[1], h.rand());
     }
     // never pass it over our own end line: keep shanks wild but plausible
     if (grade !== 'Perfect' && grade !== 'Good' && h.rand() < 0.35) {
@@ -597,9 +618,8 @@ export class ContactSystem {
     }
     const out = { x: 0, y: 0, z: 0 };
     // (a dive digs it up high: time to get up, and for someone else to play it)
-    const apex = covered
-      ? CONTACT.covered.apex + h.rand() * 0.8
-      : Math.max(T.apex + (grade === 'Perfect' ? 0 : (h.rand() - 0.3) * 1.2), bp.y + 0.6) + (form === 'dive' ? 1 : 0);
+    const passApex = Math.max(T.apex + (grade === 'Perfect' ? 0 : (h.rand() - 0.3) * 1.2), bp.y + 0.6) + (form === 'dive' ? 1 : 0);
+    const apex = covered ? lerp(coverUp, passApex, control) : passApex;
     solveApex({ x: bp.x, y: bp.y, z: bp.z }, target, apex, { x: 0, y: 0, z: 0 }, out);
     ball.hit(out, { x: (h.rand() - 0.5) * 6, y: 0, z: (h.rand() - 0.5) * 6 }, 0, t);
     ball.lastTouch = { athlete: a, kind: dig ? 'dig' : 'pass', t, side: a.side };
@@ -624,6 +644,19 @@ export class ContactSystem {
       target: new THREE.Vector3(target.x, target.y, target.z),
     });
     return true;
+  }
+
+  /**
+   * How much of a ball off their block the coverer controls (0 to `CONTACT.covered.best`): less the
+   * harder it comes, off a platform not set in time, off its edge (`off`: 0 the middle, 1 the rim),
+   * with the feet still moving (`moving`: 0-1 of a full run), reaching to the side or diving.
+   */
+  coverControl(incoming: number, grade: Grade, off: number, moving: number, form: PassForm): number {
+    const C = CONTACT.covered;
+    const hard = clamp01((incoming - C.easy) / (C.hard - C.easy));
+    const timed = grade === 'Perfect' || grade === 'Good' ? 1 : C.late;
+    const reach = form === 'side' || form === 'dive' ? C.reach : 1;
+    return C.best * (1 - hard) * timed * (1 - C.edge * clamp01(off)) * (1 - C.moving * clamp01(moving)) * reach;
   }
 
   /** a shanked pass or dig: off the arms sideways and up, still going the way it came, and slower */
