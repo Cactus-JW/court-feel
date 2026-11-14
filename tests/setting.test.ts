@@ -3,9 +3,10 @@ import * as THREE from 'three';
 import { AI, ASSIST, COURT, SET_LEVEL_IDS, SET_LEVELS, SIM, TIMING, type SetLevel } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
-import { ContactSystem, type ContactEvent, type ContactHost, type SetOption } from '../src/game/contact';
+import { ContactSystem, type ContactEvent, type ContactHost, type SetOption, type SetPreview } from '../src/game/contact';
 import { SETTER_SPOT, SET_PLAYS } from '../src/game/plays';
-import { SetterCalls, type SetterKey } from '../src/game/setterCalls';
+import { callSheet } from '../src/game/callRuns';
+import { SETTER_KEYS, SetterCalls, type SetterKey } from '../src/game/setterCalls';
 import { catchQuality, gradeRelease, setMiss, setShape, setTouch, setWindow, type SetShape } from '../src/game/setTiming';
 import { makeBall, stepBall, type BallState } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';
@@ -56,10 +57,18 @@ describe('the set window: your touch and the level set its size', () => {
     const clean = SET_LEVELS.easy.catch;
     expect(catchQuality(clean * 0.9, 'easy')).toBe(1);
     expect(catchQuality(-clean * 0.9, 'easy')).toBe(1);
-    expect(win(1, -0.3).green).toBeLessThan(win(1, 0).green);
+    expect(win(1, -0.3, 0, easy, 'normal').green).toBeLessThan(win(1, 0, 0, easy, 'normal').green);
     expect(win(1, 0.12).green).toBeLessThan(win(1, 0).green);
-    expect(setTouch(1, -0.3, 0, 0.48, easy, 'easy').reasons).toContain('caught early');
+    expect(setTouch(1, -0.3, 0, 0.48, easy, 'normal').reasons).toContain('caught early');
     expect(setTouch(1, 0.12, 0, 0.48, easy, 'easy').reasons).toContain('caught late');
+  });
+  it('on Easy, hands up early cost nothing (a beginner times the release only); from Normal up the catch is timed', () => {
+    expect(catchQuality(-0.6, 'easy')).toBe(1);
+    expect(win(1, -0.6).green).toBe(win(1, 0).green);
+    expect(setTouch(1, -0.6, 0, 0.48, easy, 'easy').reasons).not.toContain('caught early');
+    // a late catch still costs on Easy
+    expect(catchQuality(0.12, 'easy')).toBeLessThan(1);
+    for (const id of SET_LEVEL_IDS.filter((l) => l !== 'easy')) expect(catchQuality(-0.6, id)).toBeLessThan(1);
   });
   it('a setter still running at the touch gets a smaller window than one who beat the ball to the spot', () => {
     expect(win(0, 0).green).toBeLessThan(win(TIMING.setFeetReady, 0).green);
@@ -109,63 +118,105 @@ describe('the set window: your touch and the level set its size', () => {
   });
 });
 
-describe('picking the hitter (1-4) and the call sheet (C)', () => {
-  it('a key picks a hitter; the same key again asks them for a high ball (again: back to the call)', () => {
+describe('picking the hitter (1-4) and their set (the same key again)', () => {
+  it('with no key the set goes to the outside', () => {
+    const c = new SetterCalls();
+    expect(c.pick).toBeNull();
+    expect(c.target()).toBe<SetterKey>('OH');
+    c.press('OPP');
+    expect(c.target()).toBe<SetterKey>('OPP');
+  });
+  it('a key picks a hitter without changing their call', () => {
     const c = new SetterCalls();
     c.press('OH');
     expect(c.pick).toBe('OH');
     expect(c.label('OH')).toBe(SET_PLAYS.OH![0].short);
+    c.press('MB');
+    expect(c.pick).toBe('MB');
+    expect(c.label('OH')).toBe(SET_PLAYS.OH![0].short);
+    expect(c.label('MB')).toBe(SET_PLAYS.MB![0].short);
+  });
+  it("before the pass, the picked key again steps through that hitter's calls and round to the first", () => {
+    const c = new SetterCalls();
     c.press('OH');
+    c.press('OH');
+    expect(c.play('OH').short).toBe('Go');
+    expect(c.step('OH')).toEqual({ i: 1, n: SET_PLAYS.OH!.length });
+    c.press('OH');
+    expect(c.play('OH').short).toBe('3');
+    c.press('OH');
+    expect(c.play('OH').short).toBe(SET_PLAYS.OH![0].short);
+    // the others keep theirs
+    expect(c.play('MB').short).toBe(SET_PLAYS.MB![0].short);
+    expect(c.play('OPP').short).toBe(SET_PLAYS.OPP![0].short);
+  });
+  it('once the pass is played the calls are locked: the picked key again only asks for a high ball (again: back to the call)', () => {
+    const c = new SetterCalls();
+    c.press('OH');
+    c.press('OH');
+    c.lock();
+    c.press('OH');
+    expect(c.play('OH').short).toBe('Go');
     expect(c.isHigh('OH')).toBe(true);
     expect(c.label('OH')).toBe('High');
     c.press('OH');
     expect(c.isHigh('OH')).toBe(false);
+    expect(c.label('OH')).toBe('Go');
   });
-  it('with the call sheet open the keys change calls, not the pick; leave it alone and every call stays', () => {
+  it("picking another hitter after the pass changes nobody's call", () => {
     const c = new SetterCalls();
+    c.lock();
     c.press('OPP');
-    expect(c.play('MB').short).toBe(SET_PLAYS.MB![0].short);
-    c.toggleSheet();
     c.press('MB');
-    c.press('OH');
-    expect(c.pick).toBe('OPP');
-    expect(c.play('MB').short).toBe('Shoot');
-    expect(c.play('OH').short).toBe('Go');
+    expect(c.pick).toBe('MB');
+    expect(c.isHigh('OPP')).toBe(false);
     expect(c.play('OPP').short).toBe(SET_PLAYS.OPP![0].short);
   });
-  it('the pass closes the sheet and locks the calls: the hitters are already running them', () => {
+  it('the pipe has one call: its key again asks for a high ball', () => {
     const c = new SetterCalls();
-    c.toggleSheet();
-    c.lock();
-    expect(c.editing).toBe(false);
-    c.toggleSheet();
-    expect(c.editing).toBe(false);
+    c.press('PIPE');
+    c.press('PIPE');
+    expect(c.isHigh('PIPE')).toBe(true);
+    expect(c.step('PIPE').n).toBe(1);
+  });
+  it('a backup setting for the setter calls nothing: the keys pick, and again is a high ball', () => {
+    const c = new SetterCalls();
+    c.canCall = false;
     c.press('OH');
-    expect(c.pick).toBe('OH');
+    c.press('OH');
     expect(c.play('OH').short).toBe(SET_PLAYS.OH![0].short);
+    expect(c.isHigh('OH')).toBe(true);
   });
   it('the calls stay for the next ball; the pick and a high ball do not', () => {
     const c = new SetterCalls();
-    c.toggleSheet();
-    c.press('OH');
-    c.toggleSheet();
     c.press('OH');
     c.press('OH');
     c.lock();
+    c.press('OH');
     c.nextBall();
     expect(c.pick).toBeNull();
     expect(c.locked).toBe(false);
     expect(c.isHigh('OH')).toBe(false);
     expect(c.play('OH').short).toBe('Go');
   });
-  it('the keys go through the input: C the sheet, Digit1 outside ... Digit4 pipe', () => {
+  it('the call strip shows each call and how many a hitter has; the outside is lit, not picked, until a key is pressed', () => {
+    const c = new SetterCalls();
+    c.press('MB');
+    c.press('MB');
+    c.nextBall();
+    const strip = callSheet(c, SETTER_KEYS, c.target(), ['MB']);
+    const row = (k: SetterKey) => strip.items.find((i) => i.id === k)!;
+    expect(row('OH')).toMatchObject({ lit: true, picked: false, step: 0, steps: SET_PLAYS.OH!.length });
+    expect(row('MB')).toMatchObject({ call: 'Shoot', step: 1, off: true, lit: false });
+    expect(row('PIPE').steps).toBe(1);
+    c.press('OPP');
+    expect(callSheet(c, SETTER_KEYS, c.target()).items.find((i) => i.id === 'OPP')).toMatchObject({ lit: true, picked: true });
+  });
+  it('the keys go through the input: Digit1 outside ... Digit4 pipe', () => {
     const c = new SetterCalls();
     const pressed = new Set(['Digit4']);
     c.readKeys({ consumePress: (code: string) => pressed.delete(code) });
     expect(c.pick).toBe<SetterKey>('PIPE');
-    const sheet = new Set(['KeyC']);
-    c.readKeys({ consumePress: (code: string) => sheet.delete(code) });
-    expect(c.editing).toBe(true);
   });
 });
 
@@ -210,7 +261,7 @@ const OPP_TARGET = { x: 4.0, y: 3.34, z: 0.9 };
  * from the top of the bar (null: never), or `tapAt` s from T (a release before the catch).
  * `key` picks the hitter, `lookAt` is where the camera looks; `runFor` keeps the setter
  * shuffling until that long before T. Returns the set, where it came down at the hitter's
- * contact height, and the press's action.
+ * contact height, the press's action, and what the bar showed 0.2 s before the ball arrived (`pre`).
  */
 function setRep(o: {
   presses?: number[];
@@ -223,7 +274,7 @@ function setRep(o: {
   seed?: number;
 }) {
   const ball = new FakeBall();
-  ball.lastTouch = { kind: 'pass' };
+  ball.lastTouch = { kind: 'pass', side: 1 };
   const events: ContactEvent[] = [];
   const rng = new Rng(o.seed ?? 3);
   const options: SetOption[] = [
@@ -268,6 +319,7 @@ function setRep(o: {
   let landed: THREE.Vector3 | null = null;
   let apex = 0;
   let pressAct: ReturnType<Athlete['startAction']> | null = null;
+  let pre: SetPreview | null = null;
   for (let i = 0; i < SIM.hz * 5; i++) {
     host.simTime += DT;
     const t = host.simTime;
@@ -275,6 +327,7 @@ function setRep(o: {
     const running = o.runFor !== undefined && t < T - o.runFor;
     a.cmd = { moveX: running ? 0.5 * Math.sign(Math.sin(t * 12)) : 0, moveZ: 0, sprint: false, faceYaw: Math.PI / 2 };
     a.step(DT, t);
+    if (!pre && t >= T - 0.2) pre = cs.setPreview(a);
     while (presses.length && t >= presses[0]) {
       // a press lands on the frame's time (exactly when asked, here)
       cs.pressSet(a, presses.shift()!);
@@ -317,6 +370,7 @@ function setRep(o: {
     picked: cs.lastSet,
     result: cs.lastSetResult,
     act: pressAct,
+    pre,
     T,
     P,
     spot,
@@ -338,12 +392,12 @@ describe('the timed set (real contact system)', () => {
     expect(r.setT - r.T).toBeLessThan(TIMING.setLoad + 2 * DT);
   });
   it('one press per ball: pressing again does not restart the catch', () => {
-    const once = setRep({ key: 'OH', presses: [-0.6] });
-    const spam = setRep({ key: 'OH', presses: [-0.6, -0.4, -0.2, -0.1, 0, 0.02] });
+    const once = setRep({ key: 'OH', presses: [-0.6], level: 'normal' });
+    const spam = setRep({ key: 'OH', presses: [-0.6, -0.4, -0.2, -0.1, 0, 0.02], level: 'normal' });
     expect(spam.act?.t0).toBeCloseTo(spam.T - 0.6, 6);
     expect(spam.act?.catchErr).toBeLessThan(-0.55);
     expect(spam.result?.window).toBe(once.result?.window);
-    expect(spam.result!.window).toBeLessThan(setRep({ key: 'OH' }).result!.window);
+    expect(spam.result!.window).toBeLessThan(setRep({ key: 'OH', level: 'normal' }).result!.window);
   });
   it('spamming RMB cannot find the green: a tap releases before the catch, a push far too early', () => {
     const r = setRep({ key: 'OH', presses: [-0.3, -0.2, -0.1, 0], tapAt: -0.25 });
@@ -351,9 +405,11 @@ describe('the timed set (real contact system)', () => {
     expect(r.result!.err).toBeLessThan(-TIMING.setLoad);
   });
   it('a catch well before the ball arrives shrinks the green; a clean one does not', () => {
-    const clean = setRep({ key: 'OH' });
-    const early = setRep({ key: 'OH', presses: [-0.4] });
+    const clean = setRep({ key: 'OH', level: 'normal' });
+    const early = setRep({ key: 'OH', presses: [-0.4], level: 'normal' });
     expect(early.result!.window).toBeLessThan(clean.result!.window);
+    // on Easy the same early hands are a clean catch
+    expect(setRep({ key: 'OH', presses: [-0.4] }).result!.window).toBeCloseTo(setRep({ key: 'OH' }).result!.window, 4);
   });
   it('pressed late, with the ball still at the chin, it is a late catch; much later the ball has gone', () => {
     // the pass drops ~6.6 m/s through the hands: the reach is gone in ~70 ms
@@ -382,10 +438,14 @@ describe('the timed set (real contact system)', () => {
     expect(r.picked?.key).toBe('OH');
     expect(r.landed.x).toBeLessThan(-3);
   });
-  it('with no key the set goes to the hitter you look at', () => {
+  it('with no key the set goes to the outside, wherever the camera looks', () => {
     const r = setRep({ key: null, lookAt: 'OPP' });
-    expect(r.picked?.key).toBe('OPP');
-    expect(r.landed.x).toBeGreaterThan(3);
+    expect(r.picked?.key).toBe('OH');
+    expect(r.landed.x).toBeLessThan(-3);
+  });
+  it('a pick that is off this ball (the quick off a bad pass) goes to the outside too', () => {
+    const r = setRep({ key: 'MB', lookAt: 'OPP' });
+    expect(r.picked?.key).toBe('OH');
   });
   it('setting on the move shrinks the window: a release green standing is only good when still shuffling', () => {
     const still = setRep({ key: 'OH' }).result!.window;
@@ -417,6 +477,29 @@ describe('the timed set (real contact system)', () => {
     const err = elite * 1.3;
     expect(setRep({ releaseAt: err, key: 'OH' }).set.grade).toBe('Perfect');
     expect(setRep({ releaseAt: err, key: 'OH', level: 'elite' }).set.grade).toBe('Good');
+  });
+  it('the bar is there before the catch: it shows the set your pick makes and the window your touch has earned so far', () => {
+    const r = setRep({ key: 'OPP' });
+    expect(r.pre).not.toBeNull();
+    expect(r.pre!.absorbing).toBe(false);
+    expect(r.pre!.option?.key).toBe('OPP');
+    // standing on the spot, the ball coming onto the hands: feet and centring are done, the catch is still to come
+    expect(r.pre!.pips).toEqual({ feet: true, centre: true, catch: null });
+    // with a clean catch the window the bar showed is the window the set was graded in
+    expect(r.pre!.green).toBeCloseTo(r.result!.window, 3);
+    expect(r.result!.pips).toEqual({ feet: true, centre: true, catch: true });
+  });
+  it('the green on the bar grows as the feet stop: still shuffling it is smaller and the feet pip is not lit', () => {
+    const still = setRep({ key: 'OH' }).pre!;
+    const moving = setRep({ key: 'OH', runFor: 0.02 }).pre!;
+    expect(moving.pips.feet).toBe(false);
+    expect(still.pips.feet).toBe(true);
+    expect(moving.green).toBeLessThan(still.green);
+  });
+  it('a late catch shows on the bar after the set: the catch pip is missed', () => {
+    const late = setRep({ key: 'OH', presses: [0.05], level: 'elite' });
+    expect(late.result!.pips.catch).toBe(false);
+    expect(late.result!.pips.feet).toBe(true);
   });
   it('where to stand: the spot puts the ball onto your hands, not where it would land', () => {
     const r = setRep({ key: 'OH' });

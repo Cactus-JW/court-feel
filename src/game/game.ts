@@ -20,10 +20,13 @@ import type { BallEnv } from '../physics/ball';
 import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
 import type { Kit } from '../character/rig';
+import { setStepAssist } from './setAssist';
 import { aimTargetFromLook, ContactSystem, type ContactEvent, type IdealInfo, type SetPreview } from './contact';
+import { SetGuide } from '../fx/setGuide';
 import { SetRing } from '../fx/setRing';
 import { SetSpot } from '../fx/setSpot';
 import { SetBar } from '../ui/setBar';
+import { SetRadar } from '../ui/setRadar';
 import { Judge, type Outcome } from './judge';
 import { Hud } from '../ui/hud';
 import type { Brain } from '../ai/brain';
@@ -95,8 +98,23 @@ export class Game {
   slowmo = 1;
   /** the set coming down onto the user's hands (refreshed each frame), for the set slow-mo and the timing ring */
   private setPrev: SetPreview | null = null;
+  /** the set coming to you, before you are under it: the bar shows early when the ball is yours to set */
+  private setComing: SetPreview | null = null;
+
+  /**
+   * Your set loading in your hands, for the load tone: 0 at the catch, 1 at the top of the bar
+   * (above 1 held past it). Null when no set is loading, the game is paused or in a menu or a
+   * replay, or the set cues are off (Settings: Set ring and bar).
+   */
+  setLoading(): number | null {
+    const bar = this.setPrev?.bar;
+    if (!bar || this.paused || this.inMenu || this.fx.replaying || !this.settings.setRing) return null;
+    return (this.simTime - bar.start) / (bar.target - bar.start);
+  }
   private setRing!: SetRing;
   private setBar!: SetBar;
+  private setGuide!: SetGuide;
+  private setRadar!: SetRadar;
   private setSpot!: SetSpot;
   private spotP = { x: 0, y: 0, z: 0 };
   /** the lesson's clock: 1 real time, slower through a taught rep, 0 while the ball waits for the player */
@@ -182,6 +200,8 @@ export class Game {
     this.setRing = new SetRing(this.scene);
     this.setSpot = new SetSpot(this.scene);
     this.setBar = new SetBar(this.hud.root);
+    this.setGuide = new SetGuide(this.scene, this.hud.root);
+    this.setRadar = new SetRadar(this.hud.root);
     this.ball.mesh.layers.enable(REFLECT_LAYER);
     this.ball.hide();
     this.gizmos = new DebugGizmos(this.scene);
@@ -707,6 +727,8 @@ export class Game {
   private renderReplay(dt: number, draw: boolean): void {
     this.setRing.hide();
     this.setBar.hide();
+    this.setGuide.hide();
+    this.setRadar.hide();
     this.setSpot.hide();
     this.mode?.replayFrame();
     this.arena.netPress(this.ball.mesh.visible ? this.ball.mesh.position : null);
@@ -721,6 +743,20 @@ export class Game {
   }
 
   /** frame-level input: look, toggles, immediate action starts (same frame as the input) */
+  /**
+   * Aim assist for your set's footwork: the ball is yours to set and you are on the floor near
+   * the spot, so your body takes the last steps onto it (setStepAssist; off at assist 0, and
+   * once the ball is in your hands).
+   */
+  private assistSetStep(): void {
+    const me = this.me;
+    if (this.settings.aimAssist <= 0 || me.state !== 'ground' || !this.mode?.userSetsNext?.()) return;
+    if (me.action?.kind === 'set' && me.action.absorbing) return;
+    const spot = this.contact.setSpot(me, this.stepP);
+    if (spot) setStepAssist(me.cmd, me.pos, spot, this.settings.aimAssist);
+  }
+  private stepP = { x: 0, y: 0, z: 0 };
+
   private frameInput(dt: number): void {
     if (this.input.consumePress('F3')) {
       this.debug.toggle();
@@ -748,6 +784,7 @@ export class Game {
     if (this.input.consumePress('KeyN')) this.mode?.restartRep();
     if (this.input.consumePress('KeyR')) this.fx.startReplay();
     this.user.frame(dt);
+    this.assistSetStep();
     this.bot?.after();
     // the lesson's together rep: the coach holds your line (what you hold decides whether time runs)
     this.tutorial.drive(this.me);
@@ -792,6 +829,7 @@ export class Game {
     // your hands, the same on every level; only when you are under the ball or have pressed
     const sp = this.inMenu ? null : this.contact.setPreview(this.me);
     this.setPrev = sp && (sp.pressed || sp.absorbing || sp.centreD < this.contact.setReach(this.me) + 0.4) ? sp : null;
+    this.setComing = sp;
     if (this.setPrev && this.settings.setSlowmo) {
       const until = this.setPrev.tIdeal - this.simTime;
       if (this.setPrev.absorbing) slowTarget = Math.min(slowTarget, ASSIST.setSlowmoLoad);
@@ -962,10 +1000,16 @@ export class Game {
     const cues = this.settings.setRing && this.ball.active && this.ball.visible && !this.inMenu;
     this.setRing.update(this.setPrev, this.ball.rpos, tr, this.rig.camera, cues);
     const last = this.contact.lastSetResult;
-    this.setBar.update(this.setPrev, last?.athlete === me ? last : null, this.ball.rpos, this.rig.camera, tr, realDt, cues);
+    const yours = !this.inMenu && !!this.mode?.userSetsNext?.();
+    const barFor = this.setPrev ?? (yours ? this.setComing : null);
+    const fp = this.settings.firstPerson;
+    this.setBar.update(barFor, last?.athlete === me ? last : null, this.ball.rpos, this.rig.camera, tr, realDt, cues, fp);
+    this.setGuide.update(barFor, this.rig.camera, realDt, cues);
     // where to stand for your set, instead of where the ball would land
-    const spot = !this.inMenu && !this.setPrev?.absorbing && this.mode?.userSetsNext?.() ? this.contact.setSpot(me, this.spotP) : null;
+    const spot = yours && !this.setPrev?.absorbing ? this.contact.setSpot(me, this.spotP) : null;
     this.setSpot.update(spot, me.rpos, realDt);
+    // looking up at the ball in first person the floor is out of view: the same spot on a dial
+    this.setRadar.update(fp && cues ? spot : null, me.rpos, this.rig.yaw);
     this.ball.showMarker = this.settings.landingMarker && !spot && !this.setPrev?.absorbing;
     // fade our own body when the TP camera is very close, and anyone standing in the camera's way
     const camPos = this.rig.camera.position;

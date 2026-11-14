@@ -34,6 +34,20 @@ export interface SetTouch {
   reasons: string[];
 }
 
+/** a part of the touch at or above this is clean: it costs nothing worth telling the player about */
+const CLEAN = 0.97;
+
+/** the parts of the touch a coach grades, each done or not (the bar's pips); `catch` is null until the ball is caught */
+export interface SetPips {
+  feet: boolean;
+  centre: boolean;
+  catch: boolean | null;
+}
+
+export function setPips(t: SetTouch, caught: boolean): SetPips {
+  return { feet: t.feet >= CLEAN, centre: t.centre >= CLEAN, catch: caught ? t.catch >= CLEAN : null };
+}
+
 export interface SetWindow {
   /** green (Perfect) half-window, s of game time */
   green: number;
@@ -52,10 +66,14 @@ export function setShape(feet: { x: number; z: number }, from: V3, target: V3, s
   };
 }
 
-/** 0..1 the catch: 1 within the level's clean catch of the ball reaching the hands (`err` s, + = late), down to catchMin */
+/**
+ * 0..1 the catch: 1 within the level's clean catch of the ball reaching the hands (`err` s, + = late), down to
+ * catchMin. On a level with `handsEarly` (Easy) hands up early are clean however early: only a late catch costs.
+ */
 export function catchQuality(err: number, level: SetLevel): number {
-  const over = Math.abs(err) - SET_LEVELS[level].catch;
-  if (over <= 0) return 1;
+  const L = SET_LEVELS[level];
+  const over = Math.abs(err) - L.catch;
+  if (over <= 0 || (err < 0 && L.handsEarly)) return 1;
   return lerp(1, CONTACT.setTouch.catchMin, clamp01(over / (err < 0 ? TIMING.setCatchEarly : TIMING.setCatchLate)));
 }
 
@@ -68,12 +86,12 @@ export function setTouch(stillT: number, catchErr: number, centreD: number, reac
   const T = CONTACT.setTouch;
   const reasons: string[] = [];
   const feet = lerp(T.feetMin, 1, clamp01(stillT / TIMING.setFeetReady));
-  if (feet < 0.97) reasons.push('on the move');
+  if (feet < CLEAN) reasons.push('on the move');
   const caught = catchQuality(catchErr, level);
-  if (caught < 0.97) reasons.push(catchErr < 0 ? 'caught early' : 'caught late');
+  if (caught < CLEAN) reasons.push(catchErr < 0 ? 'caught early' : 'caught late');
   const off = clamp01((centreD - CONTACT.setCentreOk) / Math.max(0.01, reach - CONTACT.setCentreOk));
   const centre = 1 - (1 - T.centreMin) * off;
-  if (centre < 0.97) reasons.push('off the hands');
+  if (centre < CLEAN) reasons.push('off the hands');
   let difficulty = 1;
   if (shape.back) {
     difficulty *= T.backSet;
@@ -84,7 +102,7 @@ export function setTouch(stillT: number, catchErr: number, centreD: number, reac
     reasons.push('fast tempo');
   }
   const long = Math.max(T.longMin, 1 - T.longPerM * Math.max(0, shape.length - CONTACT.setLongFrom));
-  if (long < 0.97) reasons.push('long set');
+  if (long < CLEAN) reasons.push('long set');
   difficulty *= long;
   if (shape.outOfSystem) {
     difficulty *= T.outOfSystem;

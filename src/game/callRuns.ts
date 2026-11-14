@@ -122,18 +122,28 @@ export function callOptions(g: Game, hitters: CallHitters, calls: SetterCalls, o
   return out;
 }
 
-/** the call sheet row for the HUD: each hitter's key, call and colour, the pick lit */
-export function callSheet(calls: SetterCalls, keys: readonly SetterKey[], shown: SetterKey | null) {
+/**
+ * The call strip for the HUD: each hitter's key, call and colour, and which of their calls is on
+ * (`step` of `steps`). `lit` is the hitter the set goes to (`shown`); `picked` says you pressed
+ * their key (no key: the outside is lit, not picked). `off` hitters can't be set this ball.
+ */
+export function callSheet(calls: SetterCalls, keys: readonly SetterKey[], shown: SetterKey | null, off: readonly SetterKey[] = []) {
   return {
-    items: keys.map((k) => ({
-      key: String(SETTER_KEYS.indexOf(k) + 1),
-      who: k === 'PIPE' ? 'Pipe' : k,
-      call: k === 'PIPE' ? (calls.isHigh(k) ? 'High' : '') : calls.label(k),
-      picked: calls.pick === k,
-      lit: shown === k,
-      color: `#${CALL_COLOR[k].toString(16).padStart(6, '0')}`,
-    })),
-    editing: calls.editing,
+    items: keys.map((k) => {
+      const s = calls.step(k);
+      return {
+        id: k,
+        key: String(SETTER_KEYS.indexOf(k) + 1),
+        who: k === 'PIPE' ? 'Pipe' : k,
+        call: k === 'PIPE' ? (calls.isHigh(k) ? 'High' : '') : calls.label(k),
+        picked: calls.pick === k,
+        lit: shown === k,
+        off: off.includes(k),
+        step: s.i,
+        steps: calls.canCall ? s.n : 1,
+        color: `#${CALL_COLOR[k].toString(16).padStart(6, '0')}`,
+      };
+    }),
     locked: calls.locked,
   };
 }

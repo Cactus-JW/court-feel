@@ -319,11 +319,16 @@ export const SET_LEVEL_IDS: readonly SetLevel[] = ['easy', 'normal', 'hard', 'el
  * - `green`: the green half-window around the top of the bar, with your best and your worst touch
  * - `goodMul`: a good (white) set reaches this many green half-windows either side
  * - `catch`: a catch this close to the ball reaching your hands is clean (at the catch slow-mo)
+ * - `handsEarly`: hands up before the ball comes cost nothing (Easy). It is what coaches teach,
+ *   and it leaves a beginner one thing to time, the release; from Normal up the catch is timed too
  * The whole green never spans less than a 60 fps frame of game time (4.2 ms at quarter speed), so
  * there is always a frame that lands in it.
  */
-export const SET_LEVELS: Record<SetLevel, { label: string; green: [number, number]; goodMul: number; catch: number }> = {
-  easy: { label: 'Easy', green: [0.015, 0.007], goodMul: 3, catch: 0.08 },
+export const SET_LEVELS: Record<
+  SetLevel,
+  { label: string; green: [number, number]; goodMul: number; catch: number; handsEarly?: boolean }
+> = {
+  easy: { label: 'Easy', green: [0.015, 0.007], goodMul: 3, catch: 0.08, handsEarly: true },
   normal: { label: 'Normal', green: [0.0095, 0.0048], goodMul: 2.5, catch: 0.05 },
   hard: { label: 'Hard', green: [0.0055, 0.0033], goodMul: 2, catch: 0.03 },
   elite: { label: 'Elite', green: [0.003, 0.0023], goodMul: 1.5, catch: 0.015 },
@@ -490,6 +495,13 @@ export const ASSIST = {
   setSlowmoWindow: 0.35,
   setSlowmoCatch: 0.5,
   setSlowmoLoad: 0.25,
+  /**
+   * The set's footwork (aim assist, `src/game/setAssist.ts`): while the ball is yours to set and
+   * your feet are within `radius` m (at assist 1) of the spot, your body takes the last steps
+   * onto it: at full shuffle pace from `slow` m out, easing to a stop within `stop` m. While you
+   * push the stick (past `deadzone`) the pull is only `pull` of that, so you can walk off it.
+   */
+  setStep: { radius: 1.2, slow: 0.5, stop: 0.03, pull: 0.5, deadzone: 0.1 },
 };
 
 export const CAMERA = {
@@ -1049,9 +1061,25 @@ export const FX = {
   /**
    * The set bar beside the ball (2K's meter): px tall and wide, the gap (px) from the ball's edge,
    * where the top of the bar (the ideal push) sits as a fraction of its height, and how long
-   * (real s) it stays up after the push.
+   * (real s) it stays up after the push. `waiting` is its opacity while the pass comes down
+   * (empty, showing the window your touch earns); `pipsWidth` (px) is the room the three pips
+   * (feet, centred, catch) take to its right. In first person the ball comes down onto your
+   * face, so the bar has a fixed place instead: `fpX` px right of the crosshair, its green line
+   * level with it.
    */
-  setBar: { height: 96, width: 10, gap: 18, target: 0.8, linger: 0.7 },
+  setBar: { height: 96, width: 10, gap: 18, target: 0.8, linger: 0.7, waiting: 0.8, pipsWidth: 64, fpX: 56 },
+  /**
+   * Where to stand for the set in first person (`src/ui/setRadar.ts`): a dial `size` px across,
+   * `below` px under the crosshair, showing the floor `range` m around your feet.
+   */
+  setRadar: { size: 92, range: 0.7, below: 86 },
+  /**
+   * Who your set goes to (`src/fx/setGuide.ts`): a marker `above` (m) the hitter's head, and the
+   * set as `points` dots `size` px across, from `skip` of the way along its flight (clear of your
+   * hands) to the hitter. It comes up in `fadeIn` s and, once the ball has left your hands, fades
+   * over `fadeOut` s (real time) so a set that missed is seen leaving it.
+   */
+  setGuide: { points: 22, size: 8, skip: 0.14, opacity: 0.8, above: 0.42, fadeIn: 0.15, fadeOut: 0.9 },
   /** where to stand for the set: a floor spot this wide (m), green once your feet are within `CONTACT.setCentreOk` */
   setSpot: { radius: 0.32 },
   /** where your feet go (the plant spot of an approach): ring radius (m), and the lesson's arrows towards it */
@@ -1128,6 +1156,13 @@ export const AUDIO = {
   master: 0.8,
   sfx: 1.0,
   crowd: 0.55,
+  /**
+   * Your set loading in your hands: a soft tone rising from `f0` to `f1` (Hz) with the bar,
+   * reaching `f1` as the bar reaches the green line, so the push can be timed by ear. `gain` is
+   * its level at the top (it starts at `start` of that); held past the top it dies away within
+   * `over` of the load again.
+   */
+  setLoad: { f0: 392, f1: 784, gain: 0.035, start: 0.35, over: 0.4 },
 };
 
 export const AI = {

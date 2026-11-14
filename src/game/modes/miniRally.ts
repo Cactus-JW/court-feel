@@ -3,13 +3,12 @@ import { AI } from '../../config';
 import { netYaw } from '../../ai/brain';
 import { serveAim } from '../../ai/server';
 import { SLOT_ROLE, SLOTS, TeamAI, USER_SLOT, type SetterRead } from '../../ai/team';
-import { yawFromDir } from '../../core/mathx';
 import { Athlete } from '../athlete';
 import { applyCalls, CALL_COLOR, callOptions, callSheet, callSpot, startCallRuns, type CallHitters } from '../callRuns';
 import type { ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { BACKUP_TARGET, needsGoodPass, SET_PLAYS, SETTER_SPOT, type SetPlay } from '../plays';
-import { SETTER_KEYS, SetterCalls, type SetterKey } from '../setterCalls';
+import { DEFAULT_PICK, SETTER_KEYS, SetterCalls, type SetterKey } from '../setterCalls';
 import { kbd, makeFloorRing, Mode } from './mode';
 
 type Phase = 'prepare' | 'serve' | 'live' | 'dead';
@@ -33,7 +32,7 @@ export class MiniRally extends Mode {
   /** set calls for the user's position (keys 1-3), if it has any */
   private plays: SetPlay[] | null = null;
   private callIdx = 0;
-  /** the user setter's pick (keys 1-4: outside, middle, opposite, pipe) and calls (C: the call sheet) */
+  /** the user setter's pick (keys 1-4: outside, middle, opposite, pipe) and calls (the picked key again) */
   private setterCalls = new SetterCalls();
   private callsFor: unknown = null;
   /** the hitters the user sets, by key (outside OH1, middle, opposite, pipe OH2) */
@@ -194,7 +193,7 @@ export class MiniRally extends Mode {
     return !this.g.autoUser && (this.position === 'S' || this.position === 'L');
   }
 
-  /** the user is our setter: their calls are the hitters' (C opens the call sheet) */
+  /** the user is our setter: their calls are the hitters' */
   private get userSetter(): boolean {
     return !this.g.autoUser && this.position === 'S';
   }
@@ -216,31 +215,20 @@ export class MiniRally extends Mode {
     const g = this.g;
     if (this.userSetsKeys) {
       const c = this.setterCalls;
-      // the libero backing up has no call sheet (a backup's set goes up high to a pin)
-      if (!this.userSetter && g.input.consumePress('KeyC')) c.editing = false;
+      // the libero backing up calls nothing (a backup's set goes up high to a pin): the keys only pick
+      c.canCall = this.userSetter;
       c.readKeys(g.input);
-      // the hitter you will set: your pick, else the one you look at once the ball is yours
       const yours = this.userSetsNext();
-      let lit = c.pick;
-      if (!lit && yours) {
-        let bestD = 1e9;
-        const me = g.me;
-        for (const o of this.setOptions(me)) {
-          const oy = yawFromDir(o.target.x - me.pos.x, o.target.z - me.pos.z);
-          const d = Math.abs(((oy - g.rig.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-          if (d < bestD) {
-            bestD = d;
-            lit = o.key ?? null;
-          }
-        }
-      }
-      const keys = this.userSetter ? SETTER_KEYS : SETTER_KEYS.filter((k) => k === 'OH' || k === 'OPP');
-      g.hud.setCallSheet(callSheet(c, keys, lit));
-      // the spot you are setting to, in the hitter's colour, while the ball is yours to set
       const oos = this.outOfSystem || !this.userSetter;
-      const show = yours && !!lit && !(lit === 'MB' && oos);
+      const keys = this.userSetter ? SETTER_KEYS : SETTER_KEYS.filter((k) => k === 'OH' || k === 'OPP');
+      // the hitter your set goes to: your pick, else the outside (the outside too when the pick is off)
+      const to = c.target();
+      const lit = !keys.includes(to) || (to === 'MB' && oos) ? DEFAULT_PICK : to;
+      g.hud.setCallSheet(callSheet(c, keys, lit, this.userSetter && this.outOfSystem ? ['MB'] : []));
+      // the spot you are setting to, in the hitter's colour, while the ball is yours to set
+      const show = yours;
       this.pickRing.visible = show;
-      if (show && lit) {
+      if (show) {
         const spot = callSpot(c, lit, oos);
         this.pickRing.position.set(spot.x, 0.011, spot.z + 0.15);
         const mat = this.pickRing.material as THREE.MeshBasicMaterial;
@@ -282,11 +270,10 @@ export class MiniRally extends Mode {
     return a === this.g.me ? this.setterCalls.pick : null;
   }
 
-  /** the key hint for the user's set (the call sheet above it shows the hitters and calls) */
+  /** the key hint for the user's set (the call strip above it shows the hitters and calls) */
   private setterKeysHint(): string {
-    if (this.setterCalls.editing) return `CALL SHEET · ${kbd('1')}${kbd('2')}${kbd('3')} change a hitter's call · ${kbd('C')} done`;
-    const pick = this.userSetter ? `${kbd('1')}-${kbd('4')} pick (again: high) · ${kbd('C')} calls` : `${kbd('1')} OH ${kbd('3')} OPP`;
-    return `${pick} · ${kbd('RMB')} as it reaches your hands, release in the green`;
+    const pick = this.userSetter ? `${kbd('1')}-${kbd('4')} who · again: high` : `${kbd('1')} OH ${kbd('3')} OPP`;
+    return `${kbd('RMB')} as it reaches your hands, release in the green · ${pick}`;
   }
 
   canServe(a: Athlete): boolean {
@@ -296,7 +283,6 @@ export class MiniRally extends Mode {
   hint(): string {
     const g = this.g;
     const me = g.me;
-    if (this.userSetter && this.setterCalls.editing) return this.setterKeysHint();
     if (this.home.receiver === me) return `YOUR BALL · ${kbd('E')} pass / dig`;
     if (this.yourFreeBall)
       return this.home.touches === 1
@@ -320,7 +306,11 @@ export class MiniRally extends Mode {
     const fast = play && play.inFront === undefined && needsGoodPass(play);
     if (fast && this.home.touches === 1 && g.ball.lastTouch?.side === 1)
       return `${play.name.toUpperCase()} · ${read ? 'in system · ' : ''}start your approach as the setter touches it`;
-    const calls = this.plays ? ` · ${kbd('1')}${kbd('2')}${kbd('3')} set call` : '';
+    const calls = this.plays
+      ? ` · ${kbd('1')}${kbd('2')}${kbd('3')} set call`
+      : this.userSetter
+        ? ` · ${kbd('1')}-${kbd('4')} pick a hitter, again: their next set`
+        : '';
     if (Math.abs(me.pos.z) < 1.4) return `${kbd('RMB')} hands + ${kbd('Space')} block · ${kbd('V')} camera${calls}`;
     return `${kbd('WASD')} move · ${kbd('E')} pass · ${kbd('LMB')} attack · ${kbd('RMB')} block/set · ${kbd('V')} camera${calls}`;
   }

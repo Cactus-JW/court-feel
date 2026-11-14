@@ -88,18 +88,16 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
   setter: {
     tag: 'Second contact',
     short: 'Run the offence and watch them finish.',
-    about: 'Passes come in. Look at a hitter (outside, quick or back set) and set as the ball drops. Your hitters attack a live blocker.',
+    about: 'Passes come in. Pick a hitter (no key: the outside) and set as the ball drops. Your hitters attack a live blocker.',
     scored: 'the set, and how your hitter finishes it',
     keys: [
       { k: 'W A S D', a: 'Get under the ball' },
-      { k: 'Mouse', a: 'Look at the hitter you want' },
-      { k: '1 to 4', a: 'Pick a hitter' },
-      { k: 'C', a: 'Calls' },
+      { k: '1 to 4', a: 'Pick a hitter. Again: their next set' },
       { k: 'Right mouse', a: 'Set: press as it reaches your hands, release in the green' },
     ],
     touch: [
       { k: 'Left thumb', a: 'Get under the ball' },
-      { k: 'Right thumb', a: 'Drag to look at the hitter you want' },
+      { k: 'SET TO', a: 'Top left: tap a hitter. Again: their next set' },
       { k: 'BLOCK', a: 'Hold: it sets when the ball drops onto you' },
     ],
   },
@@ -209,8 +207,7 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'In a drill',
       rows: [
         { k: '1  2  3', a: 'Call your set (Spike Drill, Mini Rally; hitters)' },
-        { k: '1 to 4', a: 'Pick a hitter when you set (Setter Drill, Mini Rally)' },
-        { k: 'C', a: 'Calls, when you set (Setter Drill, Mini Rally)' },
+        { k: '1 to 4', a: 'Pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
         { k: 'B', a: 'Opposing block: off, single, double (Spike Drill)' },
         { k: '1 to 5', a: 'Feed type (Free Play)' },
         { k: 'F   T', a: 'Feed a ball, auto feed (Free Play)' },
@@ -250,6 +247,7 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'In a drill',
       rows: [
         { k: 'SET CALL', a: 'Top left: call your set (Spike Drill, Mini Rally; hitters)' },
+        { k: 'SET TO', a: 'Top left: pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
         { k: 'VS BLOCK', a: 'Top left: opposing block (Spike Drill)' },
         { k: 'FEED  AUTO', a: 'Top left: feed types, feed a ball, auto feed (Free Play)' },
       ],

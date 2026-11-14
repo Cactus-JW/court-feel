@@ -1060,7 +1060,7 @@ export class Menu {
         'aimAssist',
         percent,
         '',
-        'Helps your body only: a little reach and a drift towards the ball. 0 is off.',
+        'Helps your body only: a little reach, a drift towards the ball, the last steps onto the spot when you set. 0 is off.',
       ),
       sw('Slow-mo assist', 'slowmoAssist'),
       seg(

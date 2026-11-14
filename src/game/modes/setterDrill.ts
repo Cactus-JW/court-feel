@@ -10,7 +10,7 @@ import { applyCalls, CALL_COLOR, callLane, callOptions, callSheet, callSpot, sta
 import type { ContactEvent, SetOption } from '../contact';
 import { outcomeLabel, type Outcome } from '../judge';
 import { SETTER_SPOT, SETTER_TARGET, setterTouchY } from '../plays';
-import { SETTER_KEYS, SetterCalls, type SetterKey } from '../setterCalls';
+import { DEFAULT_PICK, SETTER_KEYS, SetterCalls, type SetterKey } from '../setterCalls';
 import { kbd, makeFloorRing, Mode } from './mode';
 import type { Game } from '../game';
 
@@ -18,7 +18,7 @@ type Phase = 'intro' | 'feed' | 'live' | 'result';
 
 /**
  * Setter drill: passes come in from the back court. Pick a hitter with 1-4 (outside, middle,
- * opposite, pipe), or just look at one; C opens the call sheet to change their calls. Get to the
+ * opposite, pipe; no key: the outside); press the picked one again for their next set. Get to the
  * spot, press RMB as the ball reaches your hands, hold while the bar fills and release in the
  * green: your touch sets how big the green is. Your hitters run their calls (the fast ones before
  * you touch it) and finish against a block and a back row of three diggers. Off a green set your
@@ -38,7 +38,7 @@ export class SetterDrill extends Mode {
   private attacked = false;
   private markers = new Map<SetterKey, THREE.Mesh>();
   private tossed = false;
-  /** your picks and calls (keys 1-4, C the call sheet) */
+  /** your picks and calls (keys 1-4) */
   readonly calls = new SetterCalls();
   /** this rep's pass is too far off the net for the fast calls: everything goes up high */
   private outOfSystem = false;
@@ -97,7 +97,7 @@ export class SetterDrill extends Mode {
     this.defence.place('defense');
     g.hud.setTitle('Setter Drill');
     this.updateScore();
-    g.hud.message('1-4 pick a hitter · RMB as the ball reaches your hands, release in the green', 3.2);
+    g.hud.message('RMB as the ball reaches your hands, release in the green · 1-4 pick a hitter', 3.2);
     this.toPhase('intro');
   }
 
@@ -127,9 +127,17 @@ export class SetterDrill extends Mode {
     return a === this.g.me ? this.calls.pick : null;
   }
 
+  /** the hitter your set goes to: your pick, else the outside (the outside too when the quick is off) */
+  private setTo(): SetterKey {
+    const k = this.calls.target();
+    return k === 'MB' && this.outOfSystem ? DEFAULT_PICK : k;
+  }
+
   hint(): string {
-    if (this.calls.editing) return `CALL SHEET · ${kbd('1')}${kbd('2')}${kbd('3')} change a hitter's call · ${kbd('C')} done`;
-    return `${kbd('1')}-${kbd('4')} pick (again: high) · ${kbd('C')} calls · ${kbd('WASD')} to the spot · ${kbd('RMB')} as it reaches your hands, release in the green · ${kbd('V')} camera`;
+    // the pass is in the air: only what your hands do now
+    if (this.phase === 'live' && !this.set)
+      return `${kbd('WASD')} to the spot · ${kbd('RMB')} as it reaches your hands, release in the green · ${kbd('1')}-${kbd('4')} who · again: high`;
+    return `${kbd('1')}-${kbd('4')} pick a hitter · again: their next set · ${kbd('V')} camera`;
   }
 
   private updateScore(): void {
@@ -141,28 +149,16 @@ export class SetterDrill extends Mode {
   }
 
   frame(dt: number): void {
-    // the floor rings: each hitter's spot for their call; the picked one lit (no pick: the one you look at)
+    // the floor rings: each hitter's spot for their call; the one your set goes to lit
     const g = this.g;
-    const me = g.me;
-    let lit = this.calls.pick;
-    if (!lit) {
-      let bestD = 1e9;
-      for (const o of this.setOptions(me)) {
-        const oy = yawFromDir(o.target.x - me.pos.x, o.target.z - me.pos.z);
-        const d = Math.abs(((oy - g.rig.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-        if (d < bestD) {
-          bestD = d;
-          lit = o.key ?? null;
-        }
-      }
-    }
+    const lit = this.setTo();
     for (const [k, m] of this.markers) {
       const spot = callSpot(this.calls, k, this.outOfSystem);
       m.position.set(spot.x, 0.011, spot.z + 0.15);
       const mat = m.material as THREE.MeshBasicMaterial;
       mat.opacity += ((k === lit ? 0.95 : 0.25) - mat.opacity) * Math.min(1, dt * 10);
     }
-    g.hud.setCallSheet(callSheet(this.calls, SETTER_KEYS, lit));
+    g.hud.setCallSheet(callSheet(this.calls, SETTER_KEYS, lit, this.outOfSystem ? ['MB'] : []));
   }
 
   step(dt: number): void {

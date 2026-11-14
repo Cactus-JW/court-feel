@@ -5,8 +5,19 @@ import { R, topspinFor, type V3 } from '../physics/ball';
 import { netClearance, solveApex, solveFixedTime, solveSpeedToFloor } from '../physics/solve';
 import { Athlete, type Action, type Grade, type PassForm } from './athlete';
 import type { BallEntity, TouchKind } from './ballEntity';
-import type { SetterKey } from './setterCalls';
-import { gradeRelease, setMiss, setNote, setQuality, setShape, setTouch, setWindow, type SetWindow } from './setTiming';
+import { DEFAULT_PICK, type SetterKey } from './setterCalls';
+import {
+  gradeRelease,
+  setMiss,
+  setNote,
+  setPips,
+  setQuality,
+  setShape,
+  setTouch,
+  setWindow,
+  type SetPips,
+  type SetWindow,
+} from './setTiming';
 
 export interface ContactEvent {
   athlete: Athlete;
@@ -89,6 +100,18 @@ export interface SetPreview {
   absorbing: boolean;
   /** how far (m, horizontally) the ball will come down from the hands point if the setter stays put */
   centreD: number;
+  /** where the ball is caught: where it comes down through the hands' height (in the hands: where it is) */
+  at: V3;
+  /** the set this would be: the hitter's option your pick sends it to (null: nobody to set) */
+  option: SetOption | null;
+  /**
+   * The green and good half-windows (s) the touch earns. Before the catch they are live: your
+   * feet and the centring as they stand now, a clean catch assumed. Fixed at the catch.
+   */
+  green: number;
+  good: number;
+  /** the touch's parts, done or not (the catch: null until caught) */
+  pips: SetPips;
   /** while it loads: the catch (bar start), the ideal push (bar top) and the windows around it */
   bar: { start: number; target: number; green: number; good: number } | null;
 }
@@ -107,6 +130,8 @@ export interface SetResult {
   /** the green and good half-windows it was graded in (s) */
   window: number;
   good: number;
+  /** the touch's parts, done or not */
+  pips: SetPips;
 }
 
 /** a standard normal from a 0..1 source (Box-Muller) */
@@ -823,11 +848,18 @@ export class ContactSystem {
     return false;
   }
 
-  /** the option the setter is sending: their pick (keys), else the one closest to where they look (AI: aiAim) */
+  /**
+   * The option the setter is sending. The user's keys are the only pick: with no key (or a pick
+   * that is off, as the quick is off a bad pass) it is the outside, never where they look. An AI
+   * setter sends the one closest to its aim (aiAim); so does the user where a mode has no
+   * setter's keys (Free Play: three unkeyed targets).
+   */
   private chooseSetOption(a: Athlete, opts: SetOption[], from: V3): SetOption {
     const key = this.host.setPick?.(a);
     const picked = key ? opts.find((o) => o.key === key) : undefined;
     if (picked) return picked;
+    const outside = a.isUser ? opts.find((o) => o.key === DEFAULT_PICK) : undefined;
+    if (outside) return outside;
     const aimYaw = a.isUser ? this.userAimYaw() : yawFromDir(a.aiAim.x - from.x, a.aiAim.z - from.z);
     let best = opts[0];
     let bestD = 1e9;
@@ -897,7 +929,17 @@ export class ContactSystem {
     act.contactPoint.set(bp.x, bp.y, bp.z);
     this.lastSet = best;
     const quality = setQuality(g);
-    this.lastSetResult = { athlete: a, t, grade: g.grade, green: g.grade === 'Perfect', quality, err, window: win.green, good: win.good };
+    this.lastSetResult = {
+      athlete: a,
+      t,
+      grade: g.grade,
+      green: g.grade === 'Perfect',
+      quality,
+      err,
+      window: win.green,
+      good: win.good,
+      pips: setPips(touch, true),
+    };
     h.emitContact({
       athlete: a,
       kind: 'set',
@@ -925,21 +967,43 @@ export class ContactSystem {
     const L = SET_LEVELS[this.setLevel()];
     const t = h.simTime;
     const base = { catchClean: L.catch, catchEdge: L.catch + TIMING.setCatchLate, pressed: !!act, held: act?.held ?? false };
-    if (act?.absorbing)
+    const opts = h.setOptions(a);
+    if (act?.absorbing) {
+      const bp = h.ball.pos;
       return {
         ...base,
         tIdeal: act.idealT,
         absorbing: true,
         centreD: 0,
+        at: { x: bp.x, y: bp.y, z: bp.z },
+        option: opts.length ? this.chooseSetOption(a, opts, bp) : null,
+        green: act.green,
+        good: act.good,
+        pips: act.touch ? setPips(act.touch, true) : { feet: true, centre: true, catch: true },
         bar: { start: act.arriveT, target: act.arriveT + TIMING.setLoad, green: act.green, good: act.good },
       };
+    }
     if (!this.wantsSet(a)) return null;
     const P = this.handsPoint(a, this._p);
     const pred = h.ball.ensurePrediction(h.env, t);
     const tIdeal = pred.descendThrough(P.y, t);
     if (tIdeal < 0) return null;
     pred.posAt(tIdeal, this._b);
-    return { ...base, tIdeal, absorbing: false, centreD: Math.hypot(this._b.x - P.x, this._b.z - P.z), bar: null };
+    const at = { x: this._b.x, y: this._b.y, z: this._b.z };
+    const centreD = Math.hypot(at.x - P.x, at.z - P.z);
+    const option = opts.length ? this.chooseSetOption(a, opts, at) : null;
+    // the touch as it stands: feet and centring now, for the set your pick makes it, a clean catch assumed
+    const level = this.setLevel();
+    const touch = setTouch(
+      a.stillT,
+      0,
+      centreD,
+      this.setReach(a),
+      option ? setShape(a.pos, at, option.target, a.side, !!option.fast) : { back: false, fast: false, length: 0, outOfSystem: false },
+      level,
+    );
+    const w = setWindow(touch, level);
+    return { ...base, tIdeal, absorbing: false, centreD, at, option, green: w.green, good: w.good, pips: setPips(touch, false), bar: null };
   }
 
   /**

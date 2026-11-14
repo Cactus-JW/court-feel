@@ -290,27 +290,32 @@ export class Hud {
   private lastHint = '';
 
   /**
-   * The call sheet when you set: each hitter's key, call and colour, the one you will set lit
-   * (picked, or looked at). Open (C) it says so; once the pass is played the calls are locked.
-   * Null hides it.
+   * The call strip when you set, laid out like the net (outside, middle, opposite; the pipe behind
+   * the middle): each hitter's key, call and colour, with a dot per call they have (the one on
+   * lit). The hitter your set goes to is lit: solid once you pressed their key, an outline while it
+   * is the outside by default. Once the pass is played the calls are locked (the dots dim); a
+   * hitter who can't be set this ball is struck out. Null hides it.
    */
   setCallSheet(v: CallSheetView | null): void {
     let html = '';
     if (v) {
-      const head = v.editing ? 'CALLS · 1-3 change' : v.locked ? 'SETTING' : 'SET TO';
-      const items = v.items
+      html = v.items
         .map((i) => {
-          const cls = `cs-item${i.lit ? ' lit' : ''}${i.picked ? ' picked' : ''}`;
-          return `<div class="${cls}" style="--c:${i.color}"><b>${i.key}</b>${i.who}${i.call ? `<span>${i.call}</span>` : ''}</div>`;
+          const cls = `cs-item cs-${i.id}${i.lit ? ' lit' : ''}${i.picked ? ' picked' : ''}${i.off ? ' off' : ''}`;
+          const dots =
+            i.steps > 1
+              ? `<i>${Array.from({ length: i.steps }, (_, n) => `<em${n === i.step ? ' class="on"' : ''}></em>`).join('')}</i>`
+              : '';
+          return `<div class="${cls}" style="--c:${i.color}"><b>${i.key}</b>${i.who}${i.call ? `<span>${i.call}</span>` : ''}${dots}</div>`;
         })
         .join('');
-      html = `<div class="cs-head">${head}</div>${items}`;
-      this.sheet.classList.toggle('editing', v.editing);
+      this.sheet.classList.toggle('locked', v.locked);
+      this.sheet.classList.toggle('pins', !v.items.some((i) => i.id === 'MB'));
     }
     if (html !== this.sheetHtml) {
       this.sheetHtml = html;
       this.sheet.innerHTML = html;
-      this.sheet.style.display = html ? 'flex' : 'none';
+      this.sheet.style.display = html ? 'grid' : 'none';
     }
   }
 
