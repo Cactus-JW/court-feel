@@ -597,7 +597,10 @@ export class Menu {
     const keyBox = h('div', 'key-box');
     const all = btn('link', 'All controls');
     all.onclick = () => this.setView('learn');
-    keys.append(txt('div', 'eyebrow', 'Keys for this drill'), keyBox, all);
+    // the setter's own plays (also the Plays pill in the top bar, which a phone has no room for)
+    const plays = btn('link', 'Your plays');
+    plays.onclick = () => this.openSheet('plays', plays);
+    keys.append(txt('div', 'eyebrow', 'Keys for this drill'), keyBox, all, plays);
     const setup = h('div', 'panel-setup');
     setup.append(this.posPicker());
     mid.append(keys, setup);
@@ -615,6 +618,7 @@ export class Menu {
       about.textContent = d.about;
       scored.replaceChildren(txt('b', '', 'Scored on'), ` · ${d.scored}`);
       keyBox.replaceChildren(...drillKeys(this.trainSel, this.pos));
+      plays.hidden = this.trainSel !== 'setter';
       summary.replaceChildren(
         `${netLabel(this.settings.womenNet)} · Aim assist ${percent(this.settings.aimAssist).toLowerCase()} · `,
         txt('b', '', 'Change'),
@@ -662,6 +666,8 @@ export class Menu {
     }
     const all = btn('link', 'All controls');
     all.onclick = () => this.setView('learn');
+    const plays = btn('link', 'Your plays');
+    plays.onclick = () => this.openSheet('plays', plays);
     calls.append(
       txt('div', 'eyebrow', 'Listen for your setter'),
       callList,
@@ -671,6 +677,7 @@ export class Menu {
         'The keys are the ones from the drills. The hint at the bottom of the screen names the key when the ball is yours.',
       ),
       all,
+      plays,
     );
     const setup = h('div', 'panel-setup');
     const net = h('div', 'block');

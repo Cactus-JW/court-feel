@@ -577,7 +577,8 @@ where they are going: the swing is along the run and the body's speed is in the
 ball, so off your green set the bounce goes with the run, some 15 km/h harder
 than the same hitter's standing swing (`AI.insideRun`).
 
-**Your own plays** (start screen: **Plays**, in the top bar). Pick the place on
+**Your own plays** (start screen: **Plays**, in the top bar; on a phone, **Your plays**
+in the Setter Drill's and the Mini Rally's panel). Pick the place on
 the wheel your play takes, then pick one set for each hitter, from the same sets
 their key steps through on court (a set is a run, a spot at the net and a tempo,
 all in one: "Go" is the fast one to the pin, "3" the inside one). The little

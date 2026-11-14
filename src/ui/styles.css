@@ -410,6 +410,8 @@ body.touchmode .pd-hitter .chip { min-height: 44px; }
 /* four pills in the top bar: Plays goes down to its icon first, then all the names give way to the icons */
 @media (max-width: 1120px) { .pill-plays span { display: none; } }
 @media (max-width: 1000px) { .top-right .pill span { display: none; } }
+/* a phone's top bar has no room for it: Plays is reached from the Setter Drill's and the Mini Rally's panel ("Your plays") */
+@media (max-width: 520px) { .pill-plays { display: none; } }
 /* not wide enough for three columns: the wheel's places in rows on top, then the court, then the hitters side by side */
 @media (max-width: 1100px) {
   .pd-slots { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; }
