@@ -20,6 +20,7 @@ const BOOLEAN_SETTINGS: Record<BooleanSettingKey, true> = {
   slowmoAssist: true,
   setSlowmo: true,
   setRing: true,
+  keepSetPick: true,
   landingMarker: true,
   replays: true,
   firstPerson: true,

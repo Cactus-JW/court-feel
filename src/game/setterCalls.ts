@@ -1,9 +1,13 @@
-import { SET_PLAYS, type SetPlay } from './plays';
+import { COMBOS, type Combo } from './combos';
+import { D_PLAY, isQuick, LANES, needsGoodPass, SETTER_PLAYS, type AttackLane, type SetPlay } from './plays';
 
 /** the hitters a setter can pick, in key order: 1 outside, 2 middle, 3 opposite, 4 pipe */
 export type SetterKey = 'OH' | 'MB' | 'OPP' | 'PIPE';
 export const SETTER_KEYS: readonly SetterKey[] = ['OH', 'MB', 'OPP', 'PIPE'];
-type CallKey = 'OH' | 'MB' | 'OPP';
+
+/** what the setter can send the ball to: a hitter, or (key 5, front row only) over the net: the dump */
+export type SetPick = SetterKey | 'DUMP';
+export const SET_PICKS: readonly SetPick[] = [...SETTER_KEYS, 'DUMP'];
 
 /** with no key pressed the set goes to the outside: the ball every setter gives when nothing else is on */
 export const DEFAULT_PICK: SetterKey = 'OH';
@@ -13,76 +17,201 @@ export const DEFAULT_PICK: SetterKey = 'OH';
  * - 1-4 pick the hitter you set; no key, it is the outside (never where you look: a setter
  *   watches the ball).
  * - Pressing the picked hitter again steps to their next set. Before the pass that is their next
- *   call (the same SET_PLAYS hitters call for themselves): tempo is agreed before the pass
- *   because the hitter's run depends on it. Once the pass is played the calls are locked, and
- *   the only late change a hitter can still take is a higher ball: the press asks for a high
- *   ball (again: back to the call).
+ *   call (SETTER_PLAYS): tempo is agreed before the pass because the hitter's run depends on it.
+ *   A whole combination is called at once on the play wheel (`setCombo`).
+ * - Once the pass is played the calls are locked. In system, the only late change a hitter can
+ *   still take is a higher ball: the key again asks for a high ball (again: back to the call).
+ *   A hitter already on a fast run can't stop for one (`canHold`), and a quick has no high ball.
+ * - Out of system (`oos`) it is the other way round: everything goes up high, and the key again
+ *   asks that hitter for their fast set all the same (a middle has no high ball, so picking
+ *   them is the ask). They have to hear it in time (`canAsk`), and once they run it stays asked.
+ * - Front row (`frontRow`): the opposite is in the back row and hits the D, and 5 picks the
+ *   dump (again: short or deep). A back-row setter may not attack the ball above the net.
  */
 export class SetterCalls {
-  pick: SetterKey | null = null;
+  pick: SetPick | null = null;
   /** the pass is on its way: tempos are locked */
   locked = false;
   /** the hitters run your calls (false for a backup's set: every ball goes up high, the keys only pick) */
   canCall = true;
-  private call: Record<CallKey, number> = { OH: 0, MB: 0, OPP: 0 };
+  /** this ball's pass is out of system: high balls, unless you ask a hitter for their fast set */
+  oos = false;
+  /** the setter is front row: the opposite hits the D from the back row, and the dump is on */
+  frontRow = false;
+  /** the dump goes deep (the far corner) instead of short behind the block */
+  dumpDeep = false;
+  /** out of system: can this hitter still make their fast run if asked now? (the mode knows the clock; null: always) */
+  canAsk: ((k: SetterKey) => boolean) | null = null;
+  /** a hitter was asked for their fast set after the pass (the mode starts their run) */
+  onAsk: ((k: SetterKey) => void) | null = null;
+  /**
+   * In system, after the pass: can this hitter still wait for a high ball instead of their fast
+   * call? Only if they have not started the run (the mode holds them; null: always).
+   */
+  canHold: ((k: SetterKey) => boolean) | null = null;
+  private call: Record<SetterKey, number> = { OH: 0, MB: 0, OPP: 0, PIPE: 0 };
   private high = new Set<SetterKey>();
+  private fast = new Set<SetterKey>();
+  private late: SetterKey | null = null;
 
-  press(k: SetterKey): void {
-    if (this.pick !== k) {
-      this.pick = k;
-      return;
-    }
-    if (!this.locked && this.canCall && k !== 'PIPE') {
-      this.call[k] = (this.call[k] + 1) % (SET_PLAYS[k]?.length ?? 1);
-      return;
-    }
-    if (this.high.has(k)) this.high.delete(k);
-    else this.high.add(k);
+  /** every call this hitter has (front row: the opposite only has the D) */
+  plays(k: SetterKey): readonly SetPlay[] {
+    return k === 'OPP' && this.frontRow ? [D_PLAY] : SETTER_PLAYS[k];
   }
 
-  /** keys pressed since the last step: Digit1 outside ... Digit4 pipe */
+  press(k: SetPick): void {
+    if (k === 'DUMP') {
+      if (!this.frontRow) return;
+      if (this.pick === 'DUMP') this.dumpDeep = !this.dumpDeep;
+      this.pick = 'DUMP';
+      return;
+    }
+    const again = this.pick === k;
+    this.pick = k;
+    if (this.locked && this.oos && this.canCall) {
+      // out of system: the key again asks for the fast set (the middle: picking them is the ask)
+      if ((!again && k !== 'MB') || k === 'PIPE' || this.fast.has(k) || !this.fastPlay(k)) return;
+      if (this.canAsk && !this.canAsk(k)) {
+        this.late = k;
+        return;
+      }
+      this.fast.add(k);
+      this.onAsk?.(k);
+      return;
+    }
+    if (!again) return;
+    const n = this.plays(k).length;
+    if (!this.locked && this.canCall && n > 1) {
+      this.call[k] = (this.call[k] + 1) % n;
+      return;
+    }
+    // a high ball instead of their call (again: back to the call)
+    const p = this.play(k);
+    const running = this.locked && this.canCall && needsGoodPass(p);
+    if (this.high.has(k)) {
+      // back to a fast call: they have to make the run from here
+      if (running && this.canAsk && !this.canAsk(k)) {
+        this.late = k;
+        return;
+      }
+      this.high.delete(k);
+      if (running) this.onAsk?.(k);
+      return;
+    }
+    // a quick has no high ball; a hitter already on a fast run can't stop for one
+    if (running && (isQuick(p) || (this.canHold && !this.canHold(k)))) {
+      if (!isQuick(p)) this.late = k;
+      return;
+    }
+    this.high.add(k);
+  }
+
+  /** keys pressed since the last step: Digit1 outside ... Digit4 pipe, Digit5 the dump */
   readKeys(input: { consumePress(code: string): boolean }): void {
-    SETTER_KEYS.forEach((k, i) => {
+    SET_PICKS.forEach((k, i) => {
       if (input.consumePress('Digit' + (i + 1))) this.press(k);
     });
   }
 
-  /** the pass is played: lock the tempos */
-  lock(): void {
+  /** the pass is played: lock the tempos; `oos` it is out of system */
+  lock(oos = false): void {
     this.locked = true;
+    this.oos = oos;
   }
 
-  /** after the set (or a new rep): a fresh pick, unlocked; the calls stay until you change them */
-  nextBall(): void {
-    this.pick = null;
+  /**
+   * After the set (or a new rep): unlocked, in system, nothing asked. The calls stay until you
+   * change them; the pick goes back to the outside unless you keep it (Settings: Keep my pick).
+   */
+  nextBall(keepPick = false): void {
+    if (!keepPick) {
+      this.pick = null;
+      this.dumpDeep = false;
+    }
     this.locked = false;
+    this.oos = false;
     this.high.clear();
+    this.fast.clear();
+    this.late = null;
   }
 
-  /** the hitter the set goes to: your pick, else the outside */
-  target(): SetterKey {
-    return this.pick ?? DEFAULT_PICK;
+  /** the hitter (or the dump) the set goes to: your pick, else the outside */
+  target(): SetPick {
+    return this.pick === 'DUMP' && !this.frontRow ? DEFAULT_PICK : (this.pick ?? DEFAULT_PICK);
   }
 
-  /** the call a hitter runs */
-  play(k: CallKey): SetPlay {
-    const plays = SET_PLAYS[k]!;
+  /** out of system: the fast set this hitter can be asked for (their call if it is one, else their first fast one) */
+  fastPlay(k: SetterKey): SetPlay | null {
+    const plays = this.plays(k);
+    const called = plays[this.call[k] % plays.length];
+    return needsGoodPass(called) ? called : (plays.find(needsGoodPass) ?? null);
+  }
+
+  /** out of system: this hitter was asked for their fast set and is running it */
+  asksFast(k: SetterKey): boolean {
+    return this.oos && this.fast.has(k);
+  }
+
+  /**
+   * A hitter could not make their fast run (still at the net after a block): they wait for a
+   * high ball, whatever was called or asked.
+   */
+  forceHigh(k: SetterKey): void {
+    this.high.add(k);
+    this.fast.delete(k);
+  }
+
+  /** a hitter asked too late for their fast set (once: for the message) */
+  takeLate(): SetterKey | null {
+    const k = this.late;
+    this.late = null;
+    return k;
+  }
+
+  /** the call a hitter runs (out of system and asked: their fast set) */
+  play(k: SetterKey): SetPlay {
+    if (this.asksFast(k)) return this.fastPlay(k)!;
+    const plays = this.plays(k);
     return plays[this.call[k] % plays.length];
   }
 
-  /** which of a hitter's calls is on, and how many they have (the pipe has the one) */
+  /** where a hitter's high ball goes (out of system, or asked for one) */
+  highLane(k: SetterKey): AttackLane {
+    if (k === 'PIPE') return LANES.L;
+    return k === 'OPP' && this.frontRow ? D_PLAY.lane : LANES[k];
+  }
+
+  /** which of a hitter's calls is on, and how many they have */
   step(k: SetterKey): { i: number; n: number } {
-    return k === 'PIPE' ? { i: 0, n: 1 } : { i: this.call[k], n: SET_PLAYS[k]!.length };
+    const n = this.plays(k).length;
+    return { i: this.call[k] % n, n };
   }
 
-  /** asked for a high ball */
+  /** this hitter gets a high ball: asked for one, or out of system and not asked for the fast set */
   isHigh(k: SetterKey): boolean {
-    return this.high.has(k);
+    return this.oos ? !this.fast.has(k) : this.high.has(k);
   }
 
-  /** the call as shown on screen: "Go", "1", "Back", "Pipe" (or "High" when asked for one) */
+  /** the call as shown on screen: "Go", "1", "Back", "Pipe" (or "High") */
   label(k: SetterKey): string {
-    if (this.high.has(k)) return 'High';
-    return k === 'PIPE' ? 'Pipe' : this.play(k).short;
+    if (k === 'MB' && this.oos) return this.play(k).short;
+    return this.isHigh(k) ? 'High' : this.play(k).short;
+  }
+
+  /** call a whole combination (the play wheel). Not once the pass is played, and not for a backup. */
+  setCombo(c: Combo): boolean {
+    if (this.locked || !this.canCall) return false;
+    for (const k of SETTER_KEYS) {
+      const i = this.plays(k).findIndex((p) => p.short === c.calls[k]);
+      if (i >= 0) this.call[k] = i;
+    }
+    return true;
+  }
+
+  /** the combination the calls make right now, if they are one */
+  combo(): Combo | null {
+    return (
+      COMBOS.find((c) => SETTER_KEYS.every((k) => this.plays(k).length === 1 || this.plays(k)[this.step(k).i].short === c.calls[k])) ?? null
+    );
   }
 }

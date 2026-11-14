@@ -45,6 +45,23 @@ canvas { display: block; outline: none; }
   border: 1px solid var(--c); color: var(--c); font: 800 11px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
   white-space: nowrap; text-shadow: none; pointer-events: none; }
 .set-to::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -5px; border: 5px solid transparent; border-top-color: var(--c); }
+/* the play wheel: the setter's combinations, called before the pass. The slice the mouse is on is gold; the play the calls make now is lit */
+.play-wheel { position: absolute; left: 50%; top: 50%; display: none; transform: translate(-50%, -50%); text-shadow: none; }
+.play-wheel svg { display: block; }
+.pw-slice { fill: rgba(8,10,16,0.74); stroke: rgba(255,255,255,0.16); stroke-width: 1; }
+.pw-slice.on { fill: rgba(60,70,92,0.82); stroke: rgba(255,255,255,0.4); }
+.pw-slice.sel { fill: rgba(96,72,14,0.86); stroke: var(--gold); stroke-width: 2; }
+.pw-label { fill: #e9edf5; font: 700 12px/1 system-ui, sans-serif; text-anchor: middle; pointer-events: none; }
+.pw-num { fill: rgba(255,255,255,0.5); font: 700 10px/1 ui-monospace, Menlo, monospace; text-anchor: middle; pointer-events: none; }
+.pw-mid { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(8,10,16,0.74);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; pointer-events: none; }
+.pw-name { font-weight: 800; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+.pw-court { width: 100px; height: 52px; flex: none; }
+.pw-net { stroke: #e9edf5; stroke-width: 1.6; }
+.pw-setter { fill: #e9edf5; }
+.pw-run { stroke-width: 1.8; stroke-linecap: round; }
+.pw-idea { font-size: 10px; line-height: 1.25; opacity: 0.8; max-width: 128px; }
+body.touchmode .play-wheel .pw-slice { pointer-events: auto; }
 /* first person: where to stand, on a dial under the crosshair. The mark is your feet, up is where you look, the ring is the spot */
 .set-radar { position: absolute; left: 50%; top: 50%; display: none; transform: translateX(-50%); border-radius: 50%; pointer-events: none;
   background: rgba(8,10,16,0.38); box-shadow: 0 0 0 1px rgba(255,255,255,0.3); }
@@ -93,6 +110,8 @@ canvas { display: block; outline: none; }
 .cs-item { display: flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 6px; background: rgba(8,10,16,0.55);
   border: 1px solid rgba(255,255,255,0.14); font-weight: 700; opacity: 0.7; transition: opacity 0.12s, border-color 0.12s, box-shadow 0.12s; }
 .cs-PIPE { grid-column: 2; }
+.cs-play { grid-column: 1 / -1; text-align: center; font-weight: 800; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.8;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
 .cs-item b { font: 700 10px/1 ui-monospace, Menlo, monospace; opacity: 0.7; }
 .cs-item span { font-weight: 600; color: var(--c); }
 .cs-item i { display: flex; gap: 3px; margin-left: auto; padding-left: 4px; }

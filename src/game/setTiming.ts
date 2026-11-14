@@ -107,6 +107,8 @@ export function setTouch(stillT: number, catchErr: number, centreD: number, reac
   if (shape.outOfSystem) {
     difficulty *= T.outOfSystem;
     reasons.push('off the net');
+    // a quick or a fast set from out there: possible, and very hard
+    if (shape.fast) difficulty *= T.oosFast;
   }
   return { feet, catch: caught, centre, difficulty, reasons };
 }

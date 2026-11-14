@@ -309,6 +309,8 @@ export class Hud {
           return `<div class="${cls}" style="--c:${i.color}"><b>${i.key}</b>${i.who}${i.call ? `<span>${i.call}</span>` : ''}${dots}</div>`;
         })
         .join('');
+      // the combination the calls make, named above the strip
+      if (v.play) html = `<div class="cs-play">${v.play}</div>${html}`;
       this.sheet.classList.toggle('locked', v.locked);
       this.sheet.classList.toggle('pins', !v.items.some((i) => i.id === 'MB'));
     }

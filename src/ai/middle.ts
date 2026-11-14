@@ -6,6 +6,7 @@ import type { Game } from '../game/game';
 import { laneFor, SETTER_SPOT } from '../game/plays';
 import type { V3 } from '../physics/ball';
 import { predictJump } from './approach';
+import { decoyFor, userGreen } from './greenBite';
 import { moveTo, netYaw, stop, type Brain } from './brain';
 import { BallRead } from './read';
 
@@ -44,6 +45,8 @@ export class MiddleBlocker implements Brain {
   private attackX = 0;
   /** where the hands go in the air: the spot it was running for (null: straight up) */
   private handsTo: number | null = null;
+  /** the user's green set: it bit on another hitter (`who`; null: nobody else was going, it guessed a side) */
+  private bite: { who: Athlete | null } | null = null;
   private readonly b: V3 = { x: 0, y: 0, z: 0 };
 
   constructor(
@@ -64,6 +67,7 @@ export class MiddleBlocker implements Brain {
     this.targetX = this.homeX;
     this.tc = -1;
     this.handsTo = null;
+    this.bite = null;
   }
 
   step(dt: number, g: Game): void {
@@ -162,7 +166,15 @@ export class MiddleBlocker implements Brain {
   private readSet(g: Game, lt: Touch): void {
     const a = this.athlete;
     const now = g.simTime;
-    if (this.setRead.look(lt, now, g.rng)) this.tc = -1;
+    if (this.setRead.look(lt, now, g.rng)) {
+      this.tc = -1;
+      // your green set: it has gone with a hitter you did not set, at once (there was nothing to read)
+      this.bite = userGreen(g, lt) ? { who: decoyFor(g, a, lt) } : null;
+    }
+    if (this.bite) {
+      this.goWith(g, lt, this.bite.who);
+      return;
+    }
     // until it reacts, it carries on with the pass read (lined up, leaning, or in the air with their middle)
     if (!this.setRead.seen(now)) return;
     const pred = g.ball.ensurePrediction(g.env, now);
@@ -198,6 +210,42 @@ export class MiddleBlocker implements Brain {
       this.jump(now);
       this.blockedFor = lt;
     }
+  }
+
+  /**
+   * Fooled by your green set: it goes with `who`, a hitter you did not set, and jumps with them
+   * (up with a quick, as a commit block). With nobody else going it guesses a side: on a pin set
+   * it stays home for the quick, on a set in the middle it steps `AI.greenBlockGuess` m towards
+   * the far pin. Either way it never gets to the ball: the pin blocker is on their own.
+   */
+  private goWith(g: Game, lt: Touch, who: Athlete | null): void {
+    const a = this.athlete;
+    const now = g.simTime;
+    const M = AI.middle;
+    if (who) {
+      const x = who.pos.x + who.vel.x * AI.greenBite.lead;
+      this.targetX = x;
+      this.handsTo = x;
+      if (this.blockedFor === lt || !a.canJump() || Math.abs(a.pos.x - x) > M.lateReach) return;
+      if (!(who.state === 'air' || who.state === 'load')) return;
+      const release = who.state === 'load' ? now + Math.max(0, PLAYER.loadMax - 0.02 - who.loadT) : now;
+      const top = predictJump(who, now, release);
+      if (!top || now < this.pressFor(top.t + 0.05)) return;
+      this.jump(now);
+      this.blockedFor = lt;
+      return;
+    }
+    if (this.tc < 0) {
+      const pred = g.ball.ensurePrediction(g.env, now);
+      let tc = pred.descendThrough(3.25, now);
+      if (tc < 0) tc = pred.apex().t;
+      pred.posAt(tc, this.b);
+      this.tc = tc;
+      this.attackX = this.b.x;
+    }
+    const pin = Math.abs(this.attackX) > M.pinX;
+    this.targetX = pin ? this.homeX : this.homeX + (this.attackX >= this.homeX ? -1 : 1) * AI.greenBlockGuess;
+    this.handsTo = null;
   }
 
   /** when to press so the block's hands are at the top at `tHands` */

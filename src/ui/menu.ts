@@ -1071,6 +1071,7 @@ export class Menu {
       ),
       sw('Set slow-mo', 'setSlowmo'),
       sw('Set ring and bar', 'setRing'),
+      sw('Keep my pick', 'keepSetPick', 'When you set: the hitter you picked stays picked for the next ball.'),
       sw('Landing marker', 'landingMarker'),
       sw('Hints', 'showHints', 'The key hint at the bottom, and the timing collar around the charge ring.'),
     ]);

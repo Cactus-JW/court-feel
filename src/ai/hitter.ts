@@ -4,12 +4,14 @@ import { clamp, yawFromDir } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
 import type { Game } from '../game/game';
 import { attackHeight, quickSpot, type AttackLane } from '../game/plays';
-import { planApproach, planQuick, planToPoint, riseTime, type ApproachPlan } from './approach';
+import { planApproach, planQuick, planToPoint, riseTime, runDir, type ApproachPlan } from './approach';
 import { moveTo, netYaw, stop, type Brain } from './brain';
 import { blockHands, ContactSystem, type SetResult } from '../game/contact';
-import { solveSpeedToFloor } from '../physics/solve';
+import { netClearance, solveSpeedToFloor } from '../physics/solve';
 import type { V3 } from '../physics/ball';
 import { openShot, type BlockHands, type Digger } from './openShot';
+
+const _run = new THREE.Vector3();
 
 /**
  * AI attacker: waits at its approach start, reads a set meant for it, plans a
@@ -60,6 +62,7 @@ export class HitterBrain implements Brain {
     this.swung = false;
     this.quickFor = null;
     this.pendingRun = null;
+    this.missedRun = false;
     this.tempo = false;
   }
 
@@ -88,6 +91,11 @@ export class HitterBrain implements Brain {
 
   /** a called tempo run to make: meet the set at `contact` at `tc` (planned once off the net) */
   private pendingRun: { contact: THREE.Vector3; tc: number } | null = null;
+  /**
+   * A called run this hitter could not make (still at the net after a block, too far from the
+   * start): they wait for a high ball instead, and the setter is told (the call strip shows High).
+   */
+  missedRun = false;
 
   /**
    * Run a called tempo (a set not yet made): to meet it at `contact` at time `tc`. From the
@@ -96,6 +104,14 @@ export class HitterBrain implements Brain {
    */
   runTo(contact: THREE.Vector3, tc: number): void {
     this.pendingRun = { contact, tc };
+    this.missedRun = false;
+  }
+
+  /** the setter asked for a high ball instead: drop a called run not yet started (false: already running it) */
+  holdRun(): boolean {
+    if (this.phase !== 'ready') return false;
+    this.pendingRun = null;
+    return true;
   }
 
   /** off the net and at the approach start (AI.transitionReady), or out of time to get there before taking off at `tTakeoff` */
@@ -124,14 +140,18 @@ export class HitterBrain implements Brain {
         // a called run: off the net first, then the approach
         const run = this.pendingRun;
         // (a ball that went somewhere else, or a run there is no longer time for, is dropped)
-        if (run && (!g.ball.active || run.tc - now < 0.3)) this.pendingRun = null;
-        else if (run && a.state === 'ground' && this.readyToRun(spot, now, run.tc - riseTime(a.jumpMax))) {
+        if (run && (!g.ball.active || run.tc - now < 0.3)) {
           this.pendingRun = null;
-          const plan = planToPoint(a, now, run.contact, run.tc, face, face);
+          this.missedRun = g.ball.active;
+        } else if (run && a.state === 'ground' && this.readyToRun(spot, now, run.tc - riseTime(a.jumpMax))) {
+          this.pendingRun = null;
+          const plan = planToPoint(a, now, run.contact, run.tc, face, face, undefined, true);
           if (plan && plan.error < 0.6) {
             this.runPlan(plan, g);
             break;
           }
+          // can't get there in time: wait for a high ball
+          this.missedRun = true;
         }
         // (a quick or a fast set starts from off the net: one still at the net after a block keeps backing off)
         const offNet = Math.abs(a.pos.z) >= AI.transition.approachOff;
@@ -145,9 +165,9 @@ export class HitterBrain implements Brain {
             const fast = !this.lane.quick && g.rng.next() < AI.tempo.share;
             const contact = new THREE.Vector3(this.lane.x, attackHeight(a), this.lane.z);
             const plan = this.lane.quick
-              ? planQuick(a, now, quickSpot(ps.x, a.side, this.inFront), ps.t, face, face)
+              ? planQuick(a, now, quickSpot(ps.x, a.side, this.inFront), ps.t, face, face, undefined, true)
               : fast
-                ? planToPoint(a, now, contact, ps.t + AI.tempo.flight, face, face)
+                ? planToPoint(a, now, contact, ps.t + AI.tempo.flight, face, face, undefined, true)
                 : null;
             if (plan && plan.error < 0.6) {
               this.plan = plan;
@@ -163,7 +183,7 @@ export class HitterBrain implements Brain {
           const pred = g.ball.ensurePrediction(g.env, now);
           const aim = this.chooseAim(g, pred.land.x);
           const airYaw = yawFromDir(aim.x - this.lane.x, aim.z - this.lane.z);
-          this.plan = planApproach(a, pred, now, face, airYaw);
+          this.plan = planApproach(a, pred, now, face, airYaw, undefined, true);
           if (this.plan) {
             this.tempo = false;
             this.phase = 'approach';
@@ -177,8 +197,10 @@ export class HitterBrain implements Brain {
       case 'approach': {
         const p = this.plan!;
         if (now >= p.tStart - 1e-6) {
-          a.cmd.moveX = p.dir.x;
-          a.cmd.moveZ = p.dir.z;
+          // a run across the court loops in: it turns towards the net as it goes (runDir)
+          const d = runDir(p, a.pos, _run);
+          a.cmd.moveX = d.x;
+          a.cmd.moveZ = d.z;
           a.cmd.sprint = true;
         } else stop(a);
         a.cmd.faceYaw = p.runYaw;
@@ -246,6 +268,50 @@ export class HitterBrain implements Brain {
   }
 
   /**
+   * Off your green set: the bounce. A full swing as steep as the net allows: of the spots a
+   * full-speed spike from `from` brings down inside the court and over the tape (straight ahead
+   * or across, at AI.greenBounce.depths from the net), the nearest one that does not cross the
+   * net over a blocker's hands. Null when no such shot exists (a ball hit from too deep, a block
+   * across everything).
+   */
+  private bounce(g: Game, from: V3, hitX: number): THREE.Vector3 | null {
+    const a = this.athlete;
+    const B = AI.greenBounce;
+    const opp = -a.side;
+    const hw = COURT.halfWidth;
+    const speed = CONTACT.spikePerfect * a.stats.power;
+    // the hands that will be there: blockers up or going up now (one still standing can't get up in time)
+    const hands = this.blockers()
+      .filter((b) => Math.abs(b.pos.z) < 1.4 && (b.state === 'air' || b.state === 'load' || b.action?.kind === 'block'))
+      .map((b) => b.pos.x + b.reachX + b.vel.x * (0.05 + Math.abs(a.pos.z) / 20));
+    const out = { x: 0, y: 0, z: 0 };
+    const w = { x: 0, y: 0, z: 0 };
+    const land = { x: 0, y: 0, z: 0 };
+    // straight ahead, and across the court either way
+    const xs = [clamp(hitX, -hw + 0.9, hw - 0.9), -hw + 0.9, -hw * 0.5, 0, hw * 0.5, hw - 0.9];
+    let best: THREE.Vector3 | null = null;
+    let bestD = Infinity;
+    for (const depth of B.depths) {
+      for (const x of xs) {
+        const z = opp * depth;
+        // the steepest one wins: the shortest way to the floor
+        const far = Math.hypot(x - from.x, z - from.z);
+        if (far >= bestD) continue;
+        solveSpeedToFloor(from, x, z, speed, CONTACT.spikeSpinPerfect, out, w, land);
+        // a full swing can't bring it down there, or it would not clear the tape
+        if (Math.hypot(land.x - x, land.z - z) > 0.5 || Math.abs(land.x) > hw - 0.3) continue;
+        const c = netClearance(from, out, w);
+        if (!c || c.y < g.env.netTop + BALL.radius + B.clear) continue;
+        // past the block: not over a blocker's hands
+        if (hands.some((bx) => Math.abs(c.x - bx) < CONTACT.blockHalfWidth + BALL.radius + B.hands)) continue;
+        bestD = far;
+        best = new THREE.Vector3(x, 0, z);
+      }
+    }
+    return best;
+  }
+
+  /**
    * The open spot for a full-speed spike from `from` (see openShot), against the defence as it
    * stands: they can move `read` s after the hit (a blocker in the air comes down first).
    */
@@ -299,6 +365,14 @@ export class HitterBrain implements Brain {
     // (playability: now and then the user's block is misread, as if it weren't there)
     const userUp = this.blockers().some((b) => b.isUser && Math.abs(b.pos.z) < 1.4);
     const misread = userUp && g.rng.next() < AI.userBlockMisread;
+    // off your green set: bounce it, straight down past the one block that is left
+    if (green && from) {
+      const b = this.bounce(g, from, hitX);
+      if (b) {
+        this.lastShot = 'bounce';
+        return b;
+      }
+    }
     // off your early or late set there is no open spot: the setter's touch decides the point
     const badSet = !!us && !green && us.grade !== 'Good';
     if (from && !badSet && (green || sees || g.rng.next() < AI.openShotOut)) {

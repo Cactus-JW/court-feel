@@ -93,11 +93,15 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
     keys: [
       { k: 'W A S D', a: 'Get under the ball' },
       { k: '1 to 4', a: 'Pick a hitter. Again: their next set' },
+      { k: 'C', a: 'Hold: the play wheel. Let go on a play' },
+      { k: 'G', a: 'Front row: the opposite hits the D, and 5 is your dump' },
       { k: 'Right mouse', a: 'Set: press as it reaches your hands, release in the green' },
     ],
     touch: [
       { k: 'Left thumb', a: 'Get under the ball' },
       { k: 'SET TO', a: 'Top left: tap a hitter. Again: their next set' },
+      { k: 'PLAY', a: 'Top left: the play wheel. Then tap a play' },
+      { k: 'ROW  DUMP', a: 'Top left: front row, and your dump there' },
       { k: 'BLOCK', a: 'Hold: it sets when the ball drops onto you' },
     ],
   },
@@ -208,6 +212,9 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       rows: [
         { k: '1  2  3', a: 'Call your set (Spike Drill, Mini Rally; hitters)' },
         { k: '1 to 4', a: 'Pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
+        { k: 'C', a: 'The play wheel when you set: hold, move to a play, let go (Setter Drill, Mini Rally)' },
+        { k: 'G   5', a: 'Front row, and your dump there (Setter Drill)' },
+        { k: 'H', a: "Help: you can't get to the second ball (Mini Rally)" },
         { k: 'B', a: 'Opposing block: off, single, double (Spike Drill)' },
         { k: '1 to 5', a: 'Feed type (Free Play)' },
         { k: 'F   T', a: 'Feed a ball, auto feed (Free Play)' },
@@ -248,6 +255,9 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       rows: [
         { k: 'SET CALL', a: 'Top left: call your set (Spike Drill, Mini Rally; hitters)' },
         { k: 'SET TO', a: 'Top left: pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
+        { k: 'PLAY', a: 'Top left: the play wheel when you set, then tap a play (Setter Drill, Mini Rally)' },
+        { k: 'ROW  DUMP', a: 'Top left: front row, and your dump there (Setter Drill)' },
+        { k: 'HELP', a: "Top left: you can't get to the second ball (Mini Rally)" },
         { k: 'VS BLOCK', a: 'Top left: opposing block (Spike Drill)' },
         { k: 'FEED  AUTO', a: 'Top left: feed types, feed a ball, auto feed (Free Play)' },
       ],

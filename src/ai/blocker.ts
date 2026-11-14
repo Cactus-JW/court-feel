@@ -86,15 +86,11 @@ export class BlockerBrain implements Brain {
       this.commit = g.rng.next() < 0.3 + this.skill * 0.4;
       this.fooled = g.rng.next() < 0.35 - this.skill * 0.25;
       // a green set from the user's setter: exact, at the called tempo, nothing given away early.
-      // The middle guesses wrong and commits a lane away; a wing starts its read late and reads it worse
+      // A middle guesses wrong and commits a lane away. A pin blocker blocks it like any other set:
+      // the hitter beats one block, not an empty net
       const us = g.contact.lastSetResult;
       const green = !!us?.green && lt.athlete === us.athlete && lt.t === us.t;
       this.wrongGuess = green && this.guessOnGreen;
-      if (green && !this.guessOnGreen) {
-        this.setT = now + AI.greenSetReadDelay;
-        this.readErr *= AI.greenSetReadErr;
-        this.jumpErr += AI.greenSetJumpLate;
-      }
     }
     // the middle's whole job is the read: it reacts sooner than the wings
     const react = this.closer ? 0.08 + (1 - this.skill) * 0.15 : 0.12 + (1 - this.skill) * 0.25;

@@ -386,6 +386,20 @@ export class TeamAI {
   /** where the ball was expected when the receiver was picked (re-pick if it strays, e.g. off the tape) */
   private receiverAt: Spot = { x: 0, z: 0 };
   private freeFor: unknown = null;
+  /** the first ball the user (our setter, or the libero backing up) called HELP on: a team-mate takes the second */
+  private userHelpFor: unknown = null;
+
+  /**
+   * The user can't get to the second ball and calls for help: the libero sets it if it can get
+   * there (a high ball to a pin, out of system), else whoever is closest bumps it up. Only
+   * while our first ball is in the air and the second is the user's. Returns whether it was heard.
+   */
+  askHelp(): boolean {
+    const lt = this.g.ball.lastTouch;
+    if (!lt || lt.side !== this.side || this.touches !== 1 || !this.secondBy?.isUser || this.userHelpFor === lt) return false;
+    this.userHelpFor = lt;
+    return true;
+  }
   private freeAthlete: Athlete | null = null;
   /** who sets our second ball (decided with `freeFor`), and whether the setter called HELP */
   private secondSetter: Athlete | null = null;
@@ -933,8 +947,10 @@ export class TeamAI {
           if (sDug) setJob(S, 'base', this.formSpot('defense', 'S'));
           // (who calls the pass: the setter, or the libero backing up a setter who dug it)
           const caller = sDug ? L : S;
+          // the user called HELP on this ball: it is decided as for an AI setter who can't get there
+          const helped = !!caller?.isUser && this.userHelpFor === lt;
           this.secondBy = caller ?? null;
-          if (caller && !caller.isUser) {
+          if (caller && (!caller.isUser || helped)) {
             // decided once per ball, so two players never leave it to each other
             if (this.freeFor !== lt) {
               this.freeFor = lt;
@@ -944,10 +960,11 @@ export class TeamAI {
               if (L && !L.isUser) this.brains.get(L)!.setter.sloppy = 0;
               if (comingToUs && tDown > 0) {
                 const spare = (a: Athlete | undefined) => (a && a !== lt?.athlete ? this.spareFor(a, tDown, p) : -1);
-                if (spare(caller) < 0) {
+                if (helped || spare(caller) < 0) {
                   this.secondHelp = true;
-                  this.secondSetter = !sDug && L && spare(L) >= 0 ? L : null;
-                  if (!this.secondSetter) this.freeAthlete = this.pickReceiver(p, false, lt?.athlete ?? null, null, tDown - now);
+                  this.secondSetter = !sDug && L && L !== caller && spare(L) >= 0 ? L : null;
+                  if (!this.secondSetter)
+                    this.freeAthlete = this.pickReceiver(p, false, lt?.athlete ?? null, helped ? caller : null, tDown - now);
                 }
                 // the libero's set: as good as the ball lets it be; one too hard to set is bumped up
                 const back = this.secondSetter;

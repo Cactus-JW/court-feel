@@ -5,7 +5,7 @@ import { R, topspinFor, type V3 } from '../physics/ball';
 import { netClearance, solveApex, solveFixedTime, solveSpeedToFloor } from '../physics/solve';
 import { Athlete, type Action, type Grade, type PassForm } from './athlete';
 import type { BallEntity, TouchKind } from './ballEntity';
-import { DEFAULT_PICK, type SetterKey } from './setterCalls';
+import { DEFAULT_PICK, type SetPick } from './setterCalls';
 import {
   gradeRelease,
   setMiss,
@@ -65,7 +65,7 @@ export interface ContactHost {
   /** set choices for a setter (the aim picks one) */
   setOptions(a: Athlete): SetOption[];
   /** the hitter the setter picked with a key (SetOption.key), or null: the aim picks */
-  setPick?(a: Athlete): SetterKey | null;
+  setPick?(a: Athlete): SetPick | null;
   /** the set difficulty (Settings: Set difficulty; default easy) */
   setLevel?(): SetLevel;
   /** can this athlete toss a serve now */
@@ -79,8 +79,10 @@ export interface SetOption {
   label: string;
   /** fixed flight time (a quick meeting a hitter already in the air) instead of an apex */
   time?: number;
-  /** the key that picks it (1 outside, 2 middle, 3 opposite, 4 pipe) */
-  key?: SetterKey;
+  /** the key that picks it (1 outside, 2 middle, 3 opposite, 4 pipe, 5 the dump) */
+  key?: SetPick;
+  /** the setter's dump: not a set, the ball goes over the net to `target` on their floor, peaking at `apex` */
+  dump?: boolean;
   /** a quick or a second-tempo set: harder to put exactly on the spot */
   fast?: boolean;
 }
@@ -874,7 +876,7 @@ export class ContactSystem {
     return best;
   }
 
-  /** the push: grade the release `releaseT` against the top of the bar and send the set */
+  /** the push: grade the release `releaseT` against the top of the bar and send the set (or the dump, over the net) */
   private pushSet(a: Athlete, act: Action, releaseT: number): boolean {
     const h = this.host;
     const ball = h.ball;
@@ -908,7 +910,19 @@ export class ContactSystem {
       z: best.target.z + (dz / len) * miss.shift + n2 * miss.spread * 0.5,
     };
     const out = { x: 0, y: 0, z: 0 };
-    if (best.time) {
+    if (best.dump) {
+      // over the net to their floor. A green or a good one is lifted until it clears the tape; an
+      // early or late one comes off the hands low, and the net decides
+      const zero = { x: 0, y: 0, z: 0 };
+      const clean = g.grade === 'Perfect' || g.grade === 'Good';
+      let apex = Math.max(from.y + 0.1, best.apex - miss.apexDrop + n3 * miss.spread * 0.4);
+      for (let i = 0; i < 8; i++) {
+        solveApex(from, tgt, apex, zero, out);
+        const c = clean ? netClearance(from, out, zero) : null;
+        if (!c || c.y >= h.env.netTop + R + CONTACT.dump.clear) break;
+        apex += 0.1;
+      }
+    } else if (best.time) {
       const time = best.time * (1 + n3 * miss.spread * 0.3) * (g.grade === 'Late' ? 0.9 : 1);
       solveFixedTime(from, tgt, Math.max(0.15, time), { x: 0, y: 0, z: 0 }, out);
     } else {
@@ -916,7 +930,9 @@ export class ContactSystem {
       solveApex(from, tgt, Math.max(from.y + 0.1, apex), { x: 0, y: 0, z: 0 }, out);
     }
     ball.hit(out, { x: 0, y: 0, z: 0 }, 0, t);
-    ball.lastTouch = { athlete: a, kind: 'set', t, side: a.side };
+    // a dump is an attack: their defence reads it as a tip
+    const kind = best.dump ? 'tip' : 'set';
+    ball.lastTouch = { athlete: a, kind, t, side: a.side };
     a.lastTouchT = t;
     const note = setNote(err, g, touch, best.label);
     act.resolved = true;
@@ -942,14 +958,14 @@ export class ContactSystem {
     };
     h.emitContact({
       athlete: a,
-      kind: 'set',
+      kind,
       grade: g.grade,
       note,
       speed: Math.hypot(out.x, out.y, out.z),
       point: new THREE.Vector3(bp.x, bp.y, bp.z),
       quality,
       perfect: g.grade === 'Perfect',
-      tip: false,
+      tip: !!best.dump,
       target: new THREE.Vector3(tgt.x, tgt.y, tgt.z),
     });
     return true;

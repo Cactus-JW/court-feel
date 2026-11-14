@@ -355,7 +355,16 @@ export const CONTACT = {
     longPerM: 0.05,
     longMin: 0.8,
     outOfSystem: 0.75,
+    /** a fast set (a quick, a go, a fast back) off a pass far off the net: on top of both of those. Very hard */
+    oosFast: 0.5,
   },
+  /**
+   * The setter's dump (front row only): the second ball sent over the net, from no more than
+   * `maxOff` m off it. `short` lands just behind the block, `deep` in the far corner (home-side
+   * coordinates, mirrored for the other side); it peaks `apexShort` / `apexDeep` m above the
+   * tape, and a green or a good one clears the tape by at least `clear` m.
+   */
+  dump: { maxOff: 1.6, short: { x: -1.2, z: -1.7 }, deep: { x: -3.4, z: -7.6 }, apexShort: 0.5, apexDeep: 1.0, clear: 0.1 },
   setCentreOk: 0.15,
   setLongFrom: 3,
   /** set spread (m, 1 sd along the net; off the net and in height are smaller): green, then good from best to worst */
@@ -495,6 +504,8 @@ export const ASSIST = {
   setSlowmoWindow: 0.35,
   setSlowmoCatch: 0.5,
   setSlowmoLoad: 0.25,
+  /** the play wheel is open (before the pass): the game runs at this speed while you choose */
+  playWheelSlow: 0.2,
   /**
    * The set's footwork (aim assist, `src/game/setAssist.ts`): while the ball is yours to set and
    * your feet are within `radius` m (at assist 1) of the spot, your body takes the last steps
@@ -1069,6 +1080,12 @@ export const FX = {
    */
   setBar: { height: 96, width: 10, gap: 18, target: 0.8, linger: 0.7, waiting: 0.8, pipsWidth: 64, fpX: 56 },
   /**
+   * The play wheel (`src/ui/playWheel.ts`): `size` px across with a `hole` px wide centre; the
+   * mouse picks a slice once it has moved `dead` px from where the wheel opened, and its pull
+   * is capped at `reach` px so a small move back changes the pick.
+   */
+  playWheel: { size: 384, hole: 184, dead: 24, reach: 80 },
+  /**
    * Where to stand for the set in first person (`src/ui/setRadar.ts`): a dial `size` px across,
    * `below` px under the crosshair, showing the floor `range` m around your feet.
    */
@@ -1479,6 +1496,12 @@ export const AI = {
   /** a pass the setter takes further than this (m) from their spot is out of system: high balls only, no quick */
   outOfSystem: 1.6,
   /**
+   * Out of system the user setter can still ask a hitter for their fast set, if they hear it in
+   * time: a quick this long (s) before the ball leaves the setter's hands, a second-tempo run
+   * (a go, a fast back) this long. Later than that they stay for the high ball.
+   */
+  oosAsk: { quick: 0.6, tempo: 0.75 },
+  /**
    * Transition: a hitter still at the net when their team digs (they were blocking) backs off to
    * their approach start before a tempo run (the quick, a called go / 3 / fast back / back 2).
    * Within `transitionReady` m of it they are ready to run; with less than `transitionLatest` s to
@@ -1490,16 +1513,32 @@ export const AI = {
   /** an out-of-system set (and a backup's set, when the setter played the first ball) goes this much (m) higher */
   outOfSystemApex: 0.4,
   /**
-   * Your green set is a point. An exact set at the called tempo gives the block nothing early:
-   * their middle guesses wrong (on a pin set it stays home for the quick; on the quick or the pipe
-   * it goes `greenBlockGuess` m to the other side, with a pin), and the wings start their read `greenSetReadDelay` s late, misread `greenSetReadErr` times
-   * more and jump `greenSetJumpLate` s late. Their diggers start `greenSetDigDelay` s late (the
-   * hitter hid the shot until the hand), and your hitter swings perfectly at an open spot.
+   * Your green set is a point. An exact set at the called tempo gives the block nothing early,
+   * so their middle goes on what it sees: a hitter you did not set (`greenBite`, src/ai/greenBite.ts).
+   * It goes up with them (with the quick, when one is running: what a combination is for) and is
+   * coming down as your hitter swings. A hitter counts when within `maxOff` m of the net and up, or
+   * running in faster than `runSpeed` m/s; one who is up comes first (a runner counts as
+   * `runPenalty` m further away), and the middle leads a runner by `lead` s. With nobody else
+   * going it guesses a side: on a pin set it stays home for the quick, on the quick or the pipe
+   * it steps `greenBlockGuess` m towards a pin. The pin blockers block as on any set, so your
+   * hitter has one block to beat, and bounces it past them (`greenBounce`): a full swing, as
+   * steep as the net allows (the nearest spot, at one of `depths` m from the net, that a
+   * full-speed spike brings down and that clears the tape by `clear` m), crossing the net at
+   * least `hands` m clear of a blocker's hands. Their diggers start `greenSetDigDelay` s late (the hitter hid
+   * the shot until the hand).
    */
+  /**
+   * An AI hitter's run across the court curves (src/ai/approach.ts, bendFor): a run more than
+   * `straight` rad off square to the net bends by `share` of the excess, at most `maxBend` rad,
+   * leaving that much flatter along the net and arriving that much squarer to it. Runs shorter
+   * than `minRun` m stay straight. The turn is done over the first `ground` of the way (the run
+   * on the floor); the rest is the jump, flown straight off the last step. A real hitter loops
+   * in on an X or a 2; a straight diagonal line at the spot is what nobody does.
+   */
+  approach: { straight: 0.35, share: 0.8, maxBend: 0.42, minRun: 1.5, ground: 0.6 },
   greenBlockGuess: 2.2,
-  greenSetReadDelay: 0.3,
-  greenSetReadErr: 2.5,
-  greenSetJumpLate: 0.12,
+  greenBite: { maxOff: 4.5, runSpeed: 2, runPenalty: 3, lead: 0.2 },
+  greenBounce: { depths: [2.4, 2.9, 3.4, 4.0, 4.8, 5.8], clear: 0.05, hands: 0.35 },
   greenSetDigDelay: 0.5,
   /**
    * A bad set (your early / late push) is harder to hit: your hitter's timing error grows by up
@@ -1525,6 +1564,8 @@ export interface Settings {
   setRing: boolean;
   /** set difficulty: how wide the green, the good band and the clean catch are (SET_LEVELS) */
   setLevel: SetLevel;
+  /** when you set: the hitter you picked stays picked for the next ball (off: back to the outside) */
+  keepSetPick: boolean;
   aimAssist: number;
   landingMarker: boolean;
   replays: boolean;
@@ -1553,6 +1594,7 @@ export const DEFAULT_SETTINGS: Settings = {
   setSlowmo: true,
   setRing: true,
   setLevel: 'easy',
+  keepSetPick: false,
   aimAssist: ASSIST.aim,
   landingMarker: true,
   replays: true,

@@ -187,6 +187,68 @@ export const SET_PLAYS: Partial<Record<PositionId, SetPlay[]>> = {
   ],
 };
 
+/** a first-tempo call: the hitter is in the air as the setter touches the ball, and the set meets them */
+export function isQuick(play: SetPlay): boolean {
+  return play.inFront !== undefined;
+}
+
+/**
+ * Back-row attack from the right (the "D"): what the opposite hits when the setter is front row.
+ * As the pipe, met 2 m off the net after a take-off behind the 3 m line.
+ */
+export const D_PLAY: SetPlay = {
+  name: 'D (back row, right)',
+  short: 'D',
+  lane: { x: 3.1, z: 2.0, apexAbove: 1.45, sx: 3.1, sz: 5.5, label: 'Back-row D' },
+};
+
+/**
+ * What a setter can call for each hitter (keys 1 outside, 2 middle, 3 opposite, 4 pipe): the
+ * calls hitters make for themselves (SET_PLAYS), then the ones only a setter's plays use. They
+ * come from coaching glossaries; names differ between teams, these are the common ones:
+ * - Outside: the hut (lower and quicker than the high ball, still hit off the set), and the 2
+ *   inside, right behind the middle's quick (the tandem's ball).
+ * - Middle: the push 1, a quick pushed a little further along the net than the 1.
+ * - Opposite: the X (crossing in front of the setter to hit a 2 behind the middle's quick) and
+ *   the back 1 (a quick behind the setter: with the middle's 1 it is the double quick).
+ * - Pipe: the bic, the fast pipe.
+ * A slide is not here: it needs a one-foot take-off off a curved run, which hitters can't do yet.
+ */
+export const SETTER_PLAYS: Record<'OH' | 'MB' | 'OPP' | 'PIPE', SetPlay[]> = {
+  OH: [
+    ...SET_PLAYS.OH!,
+    { name: 'Hut (lower outside)', short: 'Hut', lane: { ...LANES.OH, apexAbove: 1.15, label: 'Outside hut' } },
+    {
+      name: '2 (inside, behind the quick)',
+      short: '2',
+      lane: { ...LANES.OH, x: -0.75, z: 0.8, apexAbove: 0.8, sx: -3.3, sz: 4.3, label: 'Outside 2 (tandem)' },
+    },
+  ],
+  MB: [
+    ...SET_PLAYS.MB!,
+    { name: 'Push 1', short: 'Push', lane: { ...LANES.MB, x: -0.5, sx: 0.2, sz: 2.85, label: 'Middle push 1' }, inFront: 1.55 },
+  ],
+  OPP: [
+    ...SET_PLAYS.OPP!,
+    {
+      name: 'X (crossing for a 2)',
+      short: 'X',
+      // from further back than a pin approach, so the loop in ends squarer to the net (AI.approach)
+      lane: { ...LANES.OPP, x: -0.6, z: 0.8, apexAbove: 0.8, sx: 3.0, sz: 4.4, label: 'Opposite X' },
+    },
+    {
+      name: 'Back 1 (quick behind)',
+      short: 'Back 1',
+      lane: { ...LANES.MB, x: 2.3, sx: 3.0, sz: 2.9, label: 'Opposite back quick' },
+      inFront: -1.2,
+    },
+  ],
+  PIPE: [
+    { name: 'Pipe', short: 'Pipe', lane: LANES.L },
+    { name: 'Bic (fast pipe)', short: 'Bic', lane: { ...LANES.L, apexAbove: 0.8, label: 'Back-row bic' } },
+  ],
+};
+
 /** height of the ball centre at the top of a good approach jump */
 export function attackHeight(a: Athlete): number {
   return a.standReach - 0.16 + a.jumpMax * 0.95;

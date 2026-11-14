@@ -26,6 +26,9 @@ export const TOUCH_KEY_LABELS: Record<string, string> = {
   N: 'RESET',
   R: 'REPLAY',
   B: 'VS BLOCK',
+  C: 'PLAY',
+  G: 'ROW',
+  H: 'HELP',
   F: 'FEED',
   T: 'AUTO',
   W: 'stick ↑',
@@ -318,7 +321,8 @@ export class TouchControls {
 
   private buildChips(): void {
     const g = this.g;
-    for (const id of ['feed', 'auto', 'vsblock', 'd1', 'd2', 'd3', 'd4', 'd5'] as PadButton[]) this.buttons.delete(id);
+    for (const id of ['feed', 'auto', 'vsblock', 'play', 'row', 'help', 'd1', 'd2', 'd3', 'd4', 'd5'] as PadButton[])
+      this.buttons.delete(id);
     this.chips.innerHTML = '';
     const chip = (id: PadButton, label: string) => {
       const e = el('div', 't-tap t-chip', this.chips, label);
@@ -327,7 +331,8 @@ export class TouchControls {
     };
     const toss = this.buttons.get('toss')!;
     toss.style.display = g.modeId === 'free' ? '' : 'none';
-    // you set: tap a hitter to pick them, again for their next set (once the pass is played: a high ball).
+    // you set: tap a hitter to pick them, again for their next set (once the pass is played: a high ball);
+    // PLAY opens the play wheel (then tap a play). Setter Drill: ROW puts you in the front row, where DUMP is on.
     // Tutorial reps: no set-call chips and no block toggle (one Outside story, block off)
     const setter = !g.tutorial.active && (g.modeId === 'setter' || (g.modeId === 'rally' && (g.position === 'S' || g.position === 'L')));
     if (setter) {
@@ -336,6 +341,11 @@ export class TouchControls {
       chip('d2', 'MB');
       chip('d3', 'OPP');
       chip('d4', 'PIPE');
+      if (g.modeId === 'setter') chip('d5', 'DUMP');
+      if (g.modeId === 'setter' || g.position === 'S') chip('play', 'PLAY');
+      if (g.modeId === 'setter') chip('row', 'ROW');
+      // Mini Rally: you can't get to the second ball, a team-mate takes it
+      if (g.modeId === 'rally') chip('help', 'HELP');
     }
     const calls = !setter && !g.tutorial.active && (g.modeId === 'spike' || g.modeId === 'rally') && SET_PLAYS[g.position];
     if (calls) {

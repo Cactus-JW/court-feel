@@ -20,12 +20,14 @@ import type { BallEnv } from '../physics/ball';
 import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
 import type { Kit } from '../character/rig';
+import { COMBOS } from './combos';
 import { setStepAssist } from './setAssist';
 import { aimTargetFromLook, ContactSystem, type ContactEvent, type IdealInfo, type SetPreview } from './contact';
 import { SetGuide } from '../fx/setGuide';
 import { SetRing } from '../fx/setRing';
 import { SetSpot } from '../fx/setSpot';
 import { SetBar } from '../ui/setBar';
+import { PlayWheel } from '../ui/playWheel';
 import { SetRadar } from '../ui/setRadar';
 import { Judge, type Outcome } from './judge';
 import { Hud } from '../ui/hud';
@@ -115,6 +117,12 @@ export class Game {
   private setBar!: SetBar;
   private setGuide!: SetGuide;
   private setRadar!: SetRadar;
+  private wheel!: PlayWheel;
+
+  /** the play wheel is open: a drill holds its next ball, and the game runs slow */
+  get wheelOpen(): boolean {
+    return this.wheel.open;
+  }
   private setSpot!: SetSpot;
   private spotP = { x: 0, y: 0, z: 0 };
   /** the lesson's clock: 1 real time, slower through a taught rep, 0 while the ball waits for the player */
@@ -202,6 +210,11 @@ export class Game {
     this.setBar = new SetBar(this.hud.root);
     this.setGuide = new SetGuide(this.scene, this.hud.root);
     this.setRadar = new SetRadar(this.hud.root);
+    // a tapped slice (touch) presses that play's number, through Input like every control
+    this.wheel = new PlayWheel(this.hud.root, (i) => {
+      this.input.down('Digit' + (i + 1));
+      this.input.up('Digit' + (i + 1));
+    });
     this.ball.mesh.layers.enable(REFLECT_LAYER);
     this.ball.hide();
     this.gizmos = new DebugGizmos(this.scene);
@@ -729,6 +742,7 @@ export class Game {
     this.setBar.hide();
     this.setGuide.hide();
     this.setRadar.hide();
+    this.wheel.hide();
     this.setSpot.hide();
     this.mode?.replayFrame();
     this.arena.netPress(this.ball.mesh.visible ? this.ball.mesh.position : null);
@@ -757,6 +771,37 @@ export class Game {
   }
   private stepP = { x: 0, y: 0, z: 0 };
 
+  /**
+   * The play wheel (C, while the mode lets you call a play): hold C and move the mouse to a
+   * play, let go to call it; or press C, then the play's number (a tap on touch) or click.
+   * C again closes it. Returns whether the wheel has the mouse this frame.
+   */
+  private playWheelFrame(dx: number, dy: number): boolean {
+    const w = this.wheel;
+    const calls = this.mode?.playCalls?.() ?? null;
+    const pressed = this.input.consumePress('KeyC');
+    const released = this.input.consumeRelease('KeyC');
+    if (!calls) {
+      w.hide();
+      return false;
+    }
+    if (!w.open) {
+      if (!pressed) return false;
+      w.show(calls.combo());
+    } else if (pressed) {
+      w.hide();
+      return false;
+    }
+    w.move(dx, dy);
+    let pick = -1;
+    for (let i = 0; i < COMBOS.length; i++) if (this.input.consumePress('Digit' + (i + 1))) pick = i;
+    if (pick < 0 && w.sel >= 0 && (released || this.input.consumePress('Mouse0'))) pick = w.sel;
+    if (pick < 0) return true;
+    if (calls.setCombo(COMBOS[pick])) this.hud.message(`Play · ${COMBOS[pick].name}`, 1.4);
+    w.hide();
+    return false;
+  }
+
   private frameInput(dt: number): void {
     if (this.input.consumePress('F3')) {
       this.debug.toggle();
@@ -779,7 +824,8 @@ export class Game {
     }
     this.bot?.step(dt);
     const [dx, dy] = this.input.takeMouse();
-    this.rig.look(dx, dy, this.settings.sensitivity, this.settings.invertY);
+    // the play wheel takes the mouse while it is open
+    if (!this.playWheelFrame(dx, dy)) this.rig.look(dx, dy, this.settings.sensitivity, this.settings.invertY);
     if (this.input.consumePress('KeyV')) this.toggleCamera();
     if (this.input.consumePress('KeyN')) this.mode?.restartRep();
     if (this.input.consumePress('KeyR')) this.fx.startReplay();
@@ -818,7 +864,8 @@ export class Game {
     if (this.paused) return;
     const step = 1 / SIM.hz;
     // slow-mo assist while lining up a contact
-    let slowTarget = 1;
+    // choosing a play: the game waits for you (it runs, slowly)
+    let slowTarget = this.wheel.open ? ASSIST.playWheelSlow : 1;
     const dip = (this.settings.slowmoAssist || this.tutorial.wantsContactDip()) && this.me.state === 'air' && this.idealValid;
     if (dip) {
       const until = this.idealCache.t - this.simTime;
