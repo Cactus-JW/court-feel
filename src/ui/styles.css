@@ -368,9 +368,13 @@ body.touchmode .set-row.only-tc { display: grid !important; }
   .pos-blurb { display: none; }
   .summary { display: none; }
 }
+/* the top bar keeps the narrow spacing a little longer: with every word of the longest venue and position
+   (Games arena, Middle Blocker) it needs about 1025 px at the wide spacing */
+@media (max-width: 1023px) {
+  .topbar { gap: 14px; padding: 0 16px; }
+}
 /* narrower windows: the list goes above its panel, the nav keeps only its icons */
 @media (max-width: 1000px) {
-  .topbar { gap: 14px; padding: 0 16px; }
   .view, .sheet-body { padding: 18px 16px 22px; }
   .sheet-head { padding: 8px 16px; }
   /* the tabs go across the top */
@@ -380,6 +384,17 @@ body.touchmode .set-row.only-tc { display: grid !important; }
   .rail { position: static; align-self: stretch; flex-direction: row; flex-wrap: wrap; }
   .rail-btn { padding: 0 12px; }
   .set-main { max-width: none; }
+}
+/* a desktop-height window under 1000 px: the pills give up their words before the sections do, least needed
+   first (the gear says Settings and MB says the position), then the venue's name. With the longest venue and
+   position the bar needs about 990 px with every word, 930 px without the Settings word, 830 px without the
+   athlete's name as well and 745 px with the pills down to their icons, so each step leaves room for a wider
+   font. A phone held sideways has the smaller bar (max-height: 520px below) and keeps its words. */
+@media (max-width: 999px) and (min-height: 521px) {
+  .settings-pill span, .athlete-pill span { display: none; }
+}
+@media (max-width: 900px) and (min-height: 521px) {
+  .pill span { display: none; }
 }
 @media (max-width: 840px) {
   .nav-btn span, .pill span { display: none; }
