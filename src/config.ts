@@ -314,10 +314,12 @@ export const SET_LEVEL_IDS: readonly SetLevel[] = ['easy', 'normal', 'hard', 'el
  * Set difficulty (Settings: Set difficulty). Every level has the same bar, the same slow-mo
  * (ASSIST.setSlowmoCatch / setSlowmoLoad) and the same top of the bar, so the timing you practise
  * on one carries to the next: a harder level only narrows the windows around it. Game seconds
- * throughout; on screen they are divided by the slow-mo (Easy's ±15 ms green is ±60 ms on screen
- * at quarter speed).
+ * throughout; on screen they are divided by the slow-mo (Easy's ±40 ms green is ±160 ms on screen
+ * at quarter speed). Wider than a real setter's margin on purpose: the user's playtest (2026-11-15)
+ * found the release far too tight, so every level was widened about 2.5-3x.
  * - `green`: the green half-window around the top of the bar, with your best and your worst touch
- * - `goodMul`: a good (white) set reaches this many green half-windows either side
+ * - `goodMul`: a good (white) set reaches this many green half-windows either side. It stays under
+ *   TIMING.setHoldMax, so holding until the push goes by itself is never a good set
  * - `catch`: a catch this close to the ball reaching your hands is clean (at the catch slow-mo)
  * - `handsEarly`: hands up before the ball comes cost nothing (Easy). It is what coaches teach,
  *   and it leaves a beginner one thing to time, the release; from Normal up the catch is timed too
@@ -328,10 +330,10 @@ export const SET_LEVELS: Record<
   SetLevel,
   { label: string; green: [number, number]; goodMul: number; catch: number; handsEarly?: boolean }
 > = {
-  easy: { label: 'Easy', green: [0.015, 0.007], goodMul: 3, catch: 0.08, handsEarly: true },
-  normal: { label: 'Normal', green: [0.0095, 0.0048], goodMul: 2.5, catch: 0.05 },
-  hard: { label: 'Hard', green: [0.0055, 0.0033], goodMul: 2, catch: 0.03 },
-  elite: { label: 'Elite', green: [0.003, 0.0023], goodMul: 1.5, catch: 0.015 },
+  easy: { label: 'Easy', green: [0.04, 0.02], goodMul: 2, catch: 0.08, handsEarly: true },
+  normal: { label: 'Normal', green: [0.025, 0.013], goodMul: 2.5, catch: 0.05 },
+  hard: { label: 'Hard', green: [0.015, 0.009], goodMul: 2, catch: 0.03 },
+  elite: { label: 'Elite', green: [0.009, 0.006], goodMul: 1.5, catch: 0.015 },
 };
 
 export const CONTACT = {
@@ -1078,7 +1080,8 @@ export const FX = {
    * face, so the bar has a fixed place instead: `fpX` px right of the crosshair, its green line
    * level with it.
    */
-  setBar: { height: 96, width: 10, gap: 18, target: 0.8, linger: 0.7, waiting: 0.8, pipsWidth: 64, fpX: 56 },
+  // target 0.65: the room above the line (0.08 s of game time) shows Easy's whole late good band (SET_LEVELS)
+  setBar: { height: 96, width: 10, gap: 18, target: 0.65, linger: 0.7, waiting: 0.8, pipsWidth: 64, fpX: 56 },
   /**
    * The play wheel (`src/ui/playWheel.ts`): `size` px across with a `hole` px wide centre; the
    * mouse picks a slice once it has moved `dead` px from where the wheel opened, and its pull

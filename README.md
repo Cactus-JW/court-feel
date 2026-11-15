@@ -522,13 +522,13 @@ Elite; a harder level only narrows the windows around it:
 
 | Level | Green on screen (best / worst touch) | Good on screen (best touch) | Clean catch on screen |
 |---|---|---|---|
-| Easy (default) | ±60 / ±28 ms | ±180 ms | any time before, to 160 ms after |
-| Normal | ±38 / ±19 ms | ±95 ms | ±100 ms |
-| Hard | ±22 / ±13 ms | ±44 ms | ±60 ms |
-| Elite | ±12 / ±9 ms | ±18 ms | ±30 ms |
+| Easy (default) | ±160 / ±80 ms | ±320 ms | any time before, to 160 ms after |
+| Normal | ±100 / ±52 ms | ±250 ms | ±100 ms |
+| Hard | ±60 / ±36 ms | ±120 ms | ±60 ms |
+| Elite | ±36 / ±24 ms | ±54 ms | ±30 ms |
 
-The ball stays in your hands 0.15 s of game time, longer than a real set touch
-(under 0.1 s), so the bar has room; the slow-mo (half speed for the catch,
+The ball stays in your hands 0.15 s of game time, about twice a real set touch
+(55-75 ms in studies of college setters), so the bar has room; the slow-mo (half speed for the catch,
 quarter speed while the ball loads) is what makes it feel long: the bar fills in
 about 0.6 s on screen.
 Settings: **Set slow-mo** turns the slow-down off (the same bar in 0.15 s:

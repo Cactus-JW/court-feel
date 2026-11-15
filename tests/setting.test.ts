@@ -29,13 +29,16 @@ describe('the set window: your touch and the level set its size', () => {
     expect(gradeRelease(-w.good * 1.01, w).grade).toBe('Early');
     expect(gradeRelease(w.good * 1.01, w).grade).toBe('Late');
   });
-  it('Easy starts forgiving: the best touch gets ±15 ms of game time (±60 ms on screen), good three times that', () => {
+  it('Easy starts forgiving: the best touch gets ±40 ms of game time (±160 ms on screen), good twice that', () => {
     const w = win(1, 0);
-    expect(w.green).toBeCloseTo(0.015, 5);
-    expect(w.green / ASSIST.setSlowmoLoad).toBeCloseTo(0.06, 5);
-    expect(w.good).toBeCloseTo(0.045, 5);
-    expect(gradeRelease(0.014, w).grade).toBe('Perfect');
-    expect(gradeRelease(-0.03, w).grade).toBe('Good');
+    expect(w.green).toBeCloseTo(0.04, 5);
+    expect(w.green / ASSIST.setSlowmoLoad).toBeCloseTo(0.16, 5);
+    expect(w.good).toBeCloseTo(0.08, 5);
+    expect(gradeRelease(0.039, w).grade).toBe('Perfect');
+    expect(gradeRelease(-0.06, w).grade).toBe('Good');
+  });
+  it('holding the ball until the push goes by itself is never a good set, on any level', () => {
+    for (const id of SET_LEVEL_IDS) expect(SET_LEVELS[id].green[0] * SET_LEVELS[id].goodMul).toBeLessThan(TIMING.setHoldMax);
   });
   it('on every level the bar takes about 0.6 s on screen (the ball is in the hands 0.15 s of game time, at quarter speed)', () => {
     expect(TIMING.setLoad / ASSIST.setSlowmoLoad).toBeCloseTo(0.6, 5);
@@ -52,8 +55,8 @@ describe('the set window: your touch and the level set its size', () => {
   });
   it('Elite is very hard but never luck: even its smallest green spans a 60 fps frame of game time', () => {
     for (const id of SET_LEVEL_IDS) expect(SET_LEVELS[id].green[1] * 2).toBeGreaterThanOrEqual(ASSIST.setSlowmoLoad / 60);
-    // on screen Elite's best green is about ±12 ms
-    expect(SET_LEVELS.elite.green[0] / ASSIST.setSlowmoLoad).toBeLessThan(0.013);
+    // on screen Elite's best green is about ±36 ms: still a fraction of a real set touch (about 55-75 ms)
+    expect(SET_LEVELS.elite.green[0] / ASSIST.setSlowmoLoad).toBeLessThan(0.04);
   });
   it('a clean catch costs nothing; a catch early or late shrinks the window', () => {
     const clean = SET_LEVELS.easy.catch;
@@ -108,7 +111,7 @@ describe('the set window: your touch and the level set its size', () => {
     expect(early.shift).toBeLessThan(0);
     expect(late.shift).toBeGreaterThan(0);
     expect(late.apexDrop).toBeGreaterThan(0);
-    expect(setMiss(gradeRelease(0, w)).spread).toBeLessThan(setMiss(gradeRelease(0.03, w)).spread);
+    expect(setMiss(gradeRelease(0, w)).spread).toBeLessThan(setMiss(gradeRelease(0.06, w)).spread);
   });
   it('missing the good band costs the hitter: just past it the set is almost two balls short or long, a good window past it over a metre', () => {
     const w = win(1, 0);
