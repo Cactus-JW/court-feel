@@ -515,17 +515,29 @@ very rarely score.
 How big the green is depends on your touch, the way a coach grades a setter:
 your **feet** stopped on the spot (about 0.3 s before the ball arrives), a
 clean **catch**, the ball **centred** on your hands, and how **hard** the set is
-(a back set, a long set, a fast tempo, a pass off the net). And on the level
+(the kind of set, a pass off the net). And on the level
 (Settings: **Set difficulty**). Every level has the same bar, the same slow-mo
 and the same top of the bar, so the timing you learn on Easy is the timing on
-Elite; a harder level only narrows the windows around it:
+Elite; a harder level only narrows the windows around it. For a high ball:
 
 | Level | Green on screen (best / worst touch) | Good on screen (best touch) | Clean catch on screen |
 |---|---|---|---|
-| Easy (default) | ±160 / ±80 ms | ±320 ms | any time before, to 160 ms after |
-| Normal | ±100 / ±52 ms | ±250 ms | ±100 ms |
-| Hard | ±60 / ±36 ms | ±120 ms | ±60 ms |
-| Elite | ±36 / ±24 ms | ±54 ms | ±30 ms |
+| Easy (default) | ±240 / ±120 ms | ±480 ms | any time before, to 160 ms after |
+| Normal | ±150 / ±78 ms | ±375 ms | ±100 ms |
+| Hard | ±90 / ±54 ms | ±180 ms | ±60 ms |
+| Elite | ±54 / ±36 ms | ±81 ms | ±30 ms |
+
+A high ball leaves your hitter time to go to it, so it gets the whole green. The
+faster and flatter the set, the less room there is, because the hitter is
+already running to a spot:
+
+| The set | Its share of a high ball's green |
+|---|---|
+| High balls (outside, back set, pipe, D) and the middle's 1 | all of it |
+| Hut | 90% |
+| The middle's back 1 | 85% |
+| Go, fast back, bic; the middle's push 1 and shoot | 70% |
+| The inside balls (3, 2, X, back 2, the pipe behind you); the opposite's back 1 | 60% |
 
 The ball stays in your hands 0.15 s of game time, about twice a real set touch
 (55-75 ms in studies of college setters), so the bar has room; the slow-mo (half speed for the catch,
@@ -773,7 +785,7 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 | `TIMING` | Perfect/Good windows, swing time and stretch, tap threshold, wind-up time to full charge (`chargeFull`), pass/dig lead times, the set (how long the ball loads in the hands, `setLoad`; how long it can be held; how an early or late catch costs the touch; the feet ready time), block height thresholds, input buffer |
 | `SET_LEVELS` | The set difficulty levels: the green window (best and worst touch), the good multiple, the clean catch, whether hands up early are free (`handsEarly`, Easy) (the slow-mo is the same on every level, in `ASSIST`) |
 | `TOUCH` | Touch controls: stick radius and dead zone, run threshold (with hysteresis), aim scale and button dead zone, air-is-HIT, roll-to-HIT, block-jumps |
-| `CONTACT` | The setter's dump (`dump`: how near the net, where it lands, how high over the tape) and how hard a fast set off the net is (`setTouch.oosFast`); Reach radii, spike/tip/serve speeds and spin, power at minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`), a hit off the outer edge of the hands is tooled (`toolEdge`, `toolEdgeP`), a jump serve met early loses its topspin (`serveEarlySpin`), the user's spike tooled more often (`userToolEdge`, `userToolEdgeP`), the side dig, the dive and the overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`), a soft ball recycled off a well-formed block (`recycleSpeed`, `recycleP`, `recyclePLate`) and the AI hitter's push into the hands (`pushSpeed`, `pushDrop`), where a covered ball is dug (`covered`: out of system), the AI's serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape), what shrinks the set window (`setTouch`) and how a set misses (spread, short / long, apex) |
+| `CONTACT` | The setter's dump (`dump`: how near the net, where it lands, how high over the tape) and how hard a fast set off the net is (`setTouch.oosFast`); Reach radii, spike/tip/serve speeds and spin, power at minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`), a hit off the outer edge of the hands is tooled (`toolEdge`, `toolEdgeP`), a jump serve met early loses its topspin (`serveEarlySpin`), the user's spike tooled more often (`userToolEdge`, `userToolEdgeP`), the side dig, the dive and the overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`), a soft ball recycled off a well-formed block (`recycleSpeed`, `recycleP`, `recyclePLate`) and the AI hitter's push into the hands (`pushSpeed`, `pushDrop`), where a covered ball is dug (`covered`: out of system), the AI's serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape), what shrinks the set window (`setTouch`; each kind of set's share of a high ball's green, `setTouch.window`) and how a set misses (spread, short / long, apex) |
 | `ASSIST` | How slow the game runs while the play wheel is open (`playWheelSlow`); Default aim assist, air magnet strength, reach bonus, the set's footwork (`setStep`: how near the spot your body takes the last steps, how it arrives), slow-mo assist, the set slow-mo (when it starts, how slow for the catch and while the ball loads) |
 | `TUTORIAL` | The first-run lesson: its speeds (together, slow motion), how early cues show, how long the coach's lines stay, tries per rep |
 | `PLAYER` | Acceleration/deceleration, plant carry, jump weighting (approach vs load), apex hang, landing recovery, air turning, where team-mates at the net meet shoulder to shoulder (`shoulder`), the dive (`diveSpeed`, `diveDecel`, `diveArm`, `diveDown`, `diveTime`) |
@@ -817,7 +829,7 @@ and **e2e** (below). Both should be required checks for merging into `main`.
   contact system (press, hold, release), the timed set (one press per ball:
   spamming cannot restart the catch, a tap is a push far too early; the ball
   sits in the hands for the load; your touch sizes the window: feet, the catch,
-  centring, back / long / fast / off the net; each level harder around the same
+  centring, the kind of set (a high ball and the 1 the whole green, fast and inside sets less), off the net; each level harder around the same
   top of the bar, Elite still
   never luck at 60 fps; green at the top of the bar; early short, late flat and
   long; a key picks the hitter wherever you look, and no key is the outside;

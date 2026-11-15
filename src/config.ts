@@ -289,8 +289,8 @@ export const TIMING = {
    * fills in setLoad / ASSIST.setSlowmoLoad real seconds on every level). Levels: SET_LEVELS.
    */
   setLoad: 0.15,
-  /** held this long (game s) past the top of the bar: the push goes anyway, late */
-  setHoldMax: 0.1,
+  /** held this long (game s) past the top of the bar: the push goes anyway, late (longer than Easy's late good band) */
+  setHoldMax: 0.13,
   /** a catch this early or more (game s, beyond the level's clean catch) costs the touch the most */
   setCatchEarly: 0.3,
   /** a catch this late or more (game s, beyond the clean catch) costs the touch the most (the ball is at your chin) */
@@ -314,9 +314,10 @@ export const SET_LEVEL_IDS: readonly SetLevel[] = ['easy', 'normal', 'hard', 'el
  * Set difficulty (Settings: Set difficulty). Every level has the same bar, the same slow-mo
  * (ASSIST.setSlowmoCatch / setSlowmoLoad) and the same top of the bar, so the timing you practise
  * on one carries to the next: a harder level only narrows the windows around it. Game seconds
- * throughout; on screen they are divided by the slow-mo (Easy's ±40 ms green is ±160 ms on screen
+ * throughout; on screen they are divided by the slow-mo (Easy's ±60 ms green is ±240 ms on screen
  * at quarter speed). Wider than a real setter's margin on purpose: the user's playtest (2026-11-15)
- * found the release far too tight, so every level was widened about 2.5-3x.
+ * found the release far too tight, so every level was widened about 2.5-3x, then by half again.
+ * These are a high ball's windows: a harder set gets a share of them (CONTACT.setTouch.window).
  * - `green`: the green half-window around the top of the bar, with your best and your worst touch
  * - `goodMul`: a good (white) set reaches this many green half-windows either side. It stays under
  *   TIMING.setHoldMax, so holding until the push goes by itself is never a good set
@@ -330,11 +331,14 @@ export const SET_LEVELS: Record<
   SetLevel,
   { label: string; green: [number, number]; goodMul: number; catch: number; handsEarly?: boolean }
 > = {
-  easy: { label: 'Easy', green: [0.04, 0.02], goodMul: 2, catch: 0.08, handsEarly: true },
-  normal: { label: 'Normal', green: [0.025, 0.013], goodMul: 2.5, catch: 0.05 },
-  hard: { label: 'Hard', green: [0.015, 0.009], goodMul: 2, catch: 0.03 },
-  elite: { label: 'Elite', green: [0.009, 0.006], goodMul: 1.5, catch: 0.015 },
+  easy: { label: 'Easy', green: [0.06, 0.03], goodMul: 2, catch: 0.08, handsEarly: true },
+  normal: { label: 'Normal', green: [0.0375, 0.0195], goodMul: 2.5, catch: 0.05 },
+  hard: { label: 'Hard', green: [0.0225, 0.0135], goodMul: 2, catch: 0.03 },
+  elite: { label: 'Elite', green: [0.0135, 0.009], goodMul: 1.5, catch: 0.015 },
 };
+
+/** a kind of set, by how hard it is to put on the spot (CONTACT.setTouch.window) */
+export type SetTier = 'high' | 'hut' | 'quick' | 'backQuick' | 'backQuickOpp' | 'tempo' | 'push' | 'inside';
 
 export const CONTACT = {
   /** sphere around the ideal contact point that still lets you hit */
@@ -345,17 +349,24 @@ export const CONTACT = {
   /**
    * Your touch scales the set's green window: each part multiplies it, down to these floors.
    * Feet still moving, an early or late catch, the ball off-centre on the hands (beyond
-   * `setCentreOk` m, up to the edge of the reach), and a hard set: a back set, a long set (per
-   * metre beyond `setLongFrom`), a fast tempo, a pass far off the net (`AI.outOfSystem`).
+   * `setCentreOk` m, up to the edge of the reach), the kind of set (`window`), and a pass far
+   * off the net (`AI.outOfSystem`).
    */
   setTouch: {
     feetMin: 0.65,
     catchMin: 0.5,
     centreMin: 0.6,
-    backSet: 0.85,
-    fastTempo: 0.85,
-    longPerM: 0.05,
-    longMin: 0.8,
+    /**
+     * How hard each kind of set is to put on the spot: its share of a high ball's green. A high
+     * ball leaves the hitter time to go to it, and the 1 is a short ball straight up in front of
+     * the setter. The faster and flatter the set, the less room: the hitter is already running to
+     * a spot. `hut` the lower outside ball; `backQuick` the middle's quick behind the setter, and
+     * `backQuickOpp` the opposite's (coming in from the pin, behind the setter's back); `tempo`
+     * the second-tempo sets to a pin and the bic (go, fast back); `push` the middle's quick pushed
+     * along the net (push 1, shoot); `inside` the combination balls (3, 2, X, back 2, the pipe
+     * behind the setter). The user's call (2026-11-15).
+     */
+    window: { high: 1, hut: 0.9, quick: 1, backQuick: 0.85, backQuickOpp: 0.6, tempo: 0.7, push: 0.7, inside: 0.6 },
     outOfSystem: 0.75,
     /** a fast set (a quick, a go, a fast back) off a pass far off the net: on top of both of those. Very hard */
     oosFast: 0.5,
@@ -368,7 +379,6 @@ export const CONTACT = {
    */
   dump: { maxOff: 1.6, short: { x: -1.2, z: -1.7 }, deep: { x: -3.4, z: -7.6 }, apexShort: 0.5, apexDeep: 1.0, clear: 0.1 },
   setCentreOk: 0.15,
-  setLongFrom: 3,
   /** set spread (m, 1 sd along the net; off the net and in height are smaller): green, then good from best to worst */
   setSpreadGreen: 0.03,
   setSpreadGood: [0.1, 0.4] as [number, number],
@@ -1080,8 +1090,8 @@ export const FX = {
    * face, so the bar has a fixed place instead: `fpX` px right of the crosshair, its green line
    * level with it.
    */
-  // target 0.65: the room above the line (0.08 s of game time) shows Easy's whole late good band (SET_LEVELS)
-  setBar: { height: 96, width: 10, gap: 18, target: 0.65, linger: 0.7, waiting: 0.8, pipsWidth: 64, fpX: 56 },
+  // target 0.55: the room above the line (0.12 s of game time) shows Easy's whole late good band (SET_LEVELS)
+  setBar: { height: 96, width: 10, gap: 18, target: 0.55, linger: 0.7, waiting: 0.8, pipsWidth: 64, fpX: 56 },
   /**
    * The play wheel (`src/ui/playWheel.ts`): `size` px across with a `hole` px wide centre; the
    * mouse picks a slice once it has moved `dead` px from where the wheel opened, and its pull

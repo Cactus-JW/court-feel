@@ -1,4 +1,4 @@
-import { COURT, PLAYER, type PositionId } from '../config';
+import { COURT, PLAYER, type PositionId, type SetTier } from '../config';
 import { clamp } from '../core/mathx';
 import type { V3 } from '../physics/ball';
 import { predictJump } from '../ai/approach';
@@ -137,6 +137,8 @@ export interface SetPlay {
   short: string;
   lane: AttackLane;
   inFront?: number;
+  /** how hard the set is to put on the spot (CONTACT.setTouch.window); a high ball when not given */
+  tier?: SetTier;
 }
 
 /**
@@ -155,20 +157,34 @@ export const SET_PLAYS: Partial<Record<PositionId, SetPlay[]>> = {
       name: 'Go (fast to the pin)',
       short: 'Go',
       lane: { ...LANES.OH, x: -4.0, z: 0.85, apexAbove: 0.45, sx: -4.85, sz: 3.5, label: 'Outside go' },
+      tier: 'tempo',
     },
     // run in from outside and hit between the middle and the pin
     {
       name: '3 ball (inside)',
       short: '3',
       lane: { ...LANES.OH, x: -2.1, z: 0.8, apexAbove: 0.75, sx: -4.6, sz: 3.7, label: 'Inside 3 ball' },
+      tier: 'inside',
     },
   ],
   MB: [
-    { name: '1 (quick in front)', short: '1', lane: LANES.MB, inFront: QUICK.inFront },
+    { name: '1 (quick in front)', short: '1', lane: LANES.MB, inFront: QUICK.inFront, tier: 'quick' },
     // shoot ("31"): the middle runs out towards the outside and the setter fires it flat to them
-    { name: 'Shoot (31)', short: 'Shoot', lane: { ...LANES.MB, x: -1.4, sx: 0.0, sz: 2.9, label: 'Middle shoot (31)' }, inFront: 2.4 },
+    {
+      name: 'Shoot (31)',
+      short: 'Shoot',
+      lane: { ...LANES.MB, x: -1.4, sx: 0.0, sz: 2.9, label: 'Middle shoot (31)' },
+      inFront: 2.4,
+      tier: 'push',
+    },
     // back quick: up behind the setter's back
-    { name: 'Back quick', short: 'Back 1', lane: { ...LANES.MB, x: 2.3, sx: 1.0, sz: 2.9, label: 'Middle back quick' }, inFront: -1.2 },
+    {
+      name: 'Back quick',
+      short: 'Back 1',
+      lane: { ...LANES.MB, x: 2.3, sx: 1.0, sz: 2.9, label: 'Middle back quick' },
+      inFront: -1.2,
+      tier: 'backQuick',
+    },
   ],
   OPP: [
     { name: 'Back set (pin)', short: 'Back', lane: LANES.OPP },
@@ -177,12 +193,14 @@ export const SET_PLAYS: Partial<Record<PositionId, SetPlay[]>> = {
       name: 'Fast back',
       short: 'Fast',
       lane: { ...LANES.OPP, x: 3.95, z: 0.85, apexAbove: 0.45, sx: 4.7, sz: 3.3, label: 'Opposite fast back' },
+      tier: 'tempo',
     },
     // close behind the setter
     {
       name: 'Back 2 (behind the setter)',
       short: 'Back 2',
       lane: { ...LANES.OPP, x: 2.45, z: 0.8, apexAbove: 0.6, sx: 4.4, sz: 3.4, label: 'Opposite back 2' },
+      tier: 'inside',
     },
   ],
 };
@@ -219,16 +237,23 @@ export const D_PLAY: SetPlay = {
 export const SETTER_PLAYS: Record<'OH' | 'MB' | 'OPP' | 'PIPE', SetPlay[]> = {
   OH: [
     ...SET_PLAYS.OH!,
-    { name: 'Hut (lower outside)', short: 'Hut', lane: { ...LANES.OH, apexAbove: 1.15, label: 'Outside hut' } },
+    { name: 'Hut (lower outside)', short: 'Hut', lane: { ...LANES.OH, apexAbove: 1.15, label: 'Outside hut' }, tier: 'hut' },
     {
       name: '2 (inside, behind the quick)',
       short: '2',
       lane: { ...LANES.OH, x: -0.75, z: 0.8, apexAbove: 0.8, sx: -4.3, sz: 4.0, label: 'Outside 2 (tandem)' },
+      tier: 'inside',
     },
   ],
   MB: [
     ...SET_PLAYS.MB!,
-    { name: 'Push 1', short: 'Push', lane: { ...LANES.MB, x: -0.5, sx: 0.2, sz: 2.85, label: 'Middle push 1' }, inFront: 1.55 },
+    {
+      name: 'Push 1',
+      short: 'Push',
+      lane: { ...LANES.MB, x: -0.5, sx: 0.2, sz: 2.85, label: 'Middle push 1' },
+      inFront: 1.55,
+      tier: 'push',
+    },
   ],
   OPP: [
     ...SET_PLAYS.OPP!,
@@ -237,19 +262,26 @@ export const SETTER_PLAYS: Record<'OH' | 'MB' | 'OPP' | 'PIPE', SetPlay[]> = {
       short: 'X',
       // from a step behind the pin approach's start, so the loop in ends squarer to the net (AI.approach)
       lane: { ...LANES.OPP, x: -0.6, z: 0.8, apexAbove: 0.8, sx: 3.8, sz: 4.6, label: 'Opposite X' },
+      tier: 'inside',
     },
     {
       name: 'Back 1 (quick behind)',
       short: 'Back 1',
       lane: { ...LANES.MB, x: 2.3, sx: 3.0, sz: 2.9, label: 'Opposite back quick' },
       inFront: -1.2,
+      tier: 'backQuickOpp',
     },
   ],
   PIPE: [
     { name: 'Pipe', short: 'Pipe', lane: LANES.L },
-    { name: 'Bic (fast pipe)', short: 'Bic', lane: { ...LANES.L, apexAbove: 0.8, label: 'Back-row bic' } },
+    { name: 'Bic (fast pipe)', short: 'Bic', lane: { ...LANES.L, apexAbove: 0.8, label: 'Back-row bic' }, tier: 'tempo' },
     // right behind the setter's back: a short back set, met 2 m off the net like the pipe
-    { name: 'Pipe behind you (C)', short: 'Behind', lane: { ...LANES.L, x: 1.7, sx: 1.7, label: 'Back-row pipe behind the setter' } },
+    {
+      name: 'Pipe behind you (C)',
+      short: 'Behind',
+      lane: { ...LANES.L, x: 1.7, sx: 1.7, label: 'Back-row pipe behind the setter' },
+      tier: 'inside',
+    },
   ],
 };
 

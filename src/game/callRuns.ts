@@ -169,6 +169,7 @@ export function passToUser(g: Game, setter: Athlete): { t: number; x: number } |
  * them for the quick).
  */
 export function callOptions(g: Game, hitters: CallHitters, calls: SetterCalls, oos: boolean): SetOption[] {
+  const W = CONTACT.setTouch.window;
   const out: SetOption[] = [];
   for (const [k, h] of hitters) {
     const asked = calls.canCall && calls.asksFast(k);
@@ -180,7 +181,7 @@ export function callOptions(g: Game, hitters: CallHitters, calls: SetterCalls, o
     if (isQuick(p) && !high) {
       // a quick is met at the top of the hitter's jump when they are up with your touch
       const q = quickSetFor(h.a, g.simTime, g.ball.pos, h.brain.releaseAt, p.inFront);
-      out.push({ ...q, label, key: k, fast: true });
+      out.push({ ...q, label, key: k, fast: true, window: W[p.tier ?? 'quick'] });
       continue;
     }
     const lane = callLane(calls, k, oos);
@@ -194,6 +195,7 @@ export function callOptions(g: Game, hitters: CallHitters, calls: SetterCalls, o
       label,
       key: k,
       fast: !high && needsGoodPass(p),
+      window: high ? W.high : W[p.tier ?? 'high'],
       outOfSystem: oos && high,
     });
   }

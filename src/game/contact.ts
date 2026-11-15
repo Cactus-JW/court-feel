@@ -83,8 +83,10 @@ export interface SetOption {
   key?: SetPick;
   /** the setter's dump: not a set, the ball goes over the net to `target` on their floor, peaking at `apex` */
   dump?: boolean;
-  /** a quick or a second-tempo set: harder to put exactly on the spot */
+  /** a quick or a second-tempo set: very hard off a pass far off the net */
   fast?: boolean;
+  /** the kind of set: its share of a high ball's green (CONTACT.setTouch.window; a high ball's when not given) */
+  window?: number;
   /** a high ball off a pass out of system: there is nothing to hide, everyone in the gym knows where it is going */
   outOfSystem?: boolean;
 }
@@ -846,7 +848,7 @@ export class ContactSystem {
     const opts = h.setOptions(a);
     if (opts.length) {
       const best = this.chooseSetOption(a, opts, bp);
-      const shape = setShape(a.pos, bp, best.target, a.side, best.fast ?? false);
+      const shape = setShape(a.pos, a.side, best.fast ?? false, best.window);
       act.touch = setTouch(a.stillT, act.catchErr, act.minD, r, shape, level);
       const w = setWindow(act.touch, level);
       act.green = w.green;
@@ -900,8 +902,7 @@ export class ContactSystem {
     const err = releaseT - (act.arriveT + TIMING.setLoad);
     const level = this.setLevel();
     const touch =
-      act.touch ??
-      setTouch(a.stillT, act.catchErr, act.minD, this.setReach(a), setShape(a.pos, from, best.target, a.side, !!best.fast), level);
+      act.touch ?? setTouch(a.stillT, act.catchErr, act.minD, this.setReach(a), setShape(a.pos, a.side, !!best.fast, best.window), level);
     const win: SetWindow = act.touch ? { green: act.green, good: act.good } : setWindow(touch, level);
     const g = gradeRelease(err, win);
     const miss = setMiss(g);
@@ -1023,7 +1024,7 @@ export class ContactSystem {
       0,
       centreD,
       this.setReach(a),
-      option ? setShape(a.pos, at, option.target, a.side, !!option.fast) : { back: false, fast: false, length: 0, outOfSystem: false },
+      option ? setShape(a.pos, a.side, !!option.fast, option.window) : { window: 1, fast: false, outOfSystem: false },
       level,
     );
     const w = setWindow(touch, level);
