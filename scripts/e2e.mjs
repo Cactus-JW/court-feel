@@ -779,7 +779,7 @@ phase('probes');
         const out = [];
         const look = (label, root) => {
           for (const e of root.querySelectorAll(
-            '.panel, .row, .set-group, .set-row, .set-text, .pos-card, .body-set, .sheet-head, .topbar, .beta',
+            '.panel, .row, .set-group, .set-row, .set-text, .pos-card, .body-set, .sheet-head, .topbar',
           )) {
             if (e.offsetParent === null) continue;
             const r = e.getBoundingClientRect();

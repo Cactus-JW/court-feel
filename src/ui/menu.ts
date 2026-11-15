@@ -89,21 +89,6 @@ function buildTag(): HTMLElement {
   return txt('div', 'build', BUILD_LABEL);
 }
 
-/**
- * The strip above the start screen's top bar: the game is in early beta, so a player knows the rough edges
- * are expected and worth reporting. It is on the start screen only, never over a drill, so it never covers
- * the ball.
- */
-function betaBanner(): HTMLElement {
-  const bar = h('div', 'beta');
-  bar.setAttribute('role', 'note');
-  bar.append(
-    txt('b', 'beta-tag', 'Early beta'),
-    txt('span', 'beta-t', 'Court Feel is still in really early beta: expect rough edges, and things will change.'),
-  );
-  return bar;
-}
-
 /** key caps with what each does */
 function keyList(keys: readonly KeyHint[], cls = ''): HTMLElement {
   const list = h('div', `keys ${cls}`.trim());
@@ -232,7 +217,7 @@ export class Menu {
 
     // ------------------------------------------------------------ start screen
     this.start = h('div', 'menu');
-    this.start.append(betaBanner(), this.buildTopbar());
+    this.start.append(this.buildTopbar());
     const add = (id: View, el: HTMLElement) => {
       this.views.set(id, el);
       this.start.append(el);
@@ -332,8 +317,46 @@ export class Menu {
     set.setAttribute('aria-label', 'Settings');
     set.onclick = () => this.openSettings(set);
     right.append(this.venuePicker(), athlete, set);
-    bar.append(brand, nav, right);
+    const name = h('div', 'brand-row');
+    name.append(brand, this.betaBadge());
+    bar.append(name, nav, right);
     return bar;
+  }
+
+  /**
+   * The early-beta tag under the name: a press, a tap or (with a mouse) a hover opens the note that says what
+   * that means. It sits in the top bar rather than in a strip across the screen (turned down: it took a row of
+   * the menu all the time). It is on the start screen only, never over a drill, so it never covers the ball.
+   */
+  private betaBadge(): HTMLElement {
+    const wrap = h('div', 'beta-pick');
+    const tag = h('button', 'beta-tag', '<span>Beta</span>');
+    tag.type = 'button';
+    tag.setAttribute('aria-label', 'Early beta: what that means');
+    tag.setAttribute('aria-expanded', 'false');
+    const tip = h('div', 'beta-tip');
+    tip.id = 'beta-tip';
+    tip.setAttribute('role', 'tooltip');
+    tip.append(
+      txt('b', '', 'Really early beta'),
+      txt('span', '', 'Court Feel is still being built: expect rough edges, and things will change.'),
+    );
+    tag.setAttribute('aria-describedby', tip.id);
+    const open = (on: boolean) => {
+      wrap.classList.toggle('open', on);
+      tag.setAttribute('aria-expanded', String(on));
+    };
+    tag.onclick = () => open(!wrap.classList.contains('open'));
+    // a press anywhere else, the focus leaving or Esc puts the note away
+    window.addEventListener('pointerdown', (e) => {
+      if (wrap.classList.contains('open') && !wrap.contains(e.target as Node)) open(false);
+    });
+    wrap.addEventListener('focusout', () => open(false));
+    wrap.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') open(false);
+    });
+    wrap.append(tag, tip);
+    return wrap;
   }
 
   /**
