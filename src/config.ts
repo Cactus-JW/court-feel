@@ -493,12 +493,25 @@ export const SERVE_KINDS: readonly ServeKind[] = ['float', 'jumpFloat', 'jump'];
  * stand and how you toss, and everything after the toss is the body's work, with the spike's
  * controls and the spike's timing windows.
  *
- * Each serve has one toss, the same every time: `toss` m forward (where the ball would be back at
- * the height it left the hand) and `tossHigh` m over the standing reach at its top. A server
- * grooves one toss per serve; a different height each rep is an error, not a choice, so there is
- * no meter for it (turned down: hold Q to set the height, which made the toss the hardest part of
- * the serve and put a fourth timing in front of the run, the jump and the swing). `back` is where
- * the Serve drill stands you, m behind the end line; you may toss from anywhere behind it.
+ * Each serve has its own toss: `toss` m forward (where the ball would be back at the height it
+ * left the hand) and `tossHigh` m over the standing reach at its top. `back` is where the Serve
+ * drill stands you, m behind the end line; you may toss from anywhere behind it.
+ *
+ * The player sets the height of each toss: Q is held and let go. A tap tosses `hold.low` of the
+ * serve's `tossHigh`, a hold of `hold.full` s or longer `hold.high` of it, evenly in between, so
+ * the serve's own height is a hold of 0.36 s. A higher toss is in the air longer, and a jump
+ * server tosses it further ahead to fill that time with run-up: how far ahead it comes down is
+ * scaled by the height's share of the serve's own to the power `ahead`, 0.5 for the jump float
+ * and the jump serve (the toss's time in the air grows as the square root of its height, and the
+ * run covers ground at the same pace), 0 for the standing float, whose toss comes down in front
+ * of the hitting shoulder however high it goes. The highest jump serve toss comes down 5.1 m
+ * ahead instead of 4.0: from the drill's start that is 3.2 m of run-up, with the take-off
+ * 0.2 m behind the end line; a tap's comes down 2.8 m ahead, 1.2 m of run-up. The first
+ * version had one toss per serve and no meter (a server grooves a toss; a different height each
+ * rep is an error, not a choice, and a meter puts a fourth timing in front of the run, the jump
+ * and the swing). The two were played against each other on the preview and the held toss was
+ * kept: timing your own toss is part of serving, and a held button is how the swing and the
+ * jump are already played. The AI's tosses are not held: they are the serve's own.
  *
  * - `float`: a low toss in front of the hitting shoulder (0.8 m over the contact, in the air
  *   0.95 s), hit with the feet on the floor. Both floats move in the air as cleanly as they were
@@ -521,9 +534,10 @@ export const SERVE_KINDS: readonly ServeKind[] = ['float', 'jumpFloat', 'jump'];
  * and 95 km/h for an Outside Hitter.
  */
 export const SERVE = {
-  float: { name: 'Standing float', short: 'Float', back: 1.1, toss: 0.25, tossHigh: 0.8, spin: false },
-  jumpFloat: { name: 'Jump float', short: 'Jump float', back: 2.3, toss: 2.0, tossHigh: 1.7, spin: false },
-  jump: { name: 'Jump serve', short: 'Jump', back: 3.4, toss: 4.0, tossHigh: 2.8, spin: true },
+  float: { name: 'Standing float', short: 'Float', back: 1.1, toss: 0.25, tossHigh: 0.8, ahead: 0, spin: false },
+  jumpFloat: { name: 'Jump float', short: 'Jump float', back: 2.3, toss: 2.0, tossHigh: 1.7, ahead: 0.5, spin: false },
+  jump: { name: 'Jump serve', short: 'Jump', back: 3.4, toss: 4.0, tossHigh: 2.8, ahead: 0.5, spin: true },
+  hold: { full: 0.8, low: 0.5, high: 1.6 },
   /** a float hit in the air off a full run-up (m/s); `CONTACT.serveFloatSpeed` with no run-up at all */
   jumpFloatSpeed: 20,
   /** the run-up that gives a jump float its full pace: this share of the athlete's approach speed at the plant */

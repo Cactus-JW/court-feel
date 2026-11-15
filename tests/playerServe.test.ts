@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { COURT, SERVE, SERVE_KINDS, SIM, type ServeKind } from '../src/config';
 import { Athlete } from '../src/game/athlete';
-import { ContactSystem, type ContactEvent, type ContactHost } from '../src/game/contact';
+import { ContactSystem, tossFor, tossGroove, type ContactEvent, type ContactHost } from '../src/game/contact';
 import { rateServe } from '../src/game/modes/serveDrill';
 import { makeBall, stepBall } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';
@@ -262,6 +262,94 @@ describe('the toss', () => {
       expect(r.hitT - r.tossT).toBeGreaterThan(0.7);
       expect(r.tossApex).toBeGreaterThan(r.contactY + 0.4);
     }
+  });
+});
+
+describe('the toss button is held: the longer, the higher the toss', () => {
+  /** how high a toss held `hold` s tops out, how long until it is back at the hand, and how far ahead */
+  function toss(kind: ServeKind, hold: number) {
+    const a = new Athlete('OH', 1);
+    a.place(0, COURT.halfLength + 4, 0);
+    const state = makeBall();
+    const ball = {
+      state,
+      active: false,
+      lastTouch: null as unknown,
+      pos: state.p,
+      launch(p: object, v: object, w: object) {
+        Object.assign(state.p, p);
+        Object.assign(state.v, v);
+        Object.assign(state.w, w);
+      },
+    };
+    const host = { ball, simTime: 0, env: { netTop: COURT.netHeightMen }, canServe: () => true };
+    const contact = new ContactSystem(host as unknown as ContactHost);
+    expect(contact.serveToss(a, kind, tossFor(kind, hold))).toBe(true);
+    const y0 = state.p.y;
+    const z0 = state.p.z;
+    let apex = y0;
+    let t = 0;
+    do {
+      stepBall(state, 1 / SIM.hz, host.env);
+      t += 1 / SIM.hz;
+      apex = Math.max(apex, state.p.y);
+    } while (state.p.y > y0 && t < 5);
+    return { over: apex - a.standReach, t, ahead: z0 - state.p.z };
+  }
+
+  it("a tap is the lowest toss, a long hold the highest, and about a third of a second is the serve's own", () => {
+    for (const kind of SERVE_KINDS) {
+      const own = SERVE[kind].tossHigh;
+      // (the air takes up to a tenth off the top)
+      const near = (got: number, want: number) => {
+        expect(got, `${kind}: ${got} for ${want}`).toBeGreaterThan(want * 0.85);
+        expect(got, `${kind}: ${got} for ${want}`).toBeLessThan(want * 1.02);
+      };
+      near(toss(kind, 0).over, own * SERVE.hold.low);
+      near(toss(kind, tossGroove()).over, own);
+      near(toss(kind, SERVE.hold.full).over, own * SERVE.hold.high);
+      // holding on past full adds nothing
+      expect(toss(kind, 3).over, kind).toBeCloseTo(toss(kind, SERVE.hold.full).over, 2);
+    }
+    expect(tossGroove()).toBeGreaterThan(0.25);
+    expect(tossGroove()).toBeLessThan(0.45);
+  });
+
+  it('a higher toss is in the air longer, and a jump server tosses it further ahead to fill that time with run-up', () => {
+    for (const kind of SERVE_KINDS) {
+      const low = toss(kind, 0);
+      const own = toss(kind, tossGroove());
+      const high = toss(kind, SERVE.hold.full);
+      expect(low.t, kind).toBeLessThan(own.t - 0.1);
+      expect(high.t, kind).toBeGreaterThan(own.t + 0.1);
+      if (kind === 'float') {
+        // a standing float's toss comes down in front of the hitting shoulder however high it goes
+        expect(Math.abs(low.ahead - own.ahead), kind).toBeLessThan(0.2);
+        expect(Math.abs(high.ahead - own.ahead), kind).toBeLessThan(0.2);
+      } else {
+        // further ahead as its time in the air grows: by about a quarter for the highest, by a few metres at most
+        expect(high.ahead / own.ahead, kind).toBeGreaterThan(1.15);
+        expect(high.ahead / own.ahead, kind).toBeLessThan(1.35);
+        expect(low.ahead / own.ahead, kind).toBeLessThan(0.8);
+        expect(high.ahead - own.ahead, kind).toBeLessThan(1.5);
+      }
+    }
+  });
+
+  it('the highest jump serve toss gives the longest run-up, still taking off behind the end line from where the drill stands you', () => {
+    const run = (hold: number) => {
+      const r = serveRun({ kind: 'jump', toss: tossFor('jump', hold), user: { back: SERVE.jump.back } });
+      expect(r.e?.grade, `hold ${hold}`).toBe('Perfect');
+      expect(r.e?.footFault, `hold ${hold}`).toBe(false);
+      return SERVE.jump.back - (r.takeoffZ - COURT.halfLength);
+    };
+    const tap = run(0);
+    const own = run(tossGroove());
+    const high = run(SERVE.hold.full);
+    expect(tap).toBeLessThan(own - 0.5);
+    expect(high).toBeGreaterThan(own + 0.5);
+    // a real jump server's approach is three or four steps
+    expect(high).toBeLessThan(4);
   });
 });
 
