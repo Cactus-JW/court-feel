@@ -1155,6 +1155,7 @@ export class Menu {
         (i) => (s.setLevel = SET_LEVEL_IDS[i]),
       ),
       sw('Set slow-mo', 'setSlowmo'),
+      sw('Auto jump set', 'autoJumpSet'),
       sw('Set ring and bar', 'setRing'),
       sw('Keep my pick', 'keepSetPick', 'When you set: the hitter you picked stays picked for the next ball.'),
       sw('Hitter spots on the floor', 'hitterSpots', 'When you set: a ring on the floor where each hitter hits from.'),

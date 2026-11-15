@@ -22,6 +22,7 @@ import { makeKit } from '../character/kits';
 import type { Kit } from '../character/rig';
 import { wheelPlays } from './playbook';
 import { setStepAssist } from './setAssist';
+import { autoSetJump, takeoffSpot } from './setJump';
 import { aimTargetFromLook, ContactSystem, type ContactEvent, type IdealInfo, type SetPreview } from './contact';
 import { SetGuide } from '../fx/setGuide';
 import { SetRing } from '../fx/setRing';
@@ -766,7 +767,9 @@ export class Game {
     const me = this.me;
     if (this.settings.aimAssist <= 0 || me.state !== 'ground' || !this.mode?.userSetsNext?.()) return;
     if (me.action?.kind === 'set' && me.action.absorbing) return;
-    const spot = this.contact.setSpot(me, this.stepP);
+    // going up for it: the steps go to where the hop takes off from (the spot, less what your run carries)
+    const jump = this.contact.setCatch(me)?.jump;
+    const spot = jump ? takeoffSpot(me, jump, this.stepP) : this.contact.setSpot(me, this.stepP);
     if (spot) setStepAssist(me.cmd, me.pos, spot, this.settings.aimAssist);
   }
   private stepP = { x: 0, y: 0, z: 0 };
@@ -935,9 +938,24 @@ export class Game {
     return this.simTime - 1 / SIM.hz + this.accum;
   }
 
+  /**
+   * Your jump set (Settings: Auto jump set): a pass in system is yours to set, so your body goes
+   * up for it by itself, timed so the top of the jump is in the middle of the touch. The catch and
+   * the release stay yours. Off, or out of system, you set from the floor (or jump yourself: Space).
+   */
+  private userSetJump(): void {
+    const me = this.me;
+    const sets = !this.inMenu && !!this.mode?.userSetsNext?.();
+    me.jumpSets = sets && this.settings.autoJumpSet;
+    // what the arms get ready for in the air, chosen on the floor (a jump keeps what it went up for)
+    if (me.grounded) me.airIntent = sets ? 'set' : 'attack';
+    if (me.jumpSets) autoSetJump(me, this.contact.setCatch(me)?.jump ?? null, this.simTime);
+  }
+
   fixedStep(dt: number): void {
     this.simTime += dt;
     for (const [, b] of this.brains) b.step(dt, this);
+    this.userSetJump();
     // assist magnet for the user's mid-air drift
     this.contact.magnet(this.me);
     for (const a of this.athletes) a.step(dt, this.simTime);
@@ -1055,7 +1073,9 @@ export class Game {
     this.setGuide.update(barFor, this.rig.camera, realDt, cues);
     // where to stand for your set, instead of where the ball would land
     const spot = yours && !this.setPrev?.absorbing ? this.contact.setSpot(me, this.spotP) : null;
-    this.setSpot.update(spot, me.rpos, realDt);
+    // (a second ring: your body is going up for this one, or already has)
+    const jumping = !!spot && (me.state === 'air' || me.state === 'load' || !!this.contact.setCatch(me)?.jump);
+    this.setSpot.update(spot, me.rpos, realDt, jumping);
     // looking up at the ball in first person the floor is out of view: the same spot on a dial
     this.setRadar.update(fp && cues ? spot : null, me.rpos, this.rig.yaw);
     this.ball.showMarker = this.settings.landingMarker && !spot && !this.setPrev?.absorbing;

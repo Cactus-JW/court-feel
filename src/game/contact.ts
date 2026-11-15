@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { ASSIST, BALL, CONTACT, COURT, PLAYER, SET_LEVELS, TIMING, type SetLevel } from '../config';
+import { ASSIST, BALL, CONTACT, COURT, PLAYER, SET_LEVELS, SIM, TIMING, type SetLevel } from '../config';
 import { clamp, clamp01, dirFromYaw, lerp, rightFromYaw, smooth01, wrapAngle, yawFromDir } from '../core/mathx';
 import { R, topspinFor, type V3 } from '../physics/ball';
 import { netClearance, solveApex, solveFixedTime, solveSpeedToFloor } from '../physics/solve';
 import { Athlete, type Action, type Grade, type PassForm } from './athlete';
 import type { BallEntity, TouchKind } from './ballEntity';
 import { DEFAULT_PICK, type SetPick } from './setterCalls';
+import { HANDS_FWD, HANDS_UP, planSetJump, type SetJumpPlan } from './setJump';
 import {
   gradeRelease,
   setMiss,
@@ -122,6 +123,22 @@ export interface SetPreview {
   bar: { start: number; target: number; green: number; good: number } | null;
 }
 
+/** when and where the ball reaches a setter's hands (ContactSystem.setCatch) */
+export interface SetCatch {
+  /** sim time the ball comes down onto the hands */
+  t: number;
+  /** the ball then */
+  at: V3;
+  /** the feet's height (m) and vertical speed (m/s) then: 0 on the floor */
+  feetY: number;
+  vy: number;
+  /** the set jump the body is about to take for it (still on the floor) */
+  jump: SetJumpPlan | null;
+}
+
+/** how far ahead (s) a setter looks for the ball coming down onto the hands */
+const SET_LOOK = 1.6;
+
 /** the user's last set, read by the hitter it went to and by the block */
 export interface SetResult {
   athlete: Athlete;
@@ -170,6 +187,7 @@ export class ContactSystem {
   private _p = new THREE.Vector3();
   private _q = new THREE.Vector3();
   private _b: V3 = { x: 0, y: 0, z: 0 };
+  private _catch: SetCatch = { t: 0, at: { x: 0, y: 0, z: 0 }, feetY: 0, vy: 0, jump: null };
 
   /** search the next `horizon` seconds for the moment the ball is closest to the athlete's ideal point */
   ideal(a: Athlete, from: number, horizon = TIMING.contactLookahead, out?: IdealInfo): IdealInfo | null {
@@ -327,12 +345,23 @@ export class ContactSystem {
     a.airNudge.set(0, 0, 0);
     if (assist <= 0 || a.state !== 'air' || !h.ball.active) return;
     if (a.action && a.action.resolved) return;
+    const max = ASSIST.airMagnet * assist;
+    if (a.airIntent === 'set') {
+      // a jump set: what the drift leaves the hands short of the ball by, made up over the time left
+      const c = this.setCatch(a);
+      if (!c) return;
+      const left = Math.max(0.08, c.t - h.simTime);
+      const P = this.handsPoint(a, this._p);
+      const sx = c.at.x - P.x - a.vel.x * left;
+      const sz = c.at.z - P.z - a.vel.z * left;
+      a.airNudge.set(clamp((2 * sx) / (left * left), -max, max), 0, clamp((2 * sz) / (left * left), -max, max));
+      return;
+    }
     const info = this.ideal(a, h.simTime, 0.5);
     if (!info || info.d > this.reach(a) + 0.7) return;
     const dt = Math.max(0.08, info.t - h.simTime);
     const ex = info.ball.x - info.point.x;
     const ez = info.ball.z - info.point.z;
-    const max = ASSIST.airMagnet * assist;
     a.airNudge.set(clamp(ex / dt, -max, max), 0, clamp(ez / dt, -max, max));
   }
 
@@ -574,7 +603,87 @@ export class ContactSystem {
   /** setter's hands point (ball centre at contact) */
   handsPoint(a: Athlete, out: THREE.Vector3): THREE.Vector3 {
     const f = dirFromYaw(a.yaw, _f);
-    return out.set(a.pos.x + f.x * 0.14, a.pos.y + a.height + 0.17, a.pos.z + f.z * 0.14);
+    return out.set(a.pos.x + f.x * HANDS_FWD, a.pos.y + a.height + HANDS_UP, a.pos.z + f.z * HANDS_FWD);
+  }
+
+  /**
+   * When and where the ball now in flight reaches `a`'s hands, for what the body is doing: on the
+   * floor, about to take its set jump (`a.jumpSets`: the plan, setJump.ts), or already planting or
+   * in the air (the jump as it will go). Null if it never comes down onto the hands. The result is
+   * reused by the next call.
+   */
+  setCatch(a: Athlete): SetCatch | null {
+    const h = this.host;
+    const now = h.simTime;
+    const out = this._catch;
+    const pred = h.ball.ensurePrediction(h.env, now);
+    out.jump = null;
+    if (a.state === 'air' || a.state === 'load') return this.airCatch(a, now, out);
+    const plan = a.jumpSets ? planSetJump(a, pred, now) : null;
+    if (plan) {
+      out.t = plan.catchT;
+      out.at = plan.at;
+      out.feetY = plan.feetY;
+      out.vy = plan.vy;
+      out.jump = plan;
+      return out;
+    }
+    const t = pred.descendThrough(a.pos.y + a.height + HANDS_UP, now);
+    if (t < 0) return null;
+    pred.posAt(t, out.at);
+    out.t = t;
+    out.feetY = 0;
+    out.vy = 0;
+    return out;
+  }
+
+  /** the catch of a setter planting or in the air: the jump is stepped forward with the ball until it comes down onto the hands */
+  private airCatch(a: Athlete, now: number, out: SetCatch): SetCatch | null {
+    const h = this.host;
+    const pred = h.ball.ensurePrediction(h.env, now);
+    const dt = 1 / SIM.hz;
+    const hands = a.height + HANDS_UP;
+    let y = a.pos.y;
+    let vy = a.vel.y;
+    // planting: the feet leave the floor when the load is done (a hop or a released jump: the shortest plant; held: a full load)
+    let wait = a.state === 'load' ? Math.max(0, (a.loadRelease ? PLAYER.loadMin : PLAYER.loadMax) - a.loadT) : -1;
+    const H = a.hopH ?? a.computeJumpHeight();
+    let ballY = h.ball.pos.y;
+    let gap = ballY - (y + hands);
+    for (let t = now + dt; t < now + SET_LOOK; t += dt) {
+      if (wait >= 0) {
+        wait -= dt;
+        if (wait <= 1e-9) {
+          wait = -1;
+          vy = Athlete.takeoffSpeed(H);
+        }
+      }
+      if (wait < 0 && (y > 0 || vy > 0)) {
+        vy -= Athlete.gravityAt(vy) * dt;
+        y += vy * dt;
+        if (y <= 0) {
+          y = 0;
+          vy = 0;
+        }
+      }
+      pred.posAt(t, this._b);
+      const g = this._b.y - (y + hands);
+      if (gap >= 0 && g < 0 && this._b.y < ballY) {
+        out.t = t - dt + (gap / (gap - g)) * dt;
+        pred.posAt(out.t, out.at);
+        out.feetY = y;
+        out.vy = vy;
+        return out;
+      }
+      gap = g;
+      ballY = this._b.y;
+    }
+    return null;
+  }
+
+  /** a jump set's balance at the touch: how fast the body drifts and how fast it is rising or falling (undefined on the floor) */
+  private airBalance(a: Athlete): { drift: number; vy: number } | undefined {
+    return a.state === 'air' ? { drift: a.speed, vy: a.vel.y } : undefined;
   }
 
   /** E held / tapped: resolve a forearm pass when the ball reaches the platform */
@@ -761,21 +870,18 @@ export class ContactSystem {
     const h = this.host;
     if (!this.ballIncoming(a)) return a.role === 'S';
     const ball = h.ball;
-    const pred = ball.ensurePrediction(h.env, h.simTime);
-    const handsY = a.pos.y + a.height + 0.17;
-    const tc = pred.descendThrough(handsY, h.simTime);
+    const c = this.setCatch(a);
     const lt = ball.lastTouch;
     const friendly = !lt || lt.side === a.side || lt.kind === 'feed';
-    if (tc < 0) {
+    if (!c) {
       // it has just come down through the hands: still a (late) catch while it is within reach
       const P = this.handsPoint(a, this._p);
       const bp = ball.pos;
       return friendly && ball.vel.y < 0 && Math.hypot(bp.x - P.x, bp.y - P.y, bp.z - P.z) < this.setReach(a);
     }
-    if (tc - h.simTime > 1.6) return false;
-    pred.posAt(tc, this._b);
-    if (this._b.z * a.side < 0.2) return false; // the ball will still be on their side: block
-    const near = Math.hypot(this._b.x - a.pos.x, this._b.z - a.pos.z) < 2.5;
+    if (c.t - h.simTime > SET_LOOK) return false;
+    if (c.at.z * a.side < 0.2) return false; // the ball will still be on their side: block
+    const near = Math.hypot(c.at.x - a.pos.x, c.at.z - a.pos.z) < 2.5;
     return near && friendly;
   }
 
@@ -819,15 +925,15 @@ export class ContactSystem {
       if (!act.held) return this.pushSet(a, act, act.releaseT);
       if (t - act.arriveT - TIMING.setLoad >= TIMING.setHoldMax) return this.pushSet(a, act, t);
       // the ball loads in the hands
-      ball.hit({ x: 0, y: -TIMING.setAbsorbSpeed, z: 0 }, { x: 0, y: 0, z: 0 }, 0, t);
+      this.loadInHands(a, t);
       return false;
     }
     if (!this.ballIncoming(a)) return false;
     const bp = ball.pos;
     const P = this.handsPoint(a, this._p);
-    // the moment the ball reaches the hands, re-read while it comes down (the setter moves under it)
-    const tArr = ball.ensurePrediction(h.env, t).descendThrough(P.y, t);
-    if (tArr > 0) act.idealT = tArr;
+    // the moment the ball reaches the hands, re-read while it comes down (the setter moves under it, or goes up for it)
+    const c = this.setCatch(a);
+    if (c) act.idealT = c.t;
     const r = this.setReach(a);
     const d = Math.hypot(bp.x - P.x, bp.y - P.y, bp.z - P.z);
     if (d > r || ball.vel.y > 0.5) {
@@ -849,15 +955,21 @@ export class ContactSystem {
     if (opts.length) {
       const best = this.chooseSetOption(a, opts, bp);
       const shape = setShape(a.pos, a.side, best.fast ?? false, best.window);
-      act.touch = setTouch(a.stillT, act.catchErr, act.minD, r, shape, level);
+      act.touch = setTouch(a.stillT, act.catchErr, act.minD, r, shape, level, this.airBalance(a));
       const w = setWindow(act.touch, level);
       act.green = w.green;
       act.good = w.good;
     }
     act.absorbing = true;
     if (!act.held) return this.pushSet(a, act, act.releaseT);
-    ball.hit({ x: 0, y: -TIMING.setAbsorbSpeed, z: 0 }, { x: 0, y: 0, z: 0 }, 0, t);
+    this.loadInHands(a, t);
     return false;
+  }
+
+  /** the ball loads in the hands: it gives with them, and travels with a setter in the air */
+  private loadInHands(a: Athlete, t: number): void {
+    const air = a.state === 'air';
+    this.host.ball.hit({ x: air ? a.vel.x : 0, y: -TIMING.setAbsorbSpeed, z: air ? a.vel.z : 0 }, { x: 0, y: 0, z: 0 }, 0, t);
   }
 
   /**
@@ -902,7 +1014,16 @@ export class ContactSystem {
     const err = releaseT - (act.arriveT + TIMING.setLoad);
     const level = this.setLevel();
     const touch =
-      act.touch ?? setTouch(a.stillT, act.catchErr, act.minD, this.setReach(a), setShape(a.pos, a.side, !!best.fast, best.window), level);
+      act.touch ??
+      setTouch(
+        a.stillT,
+        act.catchErr,
+        act.minD,
+        this.setReach(a),
+        setShape(a.pos, a.side, !!best.fast, best.window),
+        level,
+        this.airBalance(a),
+      );
     const win: SetWindow = act.touch ? { green: act.green, good: act.good } : setWindow(touch, level);
     const g = gradeRelease(err, win);
     const miss = setMiss(g);
@@ -1009,13 +1130,16 @@ export class ContactSystem {
       };
     }
     if (!this.wantsSet(a)) return null;
+    const c = this.setCatch(a);
+    if (!c) return null;
+    const tIdeal = c.t;
+    const at = { x: c.at.x, y: c.at.y, z: c.at.z };
+    // the hands then: over the feet now, or where a jump under way carries them
     const P = this.handsPoint(a, this._p);
-    const pred = h.ball.ensurePrediction(h.env, t);
-    const tIdeal = pred.descendThrough(P.y, t);
-    if (tIdeal < 0) return null;
-    pred.posAt(tIdeal, this._b);
-    const at = { x: this._b.x, y: this._b.y, z: this._b.z };
-    const centreD = Math.hypot(at.x - P.x, at.z - P.z);
+    const carry = a.state === 'air' ? tIdeal - t : 0;
+    const centreD = Math.hypot(at.x - P.x - a.vel.x * carry, at.z - P.z - a.vel.z * carry);
+    // going up for it (or about to): the feet's share is the jump's balance, as it will be at the catch
+    const air = c.feetY > 0 ? { drift: a.state === 'air' ? a.speed : a.speed * a.plantCarry, vy: c.vy } : undefined;
     const option = opts.length ? this.chooseSetOption(a, opts, at) : null;
     // the touch as it stands: feet and centring now, for the set your pick makes it, a clean catch assumed
     const level = this.setLevel();
@@ -1026,6 +1150,7 @@ export class ContactSystem {
       this.setReach(a),
       option ? setShape(a.pos, a.side, !!option.fast, option.window) : { window: 1, fast: false, outOfSystem: false },
       level,
+      air,
     );
     const w = setWindow(touch, level);
     return { ...base, tIdeal, absorbing: false, centreD, at, option, green: w.green, good: w.good, pips: setPips(touch, false), bar: null };
@@ -1038,16 +1163,13 @@ export class ContactSystem {
   setSpot(a: Athlete, out: V3): V3 | null {
     const h = this.host;
     if (!h.ball.active || h.ball.state.rest) return null;
-    const pred = h.ball.ensurePrediction(h.env, h.simTime);
-    const tc = pred.descendThrough(a.pos.y + a.height + 0.17, h.simTime);
-    if (tc < 0) return null;
-    pred.posAt(tc, this._b);
-    if (this._b.z * a.side < 0.2) return null;
-    // the hands are 0.14 m in front of the feet (handsPoint)
+    const c = this.setCatch(a);
+    if (!c || c.at.z * a.side < 0.2) return null;
+    // the hands are in front of the feet (handsPoint)
     const f = dirFromYaw(a.yaw, _f);
-    out.x = this._b.x - f.x * 0.14;
+    out.x = c.at.x - f.x * HANDS_FWD;
     out.y = 0;
-    out.z = this._b.z - f.z * 0.14;
+    out.z = c.at.z - f.z * HANDS_FWD;
     return out;
   }
 

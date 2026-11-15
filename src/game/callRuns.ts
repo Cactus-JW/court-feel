@@ -92,6 +92,9 @@ export function syncRuns(hitters: CallHitters, calls: SetterCalls): void {
 
 /** where and when `setter` will touch the ball now in flight (null: it never comes down onto their hands) */
 function touchOf(g: Game, setter: Athlete): { t: number; at: { x: number; y: number; z: number } } | null {
+  // a setter going up for it meets the ball higher and sooner
+  const c = g.contact.setCatch(setter);
+  if (c && c.feetY > 0) return { t: c.t, at: { x: c.at.x, y: c.at.y, z: c.at.z } };
   const pred = g.ball.ensurePrediction(g.env, g.simTime);
   const t = pred.descendThrough(setterTouchY(setter), g.simTime);
   if (t < 0) return null;

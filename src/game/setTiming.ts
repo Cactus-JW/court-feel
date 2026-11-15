@@ -75,13 +75,30 @@ export function catchQuality(err: number, level: SetLevel): number {
 /**
  * The touch: `stillT` how long the feet were still, `catchErr` when you pressed against the ball
  * reaching the hands (s, + = late), `centreD` how far the ball passed from the hands point,
- * `reach` the hands' reach.
+ * `reach` the hands' reach. A jump set (`air`) has its balance in place of still feet: how fast
+ * the body drifts (`drift`, m/s) and how fast it is rising or falling (`vy`, m/s) at the catch.
  */
-export function setTouch(stillT: number, catchErr: number, centreD: number, reach: number, shape: SetShape, level: SetLevel): SetTouch {
+export function setTouch(
+  stillT: number,
+  catchErr: number,
+  centreD: number,
+  reach: number,
+  shape: SetShape,
+  level: SetLevel,
+  air?: { drift: number; vy: number },
+): SetTouch {
   const T = CONTACT.setTouch;
   const reasons: string[] = [];
-  const feet = lerp(T.feetMin, 1, clamp01(stillT / TIMING.setFeetReady));
-  if (feet < CLEAN) reasons.push('on the move');
+  let feet: number;
+  if (air) {
+    const drifting = clamp01((air.drift - TIMING.setStillSpeed) / (T.airDrift - TIMING.setStillSpeed));
+    const offTop = clamp01((Math.abs(air.vy) - T.offTop[0]) / (T.offTop[1] - T.offTop[0]));
+    feet = lerp(1, T.feetMin, Math.max(drifting, offTop));
+    if (feet < CLEAN) reasons.push(drifting >= offTop ? 'drifting' : 'off the top of the jump');
+  } else {
+    feet = lerp(T.feetMin, 1, clamp01(stillT / TIMING.setFeetReady));
+    if (feet < CLEAN) reasons.push('on the move');
+  }
   const caught = catchQuality(catchErr, level);
   if (caught < CLEAN) reasons.push(catchErr < 0 ? 'caught early' : 'caught late');
   const off = clamp01((centreD - CONTACT.setCentreOk) / Math.max(0.01, reach - CONTACT.setCentreOk));

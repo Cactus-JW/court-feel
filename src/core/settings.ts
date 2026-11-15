@@ -19,6 +19,7 @@ const BOOLEAN_SETTINGS: Record<BooleanSettingKey, true> = {
   womenNet: true,
   slowmoAssist: true,
   setSlowmo: true,
+  autoJumpSet: true,
   setRing: true,
   keepSetPick: true,
   hitterSpots: true,

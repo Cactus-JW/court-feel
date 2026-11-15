@@ -219,6 +219,17 @@ export const PLAYER = {
   /** gravity multiplier near the apex: a little hang time */
   apexGravityScale: 0.82,
   apexBand: 1.1,
+  /** the plant brakes the run at this rate (m/s²) down to the carried speed */
+  plantBrake: 24,
+  /**
+   * The set jump (`src/game/setJump.ts`): a controlled hop, `height` of the standing jump, off the
+   * shortest plant, timed so the top of the jump falls in the middle of the touch (real setters
+   * meet the ball at the top, with a hop well under their block jump). The body goes up only if
+   * the hop carries the hands to within `near` m of the ball while drifting no faster than
+   * `maxDrift` m/s (a setter flying through the ball stays down and sets off the floor), and no
+   * later than `late` s after the moment to plant.
+   */
+  setJump: { height: 0.7, near: 0.35, maxDrift: 1.5, late: 0.05 },
   landRecover: 0.2,
   /**
    * A dive (AI defenders, at a ball the platform can't reach on foot): the body goes hands-first
@@ -367,6 +378,14 @@ export const CONTACT = {
      * behind the setter). The user's call (2026-11-15).
      */
     window: { high: 1, hut: 0.9, quick: 1, backQuick: 0.85, backQuickOpp: 0.6, tempo: 0.7, push: 0.7, inside: 0.6 },
+    /**
+     * A jump set has no feet on the floor: its balance is the feet's share. Drifting through the
+     * touch faster than TIMING.setStillSpeed costs it, the most (`feetMin`) at `airDrift` m/s; so
+     * does a ball met off the top of the jump, the body rising or falling faster than `offTop[0]`
+     * m/s, the most at `offTop[1]`.
+     */
+    airDrift: 2,
+    offTop: [1.2, 3] as [number, number],
     outOfSystem: 0.75,
     /** a fast set (a quick, a go, a fast back) off a pass far off the net: on top of both of those. Very hard */
     oosFast: 0.5,
@@ -1110,8 +1129,12 @@ export const FX = {
    * over `fadeOut` s (real time) so a set that missed is seen leaving it.
    */
   setGuide: { points: 22, size: 8, skip: 0.14, opacity: 0.8, above: 0.42, fadeIn: 0.15, fadeOut: 0.9 },
-  /** where to stand for the set: a floor spot this wide (m), green once your feet are within `CONTACT.setCentreOk` */
-  setSpot: { radius: 0.32 },
+  /**
+   * Where to stand for the set: a floor spot this wide (m), green once your feet are within
+   * `CONTACT.setCentreOk`. When your body is going to jump for it (the jump set) a second ring
+   * stands round it, `jumpRing` times as wide, at `jumpOpacity`.
+   */
+  setSpot: { radius: 0.32, jumpRing: 1.5, jumpOpacity: 0.6 },
   /** where your feet go (the plant spot of an approach): ring radius (m), and the lesson's arrows towards it */
   floorSpot: {
     radius: 0.36,
@@ -1598,6 +1621,8 @@ export interface Settings {
   slowmoAssist: boolean;
   /** time slows for your set's catch and release (on by default; the same on every level) */
   setSlowmo: boolean;
+  /** your body jumps by itself to set a pass in system (the jump set; on by default). Off: the jump is yours (Space) */
+  autoJumpSet: boolean;
   /** the timing ring that closes on the ball as it reaches your hands when you set */
   setRing: boolean;
   /** set difficulty: how wide the green, the good band and the clean catch are (SET_LEVELS) */
@@ -1632,6 +1657,7 @@ export const DEFAULT_SETTINGS: Settings = {
   womenNet: false,
   slowmoAssist: false,
   setSlowmo: true,
+  autoJumpSet: true,
   setRing: true,
   setLevel: 'easy',
   keepSetPick: false,

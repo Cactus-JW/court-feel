@@ -175,7 +175,9 @@ export class SetterDrill extends Mode {
     // the pass is in the air: only what your hands do now
     if (this.phase === 'live' && !this.set) {
       const again = this.outOfSystem ? 'again: their fast set' : 'again: high';
-      return `${kbd('WASD')} to the spot · ${kbd('RMB')} as it reaches your hands, release in the green · ${kbd('1')}-${kbd('4')} who · ${again}${dump}`;
+      // the jump set: your body goes up by itself (Settings: Auto jump set), or it is yours
+      const jump = this.g.settings.autoJumpSet ? '' : ` · ${kbd('Space')} jump set`;
+      return `${kbd('WASD')} to the spot · ${kbd('RMB')} as it reaches your hands, release in the green${jump} · ${kbd('1')}-${kbd('4')} who · ${again}${dump}`;
     }
     return `${kbd('1')}-${kbd('4')} pick a hitter · again: their next set · ${kbd('C')} plays · ${kbd('G')} ${this.calls.frontRow ? 'back' : 'front'} row${dump}`;
   }
