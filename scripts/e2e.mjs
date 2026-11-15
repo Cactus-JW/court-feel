@@ -762,19 +762,27 @@ phase('probes');
     check(false, 'menu: the probe runs', { error: String(e).split('\n')[0] });
   }
   await r.close();
-  // the menus on a phone: no panel is squeezed shorter than its text, nothing runs off the side, and the
-  // settings' reset is in reach (held upright and sideways)
-  for (const [w, h] of [
-    [390, 844],
-    [844, 390],
+  // the menus on a phone and in the window widths where the top bar is tightest: no panel is squeezed shorter
+  // than its text, nothing runs off the side, and the settings' reset is in reach (a phone held upright and
+  // sideways; desktop-height windows in each step of the top bar's pills giving up their words)
+  for (const [w, h, phone] of [
+    [390, 844, true],
+    [844, 390, true],
+    [860, 720, false],
+    [900, 720, false],
+    [960, 720, false],
+    [1010, 720, false],
   ]) {
-    const { ctx, p } = await newHeldPage({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true });
+    const { ctx, p } = await newHeldPage(
+      phone ? { viewport: { width: w, height: h }, hasTouch: true, isMobile: true } : { viewport: { width: w, height: h } },
+    );
     let up = false;
     try {
       await comeUp(p, '', () => window.__court && window.__menu);
       up = true;
       await gpuIdle(p);
-      await p.tap('.welcome .ghost-btn');
+      if (phone) await p.tap('.welcome .ghost-btn');
+      else await p.click('.welcome .ghost-btn');
       const bad = await p.evaluate(() => {
         const out = [];
         const look = (label, root) => {
@@ -804,6 +812,19 @@ phase('probes');
           }
         };
         look('train', document.querySelector('.menu'));
+        // the top bar with the longest words its pills show: the widest venue name, then each position in turn
+        document.querySelector('[aria-label^="Venue:"]').click();
+        const wide = (e) => {
+          const range = document.createRange();
+          range.selectNodeContents(e);
+          return range.getBoundingClientRect().width;
+        };
+        const venue = [...document.querySelectorAll('.venue-opt')].sort((a, b) => wide(b) - wide(a))[0];
+        venue.click();
+        for (const chip of document.querySelectorAll('.view.on .pos-chip')) {
+          chip.click();
+          look(`train at ${venue.textContent} as ${chip.textContent}`, document.querySelector('.menu'));
+        }
         for (const name of ['Play', 'Learn']) {
           document.querySelector(`.nav-btn[aria-label=${name}]`).click();
           look(name, document.querySelector('.menu'));
