@@ -155,6 +155,8 @@ export interface SetResult {
   good: number;
   /** the touch's parts, done or not */
   pips: SetPips;
+  /** a jump set with the dump on: their middle had to honour the setter's own attack until the push (AI.middle.dumpHold) */
+  held: boolean;
 }
 
 /** a standard normal from a 0..1 source (Box-Muller) */
@@ -1085,6 +1087,7 @@ export class ContactSystem {
       window: win.green,
       good: win.good,
       pips: setPips(touch, true),
+      held: a.state === 'air' && !best.dump && opts.some((o) => o.dump),
     };
     h.emitContact({
       athlete: a,

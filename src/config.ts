@@ -1386,6 +1386,13 @@ export const AI = {
     react: 0.12,
     reactSd: 0.04,
     readErr: 0.9,
+    /**
+     * The setter's own attack holds it: off a jump set by a front-row setter who could have dumped
+     * it (the dump was on, src/game/callRuns.ts), it reads the set this much (s) later. A middle has to
+     * honour a setter in the air at the net until the ball leaves the hands; a setter on the
+     * floor, or in the back row, holds nobody. A starting value, not yet tuned on seam counts.
+     */
+    dumpHold: 0.05,
     /** on a good pass with their middle coming in: how often it commits on the quick (jumps with their middle), or cheats towards a pin */
     commit: 0.1,
     cheat: 0.1,

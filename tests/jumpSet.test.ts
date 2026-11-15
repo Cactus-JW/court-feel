@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { AI, COURT, PLAYER, SIM, TIMING } from '../src/config';
 import { Rng } from '../src/core/mathx';
+import { SetterBrain } from '../src/ai/setter';
 import { Athlete } from '../src/game/athlete';
 import { ContactSystem, type ContactEvent, type ContactHost, type SetOption } from '../src/game/contact';
+import type { Game } from '../src/game/game';
 import { SETTER_SPOT } from '../src/game/plays';
 import { autoSetJump, HANDS_FWD, hopDrift, planSetJump, setHop, takeoffSpot } from '../src/game/setJump';
 import { setTouch, setWindow, type SetShape } from '../src/game/setTiming';
@@ -216,6 +218,7 @@ describe('the jump set: the setter meets the pass at the top of a small jump', (
     const flight = ball.ensurePrediction(ENV, 0);
     const plan = planSetJump(a, flight, 0)!;
     expect(plan.catchT - plan.pressT).toBeCloseTo(setHop(a).lead, 6);
+    expect(plan.hop.H).toBe(setHop(a).H);
     expect(planSetJump(a, flight, plan.pressT - 0.01)).not.toBeNull();
     expect(planSetJump(a, flight, plan.pressT + PLAYER.setJump.late + 0.01)).toBeNull();
   });
@@ -225,6 +228,39 @@ describe('the jump set: the setter meets the pass at the top of a small jump', (
     expect(r.peak).toBeGreaterThan(setHop(r.a).H);
     expect(r.set).toBeTruthy();
     expect(Math.abs(r.catchT - r.cueT)).toBeLessThan(2 * DT);
+  });
+});
+
+describe('an AI setter jump-sets too', () => {
+  /** an AI setter under a pass to `to` (a point at standing hands height): the body and the ball as the set leaves the hands */
+  function aiSet(jumps: boolean, to?: { x: number; z: number }) {
+    const { ball, a } = stage({ to });
+    a.isUser = false;
+    const brain = new SetterBrain(a, SETTER_SPOT, Math.PI / 2);
+    brain.jumps = jumps;
+    brain.call = () => ({ target: OH_TARGET, apex: OH_TARGET.y + 1.65, hitter: null });
+    const rng = new Rng(5);
+    const g = { simTime: 0, env: ENV, ball, rng, onAiContact: () => {} };
+    for (let i = 0; i < SIM.hz * 4; i++) {
+      g.simTime += DT;
+      brain.step(DT, g as unknown as Game);
+      a.step(DT, g.simTime);
+      if ((ball.lastTouch as { kind: string }).kind === 'set') return { t: g.simTime, feetY: a.pos.y, vy: a.vel.y, ballY: ball.pos.y };
+      stepBall(ball.state, DT, ENV);
+    }
+    throw new Error('no set');
+  }
+  it('in system the ball is met at the top of the hop, higher and sooner than off the floor', () => {
+    const floor = aiSet(false);
+    const jump = aiSet(true);
+    expect(floor.feetY).toBe(0);
+    expect(jump.feetY).toBeGreaterThan(0.25);
+    expect(Math.abs(jump.vy)).toBeLessThan(0.8);
+    expect(jump.ballY - floor.ballY).toBeGreaterThan(0.2);
+    expect(jump.t).toBeLessThan(floor.t);
+  });
+  it('a pass off the net is set from the floor', () => {
+    expect(aiSet(true, { x: SETTER_SPOT.x, z: SETTER_SPOT.z + AI.outOfSystem + 0.6 }).feetY).toBe(0);
   });
 });
 
