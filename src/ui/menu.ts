@@ -89,6 +89,21 @@ function buildTag(): HTMLElement {
   return txt('div', 'build', BUILD_LABEL);
 }
 
+/**
+ * The strip above the start screen's top bar: the game is in early beta, so a player knows the rough edges
+ * are expected and worth reporting. It is on the start screen only, never over a drill, so it never covers
+ * the ball.
+ */
+function betaBanner(): HTMLElement {
+  const bar = h('div', 'beta');
+  bar.setAttribute('role', 'note');
+  bar.append(
+    txt('b', 'beta-tag', 'Early beta'),
+    txt('span', 'beta-t', 'Court Feel is still in really early beta: expect rough edges, and things will change.'),
+  );
+  return bar;
+}
+
 /** key caps with what each does */
 function keyList(keys: readonly KeyHint[], cls = ''): HTMLElement {
   const list = h('div', `keys ${cls}`.trim());
@@ -217,7 +232,7 @@ export class Menu {
 
     // ------------------------------------------------------------ start screen
     this.start = h('div', 'menu');
-    this.start.append(this.buildTopbar());
+    this.start.append(betaBanner(), this.buildTopbar());
     const add = (id: View, el: HTMLElement) => {
       this.views.set(id, el);
       this.start.append(el);

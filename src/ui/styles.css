@@ -90,6 +90,11 @@ body.touchmode .set-row.only-tc { display: grid !important; }
 /* the notch and the home bar (index.html uses viewport-fit=cover) */
 .menu, .sheet { padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
 .menu[data-view='home'] { background: linear-gradient(90deg, rgba(6,8,14,0.96) 0%, rgba(6,8,14,0.9) 46%, rgba(6,8,14,0.3) 78%, rgba(6,8,14,0.05) 100%); }
+/* the early-beta strip above the top bar, on the start screen only */
+.beta { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 30px; padding: 4px 16px;
+  background: rgba(255,210,63,0.1); border-bottom: 1px solid rgba(255,210,63,0.28); font-size: 12px; color: var(--text2); text-align: center; }
+.beta-tag { flex: none; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--gold); color: var(--gold);
+  font-size: 10px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
 .topbar { flex: none; display: flex; align-items: center; gap: 28px; height: 64px; padding: 0 40px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .menu[data-view='home'] .topbar { border-bottom-color: transparent; }
 .brand { min-height: 44px; background: none; border: 0; padding: 0; font-weight: 900; font-style: italic; font-size: 22px; letter-spacing: 0.01em; white-space: nowrap; }
@@ -586,6 +591,7 @@ body.collar .t-hit.sweet { border-color: var(--gold); box-shadow: 0 0 18px rgba(
 /* the menus on a phone held sideways: the same screens, tighter */
 body.touchmode .menu button, body.touchmode .pause button, body.touchmode .sheet button { touch-action: manipulation; }
 @media (max-height: 520px) {
+  .beta { min-height: 24px; padding: 2px 16px; font-size: 11px; }
   .topbar { height: 48px; gap: 12px; padding: 0 16px; }
   .brand { font-size: 16px; }
   .nav-btn { font-size: 13px; padding: 0 10px; gap: 6px; }
