@@ -207,7 +207,11 @@ export class ContactSystem {
     const clickT = opts.aiErr !== undefined ? idealT - lead + opts.aiErr : t;
     act.err = clickT + lead - idealT;
     act.contactT = clamp(tStar, t + TIMING.swingMin, t + TIMING.swingMax);
-    if (opts.aiErr !== undefined) act.contactT = clamp(tStar + opts.aiErr * 0.5, t + TIMING.swingMin, t + TIMING.swingMax + 0.1);
+    // (an AI hitter's mistimed swing still meets the ball: see CONTACT.aiSwingShift)
+    if (opts.aiErr !== undefined) {
+      const shift = clamp(opts.aiErr * 0.5, -CONTACT.aiSwingShift, CONTACT.aiSwingShift);
+      act.contactT = clamp(tStar + shift, t + TIMING.swingMin, t + TIMING.swingMax + 0.1);
+    }
     // provisional contact point for the animator (refined every step)
     h.ball.ensurePrediction(h.env, t).posAt(act.contactT, this._b);
     act.contactPoint.set(this._b.x, this._b.y, this._b.z);
@@ -503,6 +507,9 @@ export class ContactSystem {
     const hands = act.form === 'hands';
     // a ball off the other team's block (our attack came back): our cover is digging it
     const covered = ball.lastTouch?.kind === 'block' && ball.lastTouch.side !== a.side;
+    // (a ball that came back softly off their hands, recycled, is the easy one; anything else off
+    // their block is a stuff kept off the floor)
+    const stuffed = covered && !ball.lastTouch?.recycle;
     const P = hands ? this.handsPoint(a, this._p) : this.platformPoint(a, this._p);
     const assist = h.aimAssist(a);
     // hard-driven balls: a little extra reach (a lunge), the same for everyone
@@ -598,20 +605,25 @@ export class ContactSystem {
     // a ball off their block is a reaction touch: the share of it the coverer controls goes to the
     // setter like any pass, the rest pops up near them, on from the way the ball came
     let coverUp = 0;
-    const control = covered ? this.coverControl(incoming, grade, dBest / r, moving, form) : 1;
+    const K = stuffed ? CONTACT.covered.stuff : CONTACT.covered;
+    let control = covered ? this.coverControl(incoming, grade, dBest / r, moving, form, K.best) : 1;
+    // (a stuff kept up is mostly luck: where on the arms it landed)
+    if (stuffed) control *= lerp(CONTACT.covered.stuff.luck[0], CONTACT.covered.stuff.luck[1], h.rand());
     if (covered) {
       const C = CONTACT.covered;
       const bv = ball.vel;
       const hv = Math.hypot(bv.x, bv.z);
       const hx = hv > 0.5 ? bv.x / hv : 0;
       const hz = hv > 0.5 ? bv.z / hv : a.side;
-      const turn = (h.rand() * 2 - 1) * C.turn;
-      const pop = lerp(C.pop[0], C.pop[1], h.rand());
+      const turn = (h.rand() * 2 - 1) * K.turn;
+      const pop = lerp(K.pop[0], K.pop[1], h.rand());
       const wx = bp.x + (hx * Math.cos(turn) - hz * Math.sin(turn)) * pop;
       const wz = bp.z + (hx * Math.sin(turn) + hz * Math.cos(turn)) * pop;
       target.x = clamp(lerp(wx, target.x, control), -COURT.halfWidth - C.wide, COURT.halfWidth + C.wide);
       target.z = lerp(wz, target.z, control);
-      coverUp = bp.y + lerp(C.up[0], C.up[1], h.rand());
+      coverUp = bp.y + lerp(K.up[0], K.up[1], h.rand());
+      // (a pass is aimed at the setter's hands; a stuff kept up comes down wherever it comes down)
+      if (stuffed) target.y = lerp(CONTACT.covered.stuff.floor, T.y, control);
     }
     // never pass it over our own end line: keep shanks wild but plausible
     if (grade !== 'Perfect' && grade !== 'Good' && h.rand() < 0.35) {
@@ -652,13 +664,14 @@ export class ContactSystem {
    * How much of a ball off their block the coverer controls (0 to `CONTACT.covered.best`): less the
    * harder it comes, off a platform not set in time, off its edge (`off`: 0 the middle, 1 the rim),
    * with the feet still moving (`moving`: 0-1 of a full run), reaching to the side or diving.
+   * `best`: the most there is to control (a stuff kept up: `CONTACT.covered.stuff.best`).
    */
-  coverControl(incoming: number, grade: Grade, off: number, moving: number, form: PassForm): number {
+  coverControl(incoming: number, grade: Grade, off: number, moving: number, form: PassForm, best = CONTACT.covered.best): number {
     const C = CONTACT.covered;
     const hard = clamp01((incoming - C.easy) / (C.hard - C.easy));
     const timed = grade === 'Perfect' || grade === 'Good' ? 1 : C.late;
     const reach = form === 'side' || form === 'dive' ? C.reach : 1;
-    return C.best * (1 - hard) * timed * (1 - C.edge * clamp01(off)) * (1 - C.moving * clamp01(moving)) * reach;
+    return best * (1 - hard) * timed * (1 - C.edge * clamp01(off)) * (1 - C.moving * clamp01(moving)) * reach;
   }
 
   /** a shanked pass or dig: off the arms sideways and up, still going the way it came, and slower */
@@ -894,7 +907,7 @@ export class ContactSystem {
     ball.hit(out, { x: 0, y: 0, z: 0 }, 0, t);
     // pop the ball out of the hands volume so it doesn't re-collide
     ball.state.p.z = kind === 'stuff' || kind === 'recycle' ? -a.side * (R + 0.02) : ball.state.p.z;
-    ball.lastTouch = { athlete: a, kind: 'block', t, side: a.side };
+    ball.lastTouch = { athlete: a, kind: 'block', t, side: a.side, recycle: kind === 'recycle' };
     a.lastTouchT = t;
     act.resolved = true;
     act.contactT = t;

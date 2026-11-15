@@ -45,6 +45,16 @@ export class HitterBrain implements Brain {
   tempo = false;
   enabled = true;
   lastShot = '';
+  /** a back-row hitter (the pipe): takes off behind the 3 m line, its feet clear of it (`AI.backRow`) */
+  backRow = false;
+
+  /** the set this hitter saw it can't get to (decided once a set) */
+  private outOfReach: unknown = null;
+
+  /** how far from the net this hitter's take-off must stay (0: a front-row hitter, anywhere) */
+  private get behind(): number {
+    return this.backRow ? COURT.attackLine + AI.backRow.clear : 0;
+  }
 
   constructor(
     public athlete: Athlete,
@@ -99,7 +109,7 @@ export class HitterBrain implements Brain {
               : fast
                 ? planToPoint(a, now, contact, ps.t + AI.tempo.flight, face, face)
                 : null;
-            if (plan && plan.error < 0.6) {
+            if (plan && plan.error < AI.approachMiss) {
               this.plan = plan;
               this.tempo = !this.lane.quick;
               this.phase = 'approach';
@@ -109,12 +119,16 @@ export class HitterBrain implements Brain {
             }
           }
         }
-        if (g.ball.active && this.isMySet(g) && a.state === 'ground') {
+        if (g.ball.active && this.isMySet(g) && a.state === 'ground' && this.outOfReach !== lt) {
           const pred = g.ball.ensurePrediction(g.env, now);
           const aim = this.chooseAim(g, pred.land.x);
           const airYaw = yawFromDir(aim.x - this.lane.x, aim.z - this.lane.z);
-          this.plan = planApproach(a, pred, now, face, airYaw);
-          if (this.plan) {
+          const plan = planApproach(a, pred, now, face, airYaw, undefined, this.behind);
+          // a set they can't get to (or one on its way over the net) is not jumped for: nobody goes
+          // up beside a ball they can't touch (the team keeps it in play if it can)
+          if (plan && (plan.error >= AI.approachMiss || plan.contact.z * a.side < 0)) this.outOfReach = lt;
+          else if (plan) {
+            this.plan = plan;
             this.tempo = false;
             this.phase = 'approach';
             this.swung = false;
@@ -299,7 +313,9 @@ export class HitterBrain implements Brain {
     // (playability: now and then the user's block is misread, as if it weren't there)
     const userUp = this.blockers().some((b) => b.isUser && Math.abs(b.pos.z) < 1.4);
     const misread = userUp && g.rng.next() < AI.userBlockMisread;
-    if (from && (sees || g.rng.next() < AI.openShotOut)) {
+    // (from the back row the hitter sees less of the court: it looks for the spot less often)
+    const looks = !this.backRow || g.rng.next() < AI.pipe.open;
+    if (from && looks && (sees || g.rng.next() < AI.openShotOut)) {
       const open = this.openSpot(g, from, tHit, AI.defence.hitReact, misread);
       // the hitter goes for the hardest spot to dig even when it isn't quite open
       if (open && open.margin >= -AI.openShotStretch) {

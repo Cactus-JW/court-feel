@@ -158,6 +158,7 @@ export class TeamPlayer implements Brain {
       this.hitter.blockers = () => team.opponents?.frontRow() ?? [];
       this.hitter.defenders = () => (team.opponents ? [...team.opponents.players.values()] : []);
       this.hitter.inSystem = () => team.setInSystem;
+      this.hitter.backRow = slot === 'OH2';
       if (slot === 'MB' || slot === 'OH1' || slot === 'OPP') this.hitter.passToSetter = (g) => team.passToSetter(g);
     }
     this.blocker =
@@ -332,7 +333,9 @@ export class TeamPlayer implements Brain {
         ok =
           vArr <= AI.overhand.maxSpeed && run <= AI.overhand.maxRun && left > 0 && run / left <= a.stats.approachSpeed * AI.overhand.pace;
       }
-      this.hands = ok && g.rng.next() < AI.overhand.share;
+      // (a free ball over from deep in the court is bumped, never pushed with the fingers)
+      const deep = this.team.touches >= 2 && this.b.z * a.side > AI.freeOver.bumpFrom;
+      this.hands = ok && !deep && g.rng.next() < AI.overhand.share;
     }
     let hands = this.hands;
     let tArr = hands ? pred.descendThrough(a.height + 0.17, now) : -1;
@@ -702,9 +705,11 @@ export class TeamAI {
       const f = fast(a);
       return !!f && f.t - g.simTime >= AI.tempo.minT && f.t - g.simTime <= AI.tempo.maxT;
     };
+    // (a hitter still on the floor after a dive is not up in time for any set: nobody sets them)
+    const down = (a: Athlete) => a.state === 'dive';
     const add = (slot: Slot, lane: PositionId, w: number) => {
       const a = this.players.get(slot);
-      if (a && a !== setter && (!fast(a) || (fastOk(a) && !outOfSystem))) options.push({ slot, a, lane, w });
+      if (a && a !== setter && !down(a) && (!fast(a) || (fastOk(a) && !outOfSystem))) options.push({ slot, a, lane, w });
     };
     // a backup (the setter played the first ball) puts up a high ball to a pin: always out of system
     const backup = setter !== this.players.get('S');
@@ -725,13 +730,15 @@ export class TeamAI {
     if (mb && quick?.onTime) options.push({ slot: 'MB', a: mb, lane: 'MB', w: perfect ? AI.quickWeight.perfect : AI.quickWeight.good });
     // (both pins mid-run on fast sets the setter can't reach: the outside takes a high ball; the
     // opposite when the outside is the one setting it)
-    for (const [slot, lane] of [
-      ['OH1', 'OH'],
-      ['OPP', 'OPP'],
-    ] as const) {
-      const h = this.players.get(slot);
-      if (!options.length && h && h !== setter) options.push({ slot, a: h, lane, w: 1 });
-    }
+    // (one on their feet first; with both pins on the floor, the outside anyway)
+    for (const up of [true, false])
+      for (const [slot, lane] of [
+        ['OH1', 'OH'],
+        ['OPP', 'OPP'],
+      ] as const) {
+        const h = this.players.get(slot);
+        if (!options.length && h && h !== setter && !(up && down(h))) options.push({ slot, a: h, lane, w: 1 });
+      }
     this.setInSystem = !outOfSystem;
     const user = this.user;
     let pick = options[0];
@@ -759,7 +766,7 @@ export class TeamAI {
     // off a bad pass the setter can only put up a high ball
     const apexBoost = outOfSystem ? AI.outOfSystemApex : 0;
     const apexAbove = outOfSystem && call ? Math.max(call.apexAbove, laneFor(pick.lane, s).apexAbove) : lane.apexAbove;
-    // a back-row set off a bad pass stays well behind the 3 m line
+    // a back-row set off a bad pass stays well behind the 3 m line (in front of where its hitter waits)
     const z = outOfSystem && pick.lane === 'L' ? PIPE_HIGH_Z * s : lane.z;
     return { target: { x: lane.x, y, z }, apex: y + apexAbove + apexBoost, hitter: pick.a };
   }
@@ -918,7 +925,7 @@ export class TeamAI {
     const dx = -p.x;
     const dz = cz - p.z;
     const dl = Math.hypot(dx, dz) || 1;
-    const c = Math.min(dl, AI.diveUp.carry * 0.5);
+    const c = Math.min(dl, (AI.diveUp.carry[0] + AI.diveUp.carry[1]) * 0.25);
     return { x: p.x + (dx / dl) * c, z: p.z + (dz / dl) * c };
   }
 
@@ -952,15 +959,38 @@ export class TeamAI {
     return { x: best.x, y: 0.5, z: -s * best.z, apex: best.apex };
   }
 
-  /** a dive keeps the ball alive and no more: a bit up, `AI.diveUp.carry` m toward the middle of our court */
+  /**
+   * A ball that is only kept up goes somewhere towards the middle of our court: `dist` m from where
+   * it was played, up to `turn` rad to either side of the line to the middle, no nearer than
+   * `AI.up.net` m to the net and at most `AI.up.out` m outside the lines.
+   */
+  private keptUp(from: V3, dist: [number, number], turn: number): Spot {
+    const rng = this.g.rng;
+    const s = this.side;
+    const cz = (s * COURT.halfLength) / 2;
+    const dl = Math.hypot(from.x, cz - from.z) || 1;
+    const a = (rng.next() * 2 - 1) * turn;
+    const ux = -from.x / dl;
+    const uz = (cz - from.z) / dl;
+    const d = lerp(dist[0], dist[1], rng.next());
+    const x = from.x + (ux * Math.cos(a) - uz * Math.sin(a)) * d;
+    const z = from.z + (ux * Math.sin(a) + uz * Math.cos(a)) * d;
+    const W = COURT.halfWidth + AI.up.out;
+    return { x: clamp(x, -W, W), z: s * clamp(z * s, AI.up.net, COURT.halfLength + AI.up.out) };
+  }
+
+  /** a dive keeps the ball alive and no more: a bit up, somewhere toward the middle of our court (`AI.diveUp`) */
   diveUpTarget(from: V3): { x: number; y: number; z: number; apex: number } {
     const U = AI.diveUp;
-    const cz = (this.side * COURT.halfLength) / 2;
-    const dx = -from.x;
-    const dz = cz - from.z;
-    const dl = Math.hypot(dx, dz) || 1;
-    const c = Math.min(dl, U.carry);
-    return { x: from.x + (dx / dl) * c, y: 0.9, z: from.z + (dz / dl) * c, apex: from.y + U.apex };
+    const at = this.keptUp(from, U.carry, U.turn);
+    return { x: at.x, y: 0.9, z: at.z, apex: from.y + lerp(U.apex[0], U.apex[1], this.g.rng.next()) };
+  }
+
+  /** a second ball nobody could set is kept up, somewhere a team-mate can get to (`AI.up`): never the same spot twice */
+  upTarget(from: V3): { x: number; y: number; z: number; apex: number } {
+    const U = AI.up;
+    const at = this.keptUp(from, [U.near, U.far], U.turn);
+    return { x: at.x, y: 0.9, z: at.z, apex: Math.max(from.y + 1, lerp(U.apex[0], U.apex[1], this.g.rng.next())) };
   }
 
   step(): void {
@@ -1077,10 +1107,11 @@ export class TeamAI {
       if (theirBall || (lt?.kind === 'block' && lt.side !== this.side)) {
         // the other team touched it last: defend, receive if it is coming
         form = lt?.kind === 'serve' ? 'receive' : 'defense';
-        receive(lt?.kind === 'serve', null);
-        if (lt?.kind === 'serve') this.serveTransition(lt, setJob);
         // a free ball over (not an attack, not a serve, not a block): an easy first ball
         const free = lt && FREE_KINDS.has(lt.kind);
+        // (never the setter's: it is the one ball a team has time to pass well, and the setter sets it)
+        receive(lt?.kind === 'serve', free ? (this.players.get('S') ?? null) : null);
+        if (lt?.kind === 'serve') this.serveTransition(lt, setJob);
         if (free && comingToUs && tDown > 0) this.earlyTransition(lt, tDown, p, setJob);
         // their second ball was no set: their third can only be a free ball, and we get ready for it
         else if (free && this.theirTouches === 2 && lt.kind !== 'set' && !onOurSide) this.freeBallDefence(lt, setJob);

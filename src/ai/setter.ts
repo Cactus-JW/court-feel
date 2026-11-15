@@ -129,7 +129,8 @@ export class SetterBrain implements Brain {
       t.x += g.rng.gauss() * M.x * miss;
       // (never over the net)
       t.z = a.side * Math.max(0.4, a.side * t.z + g.rng.gauss() * M.z * miss);
-      apex += g.rng.gauss() * M.apex * miss;
+      // (however rough, it is still a high ball: the hitter has time to get to it)
+      apex = Math.max(t.y + AI.backupSet.minApex, apex + g.rng.gauss() * M.apex * miss);
     }
     const out = { x: 0, y: 0, z: 0 };
     const from = { x: bp.x, y: bp.y, z: bp.z };

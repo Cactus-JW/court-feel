@@ -96,7 +96,7 @@ Real frames from the game: no paint-overs, no staged cameras.
     </td>
     <td width="50%" valign="top">
       <img src="docs/screenshots/spike-drill-pipe.jpg" alt="Spike Drill from the side: the libero in the air in front of the 3 m line on a pipe, the setter at the net">
-      <b>The pipe.</b> In system it's met 2 m off the net: take off behind the 3 m line and broad-jump in.
+      <b>The pipe.</b> In system it's met a little over 2 m off the net: take off behind the 3 m line, feet clear of it, and broad-jump in.
     </td>
   </tr>
   <tr>
@@ -354,18 +354,25 @@ screen show them. Only your player uses them; AI players keep the defaults.
    only as good as the ball lets it be (the less time, the further from the
    setter's spot and the longer the run under it, most of all a run away from
    the net, the more it can be wide, tight or short), and only one barely
-   reached is just bumped up high (a set to you is always clean). A
-   second ball nobody gets under goes
-   up high to the 3 m line, and the third goes over from there as a free ball
-   (the AI's deep to a corner or short over the net, wherever you aren't). A
+   reached is just bumped up high (a set to you is always clean; however
+   rough, a backup's set is still a high ball, never a line drive over the
+   net). A second ball nobody gets under is just kept up by an AI player:
+   somewhere towards the middle of the court, a metre away or five, low or
+   high, never the same place twice (yours goes up high behind the 3 m line).
+   The third goes over from wherever that is as a free ball (the AI's deep to
+   a corner or short over the net, wherever you aren't; from more than 6 m
+   off the net it is always bumped, never played overhand). The setter never
+   takes their free ball: someone else passes it and the setter sets. A
    team that sees the other side's second ball bumped up instead of set calls
    the free ball before it is sent: the setter runs to the net, the front row
    drops off it to approach, the libero and the back-row outside split the
    court behind them, and the libero takes most free balls. A ball off their
    block dug by your cover (yours too) is a reaction touch, no two the same:
-   a slow one off the hands goes most of the way to the setter (in system
-   about half the time), a stuff that is kept up just pops up somewhere near
-   the coverer. An AI hitter who is under the ball never sends a light ball
+   a slow one off the hands (a recycled ball) goes most of the way to the
+   setter (in system about half the time); a stuff that is kept up is mostly
+   luck: it comes off the arms in any direction, barely off the floor and
+   fast or up high beside the coverer, and is rarely a pass anyone can set.
+   A dive takes a second and a half to get up from. An AI hitter who is under the ball never sends a light ball
    sailing out: it tips it, rolls it to the open court or pushes it off the
    block's outside hand, or it swings through it hard. A
    pass of ours going over the net is read as an overpass: no set,
@@ -377,7 +384,12 @@ screen show them. Only your player uses them; AI players keep the defaults.
    Spike Drill: press before the setter touches the ball; the call sticks
    until you change it (1 is your position's default). Fast calls (go, fast
    back) need you running as the setter touches the ball; a quick goes to
-   where you jump.
+   where you jump. The pipe is hit from behind the 3 m line with the feet
+   clear of it, and its hitter does not always go for the same open corner.
+   A setter never sets a hitter who is still on the floor after a dive, a
+   hitter who can't get to a set doesn't jump beside it, and an AI hitter's
+   mistimed swing still meets the ball (it goes long or into the net; it is
+   not swung through thin air).
 
    **The setter calls the pass.** About 0.2 s after every pass or dig your
    setter reads where they will take it and calls it, in a bubble over their
@@ -465,10 +477,10 @@ screen show them. Only your player uses them; AI players keep the defaults.
    roll it over. Kills off a good pass are about one in two, quicks two in three.
 
    **When the setter digs.** If your setter plays the first ball, he digs it high
-   to the middle of the court, just behind the 3 m line, and goes back to defend.
+   to the middle of the court, behind the 3 m line, and goes back to defend.
    The libero sets the second ball, and it is always out of system (**HIGH!**, from
    the libero): a high ball to a pin, never a quick or a fast set. Like a real
-   libero, they hand-set only from behind the 3 m line and bump-set in front of
+   libero, they hand-set only from behind the 3 m line, feet clear of it, and bump-set in front of
    it. When you are the libero, that set is yours ("Your set!"): RMB, look at a
    hitter.
 
@@ -626,10 +638,10 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 |---|---|
 | `TIMING` | Perfect/Good windows, swing time and stretch, tap threshold, wind-up time to full charge (`chargeFull`), pass/set/dig lead times, block height thresholds, input buffer |
 | `TOUCH` | Touch controls: stick radius and dead zone, run threshold (with hysteresis), aim scale and button dead zone, air-is-HIT, roll-to-HIT, block-jumps |
-| `CONTACT` | Reach radii, spike/tip/serve speeds and spin, power at minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`), a hit off the outer edge of the hands is tooled (`toolEdge`, `toolEdgeP`), a jump serve met early loses its topspin (`serveEarlySpin`), the user's spike tooled more often (`userToolEdge`, `userToolEdgeP`), the side dig, the dive and the overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`), a soft ball recycled off a well-formed block (`recycleSpeed`, `recycleP`, `recyclePLate`) and the AI hitter's push into the hands (`pushSpeed`, `pushDrop`), how a ball off their block comes off the cover's arms (`covered`: how much of it the coverer controls, by the ball's speed, the platform's timing, its edge, moving feet and reaching; the rest pops up near them), the AI's serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape) |
+| `CONTACT` | A stuff kept up comes off the arms anywhere (`covered.stuff`) while a recycled ball keeps its shape; an AI hitter's mistimed swing still meets the ball (`aiSwingShift`); Reach radii, spike/tip/serve speeds and spin, power at minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`), a hit off the outer edge of the hands is tooled (`toolEdge`, `toolEdgeP`), a jump serve met early loses its topspin (`serveEarlySpin`), the user's spike tooled more often (`userToolEdge`, `userToolEdgeP`), the side dig, the dive and the overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`), a soft ball recycled off a well-formed block (`recycleSpeed`, `recycleP`, `recyclePLate`) and the AI hitter's push into the hands (`pushSpeed`, `pushDrop`), how a ball off their block comes off the cover's arms (`covered`: how much of it the coverer controls, by the ball's speed, the platform's timing, its edge, moving feet and reaching; the rest pops up near them), the AI's serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape) |
 | `ASSIST` | Default aim assist, air magnet strength, reach bonus, slow-mo assist |
 | `TUTORIAL` | The first-run lesson: its speeds (together, slow motion), how early cues show, how long the coach's lines stay, tries per rep |
-| `PLAYER` | Acceleration/deceleration, plant carry, jump weighting (approach vs load), apex hang, landing recovery, air turning, where team-mates at the net meet shoulder to shoulder (`shoulder`), the dive (`diveSpeed`, `diveDecel`, `diveArm`, `diveDown`, `diveTime`) |
+| `PLAYER` | Acceleration/deceleration, plant carry, jump weighting (approach vs load), apex hang, landing recovery, a dive and how long getting up from it takes (`diveTime`, `diveGetUp`), air turning, where team-mates at the net meet shoulder to shoulder (`shoulder`), the dive (`diveSpeed`, `diveDecel`, `diveArm`, `diveDown`, `diveTime`) |
 | `POSITIONS` | Per-position height, jump, speeds, power, ball control |
 | `BODY` | Slider ranges for the custom height, vert and spike power (Athlete) |
 | `BALL` | Drag, Magnus scale, restitution and friction for floor/tape/antenna; the soft net (`netGive`, `netStiffness`, `netDampingRatio`, `netReturn`, `netRestitution`, `netGrip`) |
@@ -639,7 +651,7 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 | `ARENA` | The hall: floor mirror (size, strength, blur), the stands (`bowl`: tiers, rows, seats, how brightly the crowd is lit), how the net mesh goes in with a ball that is in it and settles after, lights, the final grade |
 | `VENUES` | The five venues: floor colours and how much the floor mirrors, the sky, the lights, haze, grade, the athletes' rim light, the crowd's light and sound, the boards, and whether the sky is open (`openSky`: no ceiling) |
 | `BALL_LOOK` | How deep the ball's seams look and how much it glows by itself |
-| `AI` | Reaction time and skill of hitters, blockers, defenders, setter accuracy; the Mini Rally middle blocker (`middle`: its reaction and read of the set, how often it commits on the quick or cheats to a pin, how close it closes on the pin blocker, how late it still jumps and how far it reaches sideways); how much room team-mates give each other (`giveWay`) and when the defence split-steps (`splitStep`); who the setter sets (`setWeight`) and how often the pipe (`pipe`); an overpass (`overpass`), an AI hitter misreading the user's block (`userBlockMisread`), who takes a ball (`pick`: first there takes it, the seam goes to the libero or you, the setter only when nobody else is close, a ball off a block or a second ball the libero gets to is the libero's, and so is their free ball when it gets there comfortably: `liberoFree`; no HELP call on a ball that is down `dive` s before anyone arrives); a block only from the net (`blockNet`), what players without the ball do in each of the ten situations (`sit`: the back row moving along the net with the ball, pin blockers fronting their hitters, the serve-receive transition and back-up, following the pass, waiting deeper out of system, closing on a scramble, each player's own offset for the rally), arriving on the hitter's contact instead of early (`pace`), turning to run a ball down (`chase`); where an AI free ball over goes (`freeOver`: a deep corner or short, wherever they aren't); perimeter defence read spots and reaction times (`defence`), early transition and the front row's transition off the net after a block (`transition`, `approachOff`: no quick from the net) and covering our hitter in the real 3-2 spots (`cover`: when, the middle at the net, the setter on the 3 m line, the back row behind and deep, how fast a coverer reads a ball off the block); when the setter calls the pass (`setterRead`), how far off the net is out of system (`outOfSystem`) and how much higher an out-of-system set goes (`outOfSystemApex`); the AI's serves (`serve`: jump share, run-up, toss, error, where they aim); the attack: swing timing error (`attackErr`), the open spot (`openShot*`, `digReach`, `digTop`, `blockReachBand`), where a quick goes (`quickShot`), how often the setter goes to the middle (`quickWeight`), fast sets to the pins (`tempo`), tool, roll and recycle shots (`toolShot`, `rollShot`, `recycleShot`), what a hitter under the ball does instead of a weak swing (`offSpeed`: a wipe off the block, a tip, a roll to the open court, or a hard swing through it); a backup's set off a hard ball (`backupSet`: the libero's or anyone's, how hard it is by time, distance and the run under it, how much it misses, the one barely reached that is bumped instead; never a set to the user), what an AI dive does with the ball (`diveUp`: a bit up, toward the middle) and when a free ball is aimed (`freeOver.aimSpeed`), a setter too late for the hands digging it (`lateSet`); how far out a ball must land before a receiver lets it go (`outJudge`) and how much a hard ball rushes an AI passer's timing (`passPressure`); first balls overhand (`overhand`), dives (`dive`, `stretch`: a last-ditch dive at a ball just past the hands; `anyway`, `anywayFar`: now and then a dive at one out of reach) and a second player running at a ball the first may not reach (`scramble`) |
+| `AI` | How often the pipe's hitter looks for the open spot (`pipe.open`), the 3 m line kept clear by a back-row hitter's take-off and the libero's hand set (`backRow`), where a scramble's ups go (`up`, `diveUp`), no approach for a set out of reach (`approachMiss`), no overhand free ball from deep (`freeOver.bumpFrom`); Reaction time and skill of hitters, blockers, defenders, setter accuracy; the Mini Rally middle blocker (`middle`: its reaction and read of the set, how often it commits on the quick or cheats to a pin, how close it closes on the pin blocker, how late it still jumps and how far it reaches sideways); how much room team-mates give each other (`giveWay`) and when the defence split-steps (`splitStep`); who the setter sets (`setWeight`) and how often the pipe (`pipe`); an overpass (`overpass`), an AI hitter misreading the user's block (`userBlockMisread`), who takes a ball (`pick`: first there takes it, the seam goes to the libero or you, the setter only when nobody else is close, a ball off a block or a second ball the libero gets to is the libero's, and so is their free ball when it gets there comfortably: `liberoFree`; no HELP call on a ball that is down `dive` s before anyone arrives); a block only from the net (`blockNet`), what players without the ball do in each of the ten situations (`sit`: the back row moving along the net with the ball, pin blockers fronting their hitters, the serve-receive transition and back-up, following the pass, waiting deeper out of system, closing on a scramble, each player's own offset for the rally), arriving on the hitter's contact instead of early (`pace`), turning to run a ball down (`chase`); where an AI free ball over goes (`freeOver`: a deep corner or short, wherever they aren't); perimeter defence read spots and reaction times (`defence`), early transition and the front row's transition off the net after a block (`transition`, `approachOff`: no quick from the net) and covering our hitter in the real 3-2 spots (`cover`: when, the middle at the net, the setter on the 3 m line, the back row behind and deep, how fast a coverer reads a ball off the block); when the setter calls the pass (`setterRead`), how far off the net is out of system (`outOfSystem`) and how much higher an out-of-system set goes (`outOfSystemApex`); the AI's serves (`serve`: jump share, run-up, toss, error, where they aim); the attack: swing timing error (`attackErr`), the open spot (`openShot*`, `digReach`, `digTop`, `blockReachBand`), where a quick goes (`quickShot`), how often the setter goes to the middle (`quickWeight`), fast sets to the pins (`tempo`), tool, roll and recycle shots (`toolShot`, `rollShot`, `recycleShot`), what a hitter under the ball does instead of a weak swing (`offSpeed`: a wipe off the block, a tip, a roll to the open court, or a hard swing through it); a backup's set off a hard ball (`backupSet`: the libero's or anyone's, how hard it is by time, distance and the run under it, how much it misses, the one barely reached that is bumped instead; never a set to the user), what an AI dive does with the ball (`diveUp`: a bit up, toward the middle) and when a free ball is aimed (`freeOver.aimSpeed`), a setter too late for the hands digging it (`lateSet`); how far out a ball must land before a receiver lets it go (`outJudge`) and how much a hard ball rushes an AI passer's timing (`passPressure`); first balls overhand (`overhand`), dives (`dive`, `stretch`: a last-ditch dive at a ball just past the hands; `anyway`, `anywayFar`: now and then a dive at one out of reach) and a second player running at a ball the first may not reach (`scramble`) |
 
 Player-facing settings (sensitivity, FOV, invert Y, net height, aim assist,
 slow-mo assist, landing marker, replays, camera shake, volume, hints, the venue, your
@@ -668,7 +680,7 @@ and **e2e** (below). Both should be required checks for merging into `main`.
   the 3 m line, the user libero's set), a backup set scaling with its difficulty, the free ball
   called before it is sent, covers that come off the arms by how hard the ball came, a hitter under
   the ball playing it off-speed, the setter releasing on every ball that isn't its own, your ball
-  or the libero's, the step back for a jump serve, no dive backwards at a serve or a spike, the spike timing grades driven through the real
+  or the libero's, the step back for a jump serve, no dive backwards at a serve or a spike, the setter never taking a free ball, the 3 m line kept clear by the pipe's take-off and the libero's hand set, a stuff kept up coming off the arms anywhere, a scramble's ups never to the same place twice, a free ball over from deep bumped, no set to a hitter on the floor and no jump beside a set out of reach, the spike timing grades driven through the real
   contact system (press, hold, release), hold-to-charge power, the set calls
   (pins inside the antennae, shoot / back quick geometry, a back quick meeting
   the hitter), middles hitting zone 1 / 5, hit-sound power, the impact

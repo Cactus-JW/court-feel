@@ -214,9 +214,9 @@ describe('going for every ball (Mini Rally)', () => {
     setOutside(t);
     t.run(1.1);
     const lane = laneFor('OH', -1);
-    // a roll shot over the block, dropping short into the open court 3.3 m from the cross digger, 1 s after the hit
+    // a roll shot over the block, dropping short into the open court 3.8 m from the cross digger, 1 s after the hit
     const L = t.team.players.get('L')!;
-    const to = { x: L.pos.x + 3.3 * Math.sin(1.2), y: 0.1, z: L.pos.z - 3.3 * Math.cos(1.2) };
+    const to = { x: L.pos.x + 3.8 * Math.sin(1.2), y: 0.1, z: L.pos.z - 3.8 * Math.cos(1.2) };
     t.touch('spike', -1, { x: lane.x, y: 3.25, z: lane.z }, to, 3.4);
     let dived: Athlete | null = null;
     let sentWhenDived: Athlete | null = null;
@@ -224,6 +224,10 @@ describe('going for every ball (Mini Rally)', () => {
     let towardMiddle = false;
     const mid = { x: 0, z: COURT.halfLength / 2 };
     const fromMid = (q: { x: number; z: number }) => Math.hypot(q.x - mid.x, q.z - mid.z);
+    // (a ball at the very edge of their reach: whether it is one they get to or one they throw
+    // themselves at anyway, they go to the floor for it)
+    const anyway = AI.dive.anyway;
+    AI.dive.anyway = 1;
     t.run(1.0, () => {
       const r = t.team.receiver;
       if (!dived) {
@@ -237,6 +241,7 @@ describe('going for every ball (Mini Rally)', () => {
       two = Math.max(two, runners.length);
       if (runners.some((b) => fromMid(b.spot) < fromMid(to) - 0.5)) towardMiddle = true;
     });
+    AI.dive.anyway = anyway;
     expect(dived).not.toBeNull();
     expect(dived).toBe(sentWhenDived);
     expect(two).toBeGreaterThan(0);
@@ -703,15 +708,36 @@ describe('the second ball (Mini Rally)', () => {
     expect(t.team.backupDifficulty(t.team.players.get('OH1')!, 1.5, at(-3.5, 3.5))).toBeGreaterThanOrEqual(B.otherBase);
   });
 
-  it('a second ball nobody could set goes up high to the 3 m line, not to the net, for a free ball over from there', () => {
+  it('a second ball nobody could set is just kept up: somewhere in our court off the net, never the same place or the same height twice; yours goes up high behind the 3 m line', () => {
     const t = homeTeam();
-    const you = t.team.players.get('OH2')!;
+    const mate = t.team.players.get('OH2')!;
     t.team.touches = 1;
-    const T = MiniRally.prototype.passTarget.call({ home: t.team, away: t.team, g: t.g }, you);
-    expect(T.z).toBeGreaterThan(3);
-    expect(T.z).toBeLessThan(4);
-    expect(Math.abs(T.x)).toBeLessThan(1.5);
-    expect(T.apex).toBeGreaterThan(5);
+    // (played from deep in the left corner)
+    t.put({ x: -3.5, y: 0.7, z: 7.5 }, { x: 0, y: -2, z: 0 }, t.team.players.get('L')!, 'dig');
+    const target = () => MiniRally.prototype.passTarget.call({ home: t.team, away: t.team, g: t.g }, mate);
+    const ups = Array.from({ length: 60 }, target);
+    for (const T of ups) {
+      expect(T.z).toBeGreaterThanOrEqual(AI.up.net);
+      expect(T.z).toBeLessThanOrEqual(COURT.halfLength + AI.up.out);
+      expect(Math.abs(T.x)).toBeLessThanOrEqual(W + AI.up.out);
+      const d = Math.hypot(T.x + 3.5, T.z - 7.5);
+      expect(d).toBeLessThanOrEqual(AI.up.far + 1e-6);
+      expect(T.apex).toBeGreaterThanOrEqual(AI.up.apex[0]);
+      expect(T.apex).toBeLessThanOrEqual(AI.up.apex[1]);
+    }
+    const span = (f: (T: (typeof ups)[number]) => number) => Math.max(...ups.map(f)) - Math.min(...ups.map(f));
+    // (it used to be one spot, the middle of the court on the 3 m line, 5.2 m high)
+    expect(span((T) => T.x)).toBeGreaterThan(3);
+    expect(span((T) => T.z)).toBeGreaterThan(3);
+    expect(span((T) => T.apex)).toBeGreaterThan(2);
+    // most of them go towards the middle of the court, where the team is
+    const mid = (q: { x: number; z: number }) => Math.hypot(q.x, q.z - COURT.halfLength / 2);
+    expect(ups.filter((T) => mid(T) < mid({ x: -3.5, z: 7.5 })).length).toBeGreaterThan(40);
+    mate.isUser = true;
+    const yours = target();
+    expect(yours.z).toBeGreaterThan(COURT.attackLine + AI.backRow.clear);
+    expect(yours.z).toBeLessThan(4.5);
+    expect(yours.apex).toBeGreaterThan(5);
   });
 
   it("an AI free ball over goes where they aren't: short over the net when they are deep, to a deep corner when they are up", () => {
@@ -777,27 +803,61 @@ describe('a hard ball is played as well as it can be, and no better (Mini Rally)
     expect(avg(liberoSets(1, false))).toBeGreaterThan(0.6);
   });
 
+  it('however rough, a backup set is still a high ball: it never comes off flat, a line drive over the net', () => {
+    const t = homeTeam();
+    const L = t.team.players.get('L')!;
+    const hitter = t.team.players.get('OH1')!;
+    const sb = new SetterBrain(L, { x: 0, z: 4 }, Math.PI / 2);
+    sb.sloppy = 1;
+    const lane = laneFor('OH', 1);
+    const target = { x: lane.x, y: 3.25, z: lane.z };
+    sb.call = () => ({ target, apex: target.y + lane.apexAbove, hitter });
+    for (let i = 0; i < 60; i++) {
+      L.place(0, 4);
+      t.put({ x: -0.14, y: L.height + 0.22, z: 4 }, { x: 0, y: -2, z: 0 }, t.team.players.get('OH2')!);
+      sb.step(DT, t.g as unknown as Game);
+      const b = makeBall();
+      Object.assign(b.p, t.ball.state.p);
+      Object.assign(b.v, t.ball.state.v);
+      let top = b.p.y;
+      for (let k = 0; k < 2 * SIM.hz && b.v.y > 0; k++) {
+        stepBall(b, DT, t.g.env, []);
+        top = Math.max(top, b.p.y);
+      }
+      // (the setter's own apex wobble on top: a few centimetres)
+      expect(top).toBeGreaterThan(target.y + AI.backupSet.minApex - 0.25);
+    }
+  });
+
   it('a set to the user is always clean, however hard the ball was', () => {
     const toYou = liberoSets(1, true);
     expect(toYou).toEqual(liberoSets(0, true));
     expect(avg(toYou)).toBeLessThan(0.2);
   });
 
-  it('an AI dive keeps the ball alive and no more: it pops up a couple of metres toward the middle, not to the setter; your own dive still passes to the setter', () => {
+  it('an AI dive keeps the ball alive and no more: it pops up somewhere toward the middle, never the same place twice, not to the setter; your own dive still passes to the setter', () => {
     const t = homeTeam();
     const L = t.team.players.get('L')!;
     const at = { x: 4, y: 0.35, z: 8 };
     t.put(at, { x: 2, y: -4, z: 3 }, t.theirs, 'spike', -1);
     L.state = 'dive';
     const target = () => MiniRally.prototype.passTarget.call({ home: t.team, away: t.team, g: t.g }, L);
-    const T = target();
+    const ups = Array.from({ length: 40 }, target);
     const fromMid = (q: { x: number; z: number }) => Math.hypot(q.x, q.z - COURT.halfLength / 2);
-    expect(Math.hypot(T.x - at.x, T.z - at.z)).toBeCloseTo(AI.diveUp.carry, 5);
-    expect(fromMid(T)).toBeCloseTo(fromMid(at) - AI.diveUp.carry, 5);
-    expect(T.apex).toBeCloseTo(at.y + AI.diveUp.apex, 5);
+    const U = AI.diveUp;
+    for (const q of ups) {
+      const d = Math.hypot(q.x - at.x, q.z - at.z);
+      expect(d).toBeGreaterThanOrEqual(U.carry[0] - 1e-6);
+      expect(d).toBeLessThanOrEqual(U.carry[1] + 1e-6);
+      expect(fromMid(q)).toBeLessThan(fromMid(at));
+      expect(q.apex).toBeGreaterThanOrEqual(at.y + U.apex[0]);
+      expect(q.apex).toBeLessThanOrEqual(at.y + U.apex[1]);
+    }
+    expect(Math.max(...ups.map((q) => q.x)) - Math.min(...ups.map((q) => q.x))).toBeGreaterThan(1.5);
+    expect(Math.max(...ups.map((q) => q.apex)) - Math.min(...ups.map((q) => q.apex))).toBeGreaterThan(1);
     L.isUser = true;
     const yours = target();
-    expect(yours.apex).toBeGreaterThan(T.apex + 1);
+    expect(yours.apex).toBeGreaterThan(at.y + U.apex[1] + 0.5);
     expect(Math.abs(yours.z)).toBeLessThan(2.5);
   });
 
@@ -904,6 +964,58 @@ describe('early transition (Mini Rally)', () => {
     q.run(0.1);
     expect(q.brain('L').job).not.toBe('receive');
     expect(q.brain('OPP').job).toBe('receive');
+  });
+
+  it('the setter never takes their free ball: one dropping at its feet is passed by the next closest, and the setter sets it', () => {
+    for (const at of [
+      { x: 2.8, z: 6.2 },
+      { x: 3.6, z: 7.6 },
+      { x: 1.9, z: 5.2 },
+    ]) {
+      const t = homeTeam();
+      const S = t.team.players.get('S')!;
+      // (the setter is in right back in defence: a free ball right onto it, and around it)
+      t.touch('pass', -1, { x: 0, y: 1.0, z: -5 }, { x: at.x, y: 0.8, z: at.z }, 6.5);
+      t.run(0.6);
+      expect(t.team.receiver, `${at.x}, ${at.z}`).not.toBeNull();
+      expect(t.team.receiver).not.toBe(S);
+      expect(t.brain('S').job).not.toBe('receive');
+      // it is on its way to the net to set
+      expect(t.brain('S').spot).toEqual(t.team.formSpot('offense', 'S'));
+    }
+    // (their attack at the setter is still the setter's to dig)
+    const h = homeTeam();
+    const S = h.team.players.get('S')!;
+    h.spike({ x: -4, y: 3.25, z: -0.9 }, { x: S.pos.x, y: 0.1, z: S.pos.z }, 20);
+    h.run(0.3);
+    expect(h.team.receiver).toBe(S);
+  });
+
+  it('a free ball over from more than 6 m off the net is bumped, never played overhand; nearer the net it can be', () => {
+    const forms = (z: number) => {
+      const seen = new Set<string>();
+      for (let seed = 1; seed <= 12; seed++) {
+        const t = homeTeam();
+        t.g.rng = new Rng(seed);
+        const L = t.team.players.get('L')!;
+        const mate = t.team.players.get('OH2')!;
+        L.place(0, z, 0);
+        // our second ball, kept up high: it comes down slowly right onto the libero
+        t.team.touches = 2;
+        t.touch('pass', 1, { x: 2, y: 1.0, z: z - 2 }, { x: 0, y: 1.0, z: z - 0.1 }, 5.5, mate);
+        const b = t.brain('L');
+        t.run(1.6, () => {
+          b.job = 'free';
+          const act = L.action;
+          if (act?.kind === 'pass') seen.add(act.form);
+        });
+      }
+      return seen;
+    };
+    const deep = forms(AI.freeOver.bumpFrom + 1);
+    expect(deep.has('platform')).toBe(true);
+    expect(deep.has('hands')).toBe(false);
+    expect(forms(AI.freeOver.bumpFrom - 2).has('hands')).toBe(true);
   });
 
   it('on a soft block the passer can get to easily, the setter releases; on a hard hit the setter releases and the front row leaves the net once it reads the hit', () => {
@@ -1337,6 +1449,55 @@ describe('given the ball (Mini Rally)', () => {
     b.job = 'free';
     b.step(DT, t.g as unknown as Game);
     expect(b.hitter!.phase).toBe('ready');
+  });
+});
+
+describe('who the setter sets (Mini Rally)', () => {
+  it('never a hitter still on the floor after a dive: they are not up in time', () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      const t = homeTeam();
+      t.g.rng = new Rng(seed);
+      t.team.place('offense');
+      const S = t.team.players.get('S')!;
+      const oh = t.team.players.get('OH1')!;
+      oh.dive(0);
+      t.put({ x: SETTER_SPOT.x, y: 2.6, z: SETTER_SPOT.z }, { x: 0, y: -1, z: 0 }, t.team.players.get('L')!);
+      expect(t.team.callSet(t.g as unknown as Game, S).hitter, `seed ${seed}`).not.toBe(oh);
+    }
+  });
+});
+
+describe('a set the hitter cannot get to (Mini Rally)', () => {
+  /** our setter's set to the outside, `T` s in the air; does the outside leave the floor for it? */
+  const jumps = (to: V3, apex: number) => {
+    const t = homeTeam();
+    t.team.place('offense');
+    const S = t.team.players.get('S')!;
+    const oh = t.team.players.get('OH1')!;
+    // (in the air the hitter draws the arm back and looks for the ball: nothing to hit in this stand-in)
+    Object.assign(t.g.contact, { ideal: () => null, beginWindup() {} });
+    t.team.touches = 2;
+    t.team.setFor = oh;
+    t.touch('set', 1, { x: S.pos.x, y: 2.6, z: S.pos.z }, to, apex, S);
+    let up = false;
+    t.run(2.2, () => {
+      t.team.setFor = oh;
+      if (oh.state === 'air') up = true;
+    });
+    return up;
+  };
+  const lane = laneFor('OH', 1);
+
+  it('a high ball to the pin is run in for and jumped at', () => {
+    expect(jumps({ x: lane.x, y: 3.2, z: lane.z }, 3.2 + lane.apexAbove)).toBe(true);
+  });
+
+  it('a ball fired flat past the pin before they can get there is not jumped for: nobody goes up beside a ball they cannot touch', () => {
+    expect(jumps({ x: lane.x, y: 3.2, z: lane.z }, 3.25)).toBe(false);
+  });
+
+  it('nor is a set on its way over the net', () => {
+    expect(jumps({ x: lane.x, y: 3.2, z: -1.2 }, 3.2 + lane.apexAbove)).toBe(false);
   });
 });
 

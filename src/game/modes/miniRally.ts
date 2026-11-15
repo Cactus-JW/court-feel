@@ -193,7 +193,9 @@ export class MiniRally extends Mode {
     if (a.state === 'dive' && !a.isUser) return team.diveUpTarget(this.g.ball.pos);
     // a first ball goes to the setter target (or, played by the setter himself, high to the 3 m line)
     if (team.touches === 0) return team.firstBallTarget(a);
-    // a second ball nobody could set: high to the 3 m line, for a free ball over from there
+    // a second ball nobody could set: an AI player just keeps it up, somewhere a team-mate can get
+    // to (never the same spot twice); yours goes up high behind the 3 m line, as you aimed it
+    if (!a.isUser) return team.upTarget(this.g.ball.pos);
     return { x: BACKUP_TARGET.x * s, y: BACKUP_TARGET.y, z: BACKUP_TARGET.z * s, apex: BACKUP_TARGET.apex };
   }
 
