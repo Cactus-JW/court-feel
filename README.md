@@ -116,7 +116,7 @@ Real frames from the game: no paint-overs, no staged cameras.
       <b>On your phone.</b> A joystick for your feet, drag to aim, hold to jump and hold to swing. The timing windows are the same as on a keyboard.
     </td>
     <td width="50%" valign="top">
-      <img src="docs/screenshots/start-screen.jpg" alt="Start screen, Train: the five drills in a list, the Spike Drill's panel with its own keys, the five positions to play it as, and PLAY; the venue, athlete and settings pills at the top right">
+      <img src="docs/screenshots/start-screen.jpg" alt="Start screen, Train: the BETA tag under the name, the five drills in a list, the Spike Drill's panel with its own keys, the five positions to play it as, and PLAY; the venue, athlete and settings pills at the top right">
       <b>Pick a drill.</b> Each drill shows what it scores, its own keys and the position you play it as.
     </td>
   </tr>

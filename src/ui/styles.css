@@ -168,6 +168,22 @@ body.touchmode .set-row.only-tc { display: grid !important; }
 .menu[data-view='home'] .topbar { border-bottom-color: transparent; }
 .brand { min-height: 44px; background: none; border: 0; padding: 0; font-weight: 900; font-style: italic; font-size: 22px; letter-spacing: 0.01em; white-space: nowrap; }
 .brand b { color: var(--gold); margin-left: 6px; }
+/* the early-beta tag tucked under the name, and the note it opens on a hover, a press or a tap. Under the name, not
+   beside it: the top bar has no width to spare between about 860 and 1030 px, and the tag would push the pills off. */
+.brand-row { flex: none; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+.brand-row .brand { min-height: 0; line-height: 1.1; }
+.beta-pick { position: relative; }
+/* a small chip with a larger hit area around it, so a thumb finds it */
+.beta-tag { position: relative; display: flex; padding: 0; border: 0; background: none; }
+.beta-tag::before { content: ''; position: absolute; inset: -6px -12px; }
+.beta-tag span { padding: 1px 6px; border-radius: 999px; border: 1px solid var(--gold); color: var(--gold);
+  font-size: 9px; line-height: 1.3; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
+.beta-pick.open .beta-tag span { background: rgba(255,210,63,0.16); }
+.beta-tip { position: absolute; top: 26px; left: 0; z-index: 5; width: 260px; padding: 12px 14px; display: none; flex-direction: column; gap: 4px; border-radius: 14px;
+  background: rgba(10,12,20,0.94); border: 1px solid rgba(255,255,255,0.22); box-shadow: 0 14px 40px rgba(0,0,0,0.5); font-size: 13px; line-height: 1.4; color: var(--text2); }
+.beta-tip b { color: var(--gold); font-weight: 800; }
+.beta-pick.open .beta-tip, .beta-tag:focus-visible + .beta-tip { display: flex; }
+@media (hover: hover) { .beta-pick:hover .beta-tip { display: flex; } }
 .nav { display: flex; gap: 4px; }
 .nav-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 44px; min-height: 44px; padding: 0 14px; border-radius: 8px; border: 0; background: none;
   font-size: 14px; font-weight: 600; color: var(--text2); }
@@ -530,7 +546,7 @@ body.touchmode .pd-hitter .chip { min-height: 44px; }
   .pause-side { border-left: 0; border-top: 1px solid rgba(255,255,255,0.1); }
 }
 @media (max-width: 520px) {
-  .brand { display: none; }
+  .brand-row { display: none; }
   .play-btn { padding: 6px 16px; font-size: 17px; letter-spacing: 0.04em; white-space: normal; }
   .sheet-head { gap: 6px; padding: 8px 12px; } .sheet-head .view-t { font-size: 22px; } .sheet-head .ghost-btn { padding: 0 10px; }
   .sheet-head .play-btn { padding: 0 14px; font-size: 15px; }
