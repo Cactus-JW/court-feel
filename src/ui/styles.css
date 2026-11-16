@@ -423,11 +423,12 @@ body.touchmode .set-row.only-tc { display: grid !important; }
 .pd-hitter .chip { min-width: 40px; min-height: 36px; padding: 0 12px; font-size: 13px; }
 .pd-hitter .chip:disabled { opacity: 0.4; border-style: dashed; cursor: not-allowed; }
 body.touchmode .pd-hitter .chip { min-height: 44px; }
-/* four pills in the top bar: Plays goes down to its icon first, then all the names give way to the icons */
-@media (max-width: 1120px) { .pill-plays span { display: none; } }
-@media (max-width: 1000px) { .top-right .pill span { display: none; } }
-/* a phone's top bar has no room for it: Plays is reached from the Setter Drill's and the Mini Rally's panel ("Your plays") */
-@media (max-width: 520px) { .pill-plays { display: none; } }
+/* the Plays pill only where the top bar has room for it beside every word of the longest venue and position
+   (Games arena, Middle Blocker) in a wider font than ours (Arial, as on Linux, needs 1137 px with its word and
+   1095 px with its icon): with its word from 1160 px, its icon from 1120 px. Narrower, the other pills keep their
+   steps and Plays is reached from the Setter Drill's and the Mini Rally's panel ("Your plays") */
+@media (max-width: 1159px) { .pill-plays span { display: none; } }
+@media (max-width: 1119px) { .pill-plays { display: none; } }
 /* not wide enough for three columns: the wheel's places in rows on top, then the court, then the hitters side by side */
 @media (max-width: 1100px) {
   .pd-slots { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; }
