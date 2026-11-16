@@ -309,14 +309,14 @@ export class Menu {
       nav.append(b);
     }
     const right = h('div', 'top-right');
-    const athlete = btn('pill');
+    const athlete = btn('pill athlete-pill');
     athlete.onclick = () => this.openSheet('athlete', athlete);
     this.syncs.push(() => {
       const p = POSITIONS[this.pos];
       athlete.innerHTML = `<b>${p.short}</b><span>${p.name}</span>`;
       athlete.setAttribute('aria-label', `Athlete: ${p.name}`);
     });
-    const set = h('button', 'pill', `${ICONS.settings}<span>Settings</span>`);
+    const set = h('button', 'pill settings-pill', `${ICONS.settings}<span>Settings</span>`);
     set.type = 'button';
     set.setAttribute('aria-label', 'Settings');
     set.onclick = () => this.openSettings(set);

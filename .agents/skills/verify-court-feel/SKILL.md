@@ -63,6 +63,7 @@ Read-only. Run it first, and again whenever a result looks off. It exits 0 when 
 | Command | What it does |
 |---|---|
 | `open [query] [--fresh] [--manual]` | Load the app. `open '?mode=spike&pos=OH'` uses a quick-start link. `--fresh` clears everything the app saved, so it is a first visit: without a link the app opens on its welcome. `--manual` starts on the manual clock. On the real clock a load takes 5 to 20 seconds, and the result's `took` says where the time went. |
+| `resize <width> <height>` | Change the window size in CSS pixels, as a player dragging the window's edge. The layout follows at once, and the size lasts until `stop`. The page is not reloaded. A touch session stays a touch session. |
 | `click <selector>`, `dblclick <selector>` | Real mouse click. Playwright selectors: CSS, `text=`, `role=button[name="Train"]`. |
 | `key <Key>`, `keydown <Key>`, `keyup <Key>` | Real key events. `Enter`, `Escape`, `Space`, `Tab`, `F3`, `Shift`, `ArrowRight`, letters `v`, digits `1`. |
 | `mouse <down\|up> [left\|right]` | Attack (left) and block or set (right) buttons. |
@@ -110,6 +111,7 @@ Stand-ins for what headless Chromium lacks. They are faithful, but name them in 
 
 - `look` sends the relative mouse movement as a DOM `mousemove`. Headless Chromium reports garbage movement while the game holds the pointer, so the helper drops the browser's own `mousemove` events in that state.
 - `esc` releases the pointer the way Chrome does when you press Esc in play, then waits 1.5 seconds, because Chromium will not hand the pointer back sooner than that. A plain `key Escape` does nothing while the game holds the pointer. When the pointer is free (menus, pause, a drill opened by link), `esc` sends the real key.
+- `resize` sets the page's viewport through Playwright, since a headless browser has no window edge to drag. The CSS media queries see the same widths and heights a resized window gives them.
 - `set` writes a slider's value and fires its `input` event. The keyboard path is `click` on the slider, then `key ArrowRight`.
 
 Test hooks. They are not user input. Say so when a proof uses one:
