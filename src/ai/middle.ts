@@ -6,7 +6,7 @@ import type { Game } from '../game/game';
 import { laneFor, SETTER_SPOT } from '../game/plays';
 import type { V3 } from '../physics/ball';
 import { predictJump } from './approach';
-import { decoyFor, greenFools } from './greenBite';
+import { decoyFor, dumpHeld, greenFools } from './greenBite';
 import { moveTo, netYaw, stop, type Brain } from './brain';
 import { BallRead } from './read';
 
@@ -166,7 +166,7 @@ export class MiddleBlocker implements Brain {
   private readSet(g: Game, lt: Touch): void {
     const a = this.athlete;
     const now = g.simTime;
-    if (this.setRead.look(lt, now, g.rng)) {
+    if (this.setRead.look(lt, now, g.rng, dumpHeld(g, lt) ? AI.middle.dumpHold : 0)) {
       this.tc = -1;
       // your green set: it has gone with a hitter you did not set, at once (there was nothing to read);
       // not off a pass out of system to a pin, which it reads and closes on like any set

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { AI, ASSIST, BALL, COURT, SET_LEVEL_IDS, SET_LEVELS, SIM, TIMING, type SetLevel } from '../src/config';
+import { AI, ASSIST, BALL, CONTACT, COURT, SET_LEVEL_IDS, SET_LEVELS, SIM, TIMING, type SetLevel } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
 import { ContactSystem, type ContactEvent, type ContactHost, type SetOption, type SetPreview } from '../src/game/contact';
@@ -17,8 +17,9 @@ import { solveApex } from '../src/physics/solve';
 const DT = 1 / SIM.hz;
 const ENV = { netTop: COURT.netHeightMen };
 
-/** a short front set from the setter's spot, standing, in system */
-const easy: SetShape = { back: false, fast: false, length: 2.5, outOfSystem: false };
+/** a high ball from the setter's spot, standing, in system */
+const easy: SetShape = { window: 1, fast: false, outOfSystem: false };
+const W = CONTACT.setTouch.window;
 const win = (stillT: number, catchErr: number, centreD = 0, shape = easy, level: SetLevel = 'easy') =>
   setWindow(setTouch(stillT, catchErr, centreD, 0.48, shape, level), level);
 
@@ -29,13 +30,13 @@ describe('the set window: your touch and the level set its size', () => {
     expect(gradeRelease(-w.good * 1.01, w).grade).toBe('Early');
     expect(gradeRelease(w.good * 1.01, w).grade).toBe('Late');
   });
-  it('Easy starts forgiving: the best touch gets ±40 ms of game time (±160 ms on screen), good twice that', () => {
+  it('Easy starts forgiving: the best touch on a high ball gets ±60 ms of game time (±240 ms on screen), good twice that', () => {
     const w = win(1, 0);
-    expect(w.green).toBeCloseTo(0.04, 5);
-    expect(w.green / ASSIST.setSlowmoLoad).toBeCloseTo(0.16, 5);
-    expect(w.good).toBeCloseTo(0.08, 5);
-    expect(gradeRelease(0.039, w).grade).toBe('Perfect');
-    expect(gradeRelease(-0.06, w).grade).toBe('Good');
+    expect(w.green).toBeCloseTo(0.06, 5);
+    expect(w.green / ASSIST.setSlowmoLoad).toBeCloseTo(0.24, 5);
+    expect(w.good).toBeCloseTo(0.12, 5);
+    expect(gradeRelease(0.059, w).grade).toBe('Perfect');
+    expect(gradeRelease(-0.09, w).grade).toBe('Good');
   });
   it('holding the ball until the push goes by itself is never a good set, on any level', () => {
     for (const id of SET_LEVEL_IDS) expect(SET_LEVELS[id].green[0] * SET_LEVELS[id].goodMul).toBeLessThan(TIMING.setHoldMax);
@@ -55,8 +56,8 @@ describe('the set window: your touch and the level set its size', () => {
   });
   it('Elite is very hard but never luck: even its smallest green spans a 60 fps frame of game time', () => {
     for (const id of SET_LEVEL_IDS) expect(SET_LEVELS[id].green[1] * 2).toBeGreaterThanOrEqual(ASSIST.setSlowmoLoad / 60);
-    // on screen Elite's best green is about ±36 ms: still a fraction of a real set touch (about 55-75 ms)
-    expect(SET_LEVELS.elite.green[0] / ASSIST.setSlowmoLoad).toBeLessThan(0.04);
+    // on screen Elite's best green is about ±54 ms: still shorter than a real set touch (about 55-75 ms)
+    expect(SET_LEVELS.elite.green[0] / ASSIST.setSlowmoLoad).toBeLessThan(0.055);
   });
   it('a clean catch costs nothing; a catch early or late shrinks the window', () => {
     const clean = SET_LEVELS.easy.catch;
@@ -82,36 +83,53 @@ describe('the set window: your touch and the level set its size', () => {
   it('a ball off to one side of the hands shrinks the window', () => {
     expect(win(1, 0, 0.4).green).toBeLessThan(win(1, 0, 0.1).green);
   });
-  it('from the same touch, a back set and a long set get a smaller window than a short front set', () => {
-    expect(win(1, 0, 0, { ...easy, back: true }).green).toBeLessThan(win(1, 0).green);
-    expect(win(1, 0, 0, { ...easy, length: 6 }).green).toBeLessThan(win(1, 0).green);
+  it('the kind of set sizes the green: a high ball and the 1 get all of it, the faster and flatter the set the less', () => {
+    expect(W.high).toBe(1);
+    expect(W.quick).toBe(1);
+    expect(W.hut).toBeLessThan(W.high);
+    // behind the setter the quick is harder, and harder still to an opposite coming in from the pin
+    expect(W.backQuick).toBeLessThan(W.quick);
+    expect(W.backQuickOpp).toBeLessThan(W.backQuick);
+    // second tempo to a pin, and the middle's quick pushed along the net
+    expect(W.tempo).toBeLessThan(W.hut);
+    expect(W.push).toBeLessThan(W.backQuick);
+    // the inside combination balls are the hardest in system
+    expect(W.inside).toBeLessThan(W.tempo);
+    expect(win(1, 0, 0, { ...easy, window: W.inside }).green).toBeCloseTo(win(1, 0).green * W.inside, 6);
+    expect(setTouch(1, 0, 0, 0.48, { ...easy, window: W.tempo }, 'easy').reasons).toContain('hard set');
+    expect(setTouch(1, 0, 0, 0.48, easy, 'easy').reasons).toEqual([]);
   });
-  it("a fast tempo and a pass off the net shrink it too, and it never goes below the level's worst", () => {
-    expect(win(1, 0, 0, { ...easy, fast: true }).green).toBeLessThan(win(1, 0).green);
+  it('every call says how hard it is: only the high balls and the 1 keep the whole green', () => {
+    const tier = (k: 'OH' | 'MB' | 'OPP' | 'PIPE', short: string) => SETTER_PLAYS[k].find((p) => p.short === short)!.tier;
+    expect(tier('MB', '1')).toBe('quick');
+    expect(tier('MB', 'Back 1')).toBe('backQuick');
+    expect(tier('OPP', 'Back 1')).toBe('backQuickOpp');
+    expect(tier('MB', 'Push')).toBe('push');
+    expect(tier('MB', 'Shoot')).toBe('push');
+    for (const p of [...Object.values(SETTER_PLAYS).flat(), D_PLAY]) {
+      const share = W[p.tier ?? 'high'];
+      if (['High', '1', 'Back', 'Pipe', 'D'].includes(p.short)) expect(share, p.name).toBe(1);
+      else expect(share, p.name).toBeLessThan(1);
+    }
+  });
+  it("a pass off the net shrinks it too, and it never goes below the level's worst", () => {
     expect(win(1, 0, 0, { ...easy, outOfSystem: true }).green).toBeLessThan(win(1, 0).green);
-    const hard: SetShape = { back: true, fast: true, length: 9, outOfSystem: true };
+    const hard: SetShape = { window: W.inside, fast: true, outOfSystem: true };
     for (const id of SET_LEVEL_IDS) expect(win(0, -1, 1, hard, id).green).toBe(SET_LEVELS[id].green[1]);
   });
-  it('a back set is one that goes behind the setter, for either side', () => {
-    const from = { x: 1, y: 2.1, z: 0.8 };
-    expect(setShape(SETTER_SPOT, from, { x: 4, y: 3.3, z: 0.9 }, 1, false).back).toBe(true);
-    expect(setShape(SETTER_SPOT, from, { x: -4, y: 3.3, z: 0.9 }, 1, false).back).toBe(false);
-    const away = { x: -1, y: 2.1, z: -0.8 };
-    expect(setShape({ x: -1.1, z: -0.65 }, away, { x: -4, y: 3.3, z: -0.9 }, -1, false).back).toBe(true);
-  });
   it('a pass the setter takes far from their spot is out of system', () => {
-    const from = { x: 1, y: 2.1, z: 3 };
-    expect(setShape({ x: 1, z: 3 }, from, { x: -4, y: 3.3, z: 0.9 }, 1, false).outOfSystem).toBe(true);
+    expect(setShape({ x: 1, z: 3 }, 1, false).outOfSystem).toBe(true);
+    expect(setShape(SETTER_SPOT, 1, false).outOfSystem).toBe(false);
     expect(AI.outOfSystem).toBeLessThan(3 - SETTER_SPOT.z);
   });
   it('early comes up short, late goes flat and long, and a green has the least spread', () => {
     const w = win(1, 0);
-    const early = setMiss(gradeRelease(-0.1, w));
-    const late = setMiss(gradeRelease(0.1, w));
+    const early = setMiss(gradeRelease(-0.13, w));
+    const late = setMiss(gradeRelease(0.13, w));
     expect(early.shift).toBeLessThan(0);
     expect(late.shift).toBeGreaterThan(0);
     expect(late.apexDrop).toBeGreaterThan(0);
-    expect(setMiss(gradeRelease(0, w)).spread).toBeLessThan(setMiss(gradeRelease(0.06, w)).spread);
+    expect(setMiss(gradeRelease(0, w)).spread).toBeLessThan(setMiss(gradeRelease(0.09, w)).spread);
   });
   it('missing the good band costs the hitter: just past it the set is almost two balls short or long, a good window past it over a metre', () => {
     const w = win(1, 0);
@@ -120,6 +138,23 @@ describe('the set window: your touch and the level set its size', () => {
     expect(setMiss(gradeRelease(w.good * 2.01, w)).shift).toBeGreaterThan(1);
     // and a set at the edge of the good band already spreads ~0.4 m along the net
     expect(setMiss(gradeRelease(w.good * 0.99, w)).spread).toBeGreaterThan(0.35);
+  });
+});
+
+describe('the Setter Drill gives you time to choose, not time to wait', () => {
+  const D = TIMING.setterDrill;
+  it('from the end of a rep to the next pass there are at least two seconds to pick a hitter and their set', () => {
+    expect(D.resultMiss + D.feed).toBeGreaterThanOrEqual(2);
+    expect(D.result + D.feed).toBeGreaterThanOrEqual(2.5);
+  });
+  it('a ball nobody played costs less waiting than a rally: the next pass is on its way within two seconds', () => {
+    expect(D.resultMiss).toBeLessThan(D.result);
+    expect(D.resultMiss + D.feed).toBeLessThanOrEqual(2);
+    expect(D.result + D.feed).toBeLessThan(3);
+  });
+  it('after the play wheel closes the pass still gives you a moment, never the whole wait again', () => {
+    expect(D.settle).toBeGreaterThan(D.wind);
+    expect(D.settle).toBeLessThan(D.feed);
   });
 });
 
@@ -465,6 +500,8 @@ function setRep(o: {
   releaseAt?: number | null;
   tapAt?: number;
   key?: SetPick | null;
+  /** the outside's set is this kind (its share of a high ball's green) instead of a high ball */
+  window?: number;
   /** the setter is front row: the dump is an option (key 'DUMP') */
   dump?: boolean;
   lookAt?: 'OH' | 'OPP';
@@ -477,7 +514,7 @@ function setRep(o: {
   const events: ContactEvent[] = [];
   const rng = new Rng(o.seed ?? 3);
   const options: SetOption[] = [
-    { target: OH_TARGET, apex: OH_TARGET.y + 1.65, hitter: null, label: 'OH High', key: 'OH' },
+    { target: OH_TARGET, apex: OH_TARGET.y + 1.65, hitter: null, label: 'OH High', key: 'OH', window: o.window },
     { target: OPP_TARGET, apex: OPP_TARGET.y + 1.55, hitter: null, label: 'OPP Back', key: 'OPP' },
   ];
   if (o.dump) {
@@ -636,8 +673,9 @@ describe('the timed set (real contact system)', () => {
   });
   it('a late push goes flat and long; an early one comes up short', () => {
     const good = setRep({ key: 'OH' });
-    const late = setRep({ releaseAt: 0.09, key: 'OH' });
-    const early = setRep({ releaseAt: -0.12, key: 'OH' });
+    // (on Normal: Easy's good band reaches almost to where the push goes by itself)
+    const late = setRep({ releaseAt: 0.125, key: 'OH', level: 'normal' });
+    const early = setRep({ releaseAt: -0.14, key: 'OH' });
     expect(late.set.grade).toBe('Late');
     expect(early.set.grade).toBe('Early');
     // along the set (towards -x): long = further out, short = nearer the setter
@@ -667,13 +705,16 @@ describe('the timed set (real contact system)', () => {
     expect(setRep({ releaseAt: err, key: 'OH' }).set.grade).toBe('Perfect');
     expect(setRep({ releaseAt: err, key: 'OH', runFor: 0.02 }).set.grade).toBe('Good');
   });
-  it('the back set is harder: the same release is green to the outside, not behind you', () => {
-    const front = setRep({ key: 'OH' }).result!.window;
-    const back = setRep({ key: 'OPP' }).result!.window;
-    expect(back).toBeLessThan(front);
-    const err = (front + back) / 2;
+  it('a fast set to the pin is harder: the same release is green on the high ball, only good on the go', () => {
+    const high = setRep({ key: 'OH' }).result!.window;
+    const go = setRep({ key: 'OH', window: W.tempo }).result!.window;
+    expect(go).toBeCloseTo(high * W.tempo, 6);
+    const err = (high + go) / 2;
     expect(setRep({ releaseAt: err, key: 'OH' }).set.grade).toBe('Perfect');
-    expect(setRep({ releaseAt: err, key: 'OPP' }).set.grade).toBe('Good');
+    expect(setRep({ releaseAt: err, key: 'OH', window: W.tempo }).set.grade).toBe('Good');
+  });
+  it('a high back set gets the whole green, like the outside high ball', () => {
+    expect(setRep({ key: 'OPP' }).result!.window).toBe(setRep({ key: 'OH' }).result!.window);
   });
   it('every level has the same top of the bar: the same catch and release leave at the same moment', () => {
     const easyRep = setRep({ key: 'OH' });

@@ -521,7 +521,9 @@ export class TouchBot {
       }
       return;
     }
-    const tArr = pred.descendThrough(h, now);
+    // a set: when and where the ball reaches the hands as the player's cues show it (off the floor, or at the top of a jump set)
+    const c = this.kind === 'set' ? g.contact.setCatch(me) : null;
+    const tArr = this.kind === 'set' ? (c ? c.t : -1) : pred.descendThrough(h, now);
     if (tArr > 0) this.tCatch = tArr;
     if (
       this.kind === 'set' &&
@@ -536,7 +538,8 @@ export class TouchBot {
       this.pick++;
     }
     if (tArr < 0) return;
-    pred.posAt(tArr, this.b);
+    if (c) Object.assign(this.b, c.at);
+    else pred.posAt(tArr, this.b);
     const sx = this.b.x - fx * fwd;
     const sz = this.b.z - fz * fwd;
     const dx = sx - me.pos.x;

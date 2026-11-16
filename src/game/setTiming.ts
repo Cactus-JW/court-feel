@@ -1,6 +1,5 @@
 import { AI, CONTACT, SET_LEVELS, TIMING, type SetLevel } from '../config';
 import { clamp01, lerp } from '../core/mathx';
-import type { V3 } from '../physics/ball';
 import type { Grade } from './athlete';
 import { SETTER_SPOT } from './plays';
 
@@ -14,12 +13,10 @@ import { SETTER_SPOT } from './plays';
 
 /** what makes a set hard to put exactly on the spot */
 export interface SetShape {
-  /** behind the setter (towards the right pin for the home side) */
-  back: boolean;
+  /** the kind of set: its share of a high ball's green (CONTACT.setTouch.window) */
+  window: number;
   /** a quick or a second-tempo set (go, 3 ball, fast back, back 2, shoot, back quick) */
   fast: boolean;
-  /** horizontal length of the set (m) */
-  length: number;
   /** the setter took it far from their spot: a pass off the net */
   outOfSystem: boolean;
 }
@@ -55,13 +52,11 @@ export interface SetWindow {
   good: number;
 }
 
-/** the set's shape: from the hands (ball) to the target, for a setter standing at `feet` on `side` */
-export function setShape(feet: { x: number; z: number }, from: V3, target: V3, side: 1 | -1, fast: boolean): SetShape {
+/** the set's shape for a setter standing at `feet` on `side`: the kind of set (`window`, its share of a high ball's green) and where they took the pass */
+export function setShape(feet: { x: number; z: number }, side: 1 | -1, fast: boolean, window = 1): SetShape {
   return {
-    // the home setter faces -x (the outside): a back set goes to larger x
-    back: (target.x - from.x) * side > 0.5,
+    window,
     fast,
-    length: Math.hypot(target.x - from.x, target.z - from.z),
     outOfSystem: Math.hypot(feet.x - SETTER_SPOT.x * side, feet.z - SETTER_SPOT.z * side) > AI.outOfSystem,
   };
 }
@@ -80,30 +75,37 @@ export function catchQuality(err: number, level: SetLevel): number {
 /**
  * The touch: `stillT` how long the feet were still, `catchErr` when you pressed against the ball
  * reaching the hands (s, + = late), `centreD` how far the ball passed from the hands point,
- * `reach` the hands' reach.
+ * `reach` the hands' reach. A jump set (`air`) has its balance in place of still feet: how fast
+ * the body drifts (`drift`, m/s) and how fast it is rising or falling (`vy`, m/s) at the catch.
  */
-export function setTouch(stillT: number, catchErr: number, centreD: number, reach: number, shape: SetShape, level: SetLevel): SetTouch {
+export function setTouch(
+  stillT: number,
+  catchErr: number,
+  centreD: number,
+  reach: number,
+  shape: SetShape,
+  level: SetLevel,
+  air?: { drift: number; vy: number },
+): SetTouch {
   const T = CONTACT.setTouch;
   const reasons: string[] = [];
-  const feet = lerp(T.feetMin, 1, clamp01(stillT / TIMING.setFeetReady));
-  if (feet < CLEAN) reasons.push('on the move');
+  let feet: number;
+  if (air) {
+    const drifting = clamp01((air.drift - TIMING.setStillSpeed) / (T.airDrift - TIMING.setStillSpeed));
+    const offTop = clamp01((Math.abs(air.vy) - T.offTop[0]) / (T.offTop[1] - T.offTop[0]));
+    feet = lerp(1, T.feetMin, Math.max(drifting, offTop));
+    if (feet < CLEAN) reasons.push(drifting >= offTop ? 'drifting' : 'off the top of the jump');
+  } else {
+    feet = lerp(T.feetMin, 1, clamp01(stillT / TIMING.setFeetReady));
+    if (feet < CLEAN) reasons.push('on the move');
+  }
   const caught = catchQuality(catchErr, level);
   if (caught < CLEAN) reasons.push(catchErr < 0 ? 'caught early' : 'caught late');
   const off = clamp01((centreD - CONTACT.setCentreOk) / Math.max(0.01, reach - CONTACT.setCentreOk));
   const centre = 1 - (1 - T.centreMin) * off;
   if (centre < CLEAN) reasons.push('off the hands');
-  let difficulty = 1;
-  if (shape.back) {
-    difficulty *= T.backSet;
-    reasons.push('back set');
-  }
-  if (shape.fast) {
-    difficulty *= T.fastTempo;
-    reasons.push('fast tempo');
-  }
-  const long = Math.max(T.longMin, 1 - T.longPerM * Math.max(0, shape.length - CONTACT.setLongFrom));
-  if (long < CLEAN) reasons.push('long set');
-  difficulty *= long;
+  let difficulty = shape.window;
+  if (difficulty < CLEAN) reasons.push('hard set');
   if (shape.outOfSystem) {
     difficulty *= T.outOfSystem;
     reasons.push('off the net');

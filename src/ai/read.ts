@@ -24,12 +24,12 @@ export class BallRead {
 
   constructor(private p: ReadParams) {}
 
-  /** a touch was made: a new read if it is a new touch (true), else nothing changes */
-  look(touch: unknown, now: number, rng: Rng): boolean {
+  /** a touch was made: a new read if it is a new touch (true), else nothing changes. `held`: the player was held this much (s) longer */
+  look(touch: unknown, now: number, rng: Rng, held = 0): boolean {
     if (touch === this.ref) return false;
     this.ref = touch;
     this.cueT = now;
-    this.at = now + Math.max(0.05, this.p.react + rng.gauss() * this.p.reactSd);
+    this.at = now + Math.max(0.05, this.p.react + rng.gauss() * this.p.reactSd) + held;
     this.ex = rng.gauss() * this.p.err;
     return true;
   }

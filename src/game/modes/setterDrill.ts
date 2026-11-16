@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AI, CONTACT } from '../../config';
+import { AI, CONTACT, TIMING } from '../../config';
 import { yawFromDir } from '../../core/mathx';
 import { solveApex } from '../../physics/solve';
 import { HitterBrain } from '../../ai/hitter';
@@ -65,6 +65,8 @@ export class SetterDrill extends Mode {
   readonly calls = new SetterCalls();
   /** this rep's pass is too far off the net for the fast calls: everything goes up high */
   private outOfSystem = false;
+  /** how long this rep's result stays up (TIMING.setterDrill: shorter after a ball nobody played) */
+  private resultFor = 0;
 
   setup(): void {
     const g = this.g;
@@ -139,9 +141,9 @@ export class SetterDrill extends Mode {
     return opts;
   }
 
-  /** before the pass you can call a play: the wheel opens on your calls */
+  /** until the pass you can call a play (from the moment the last rep ended): the wheel opens on your calls */
   playCalls(): SetterCalls | null {
-    return this.calls.locked || this.phase === 'result' ? null : this.calls;
+    return this.calls.locked ? null : this.calls;
   }
 
   /** the pass is in the air until your set: the ball is yours to set */
@@ -175,7 +177,9 @@ export class SetterDrill extends Mode {
     // the pass is in the air: only what your hands do now
     if (this.phase === 'live' && !this.set) {
       const again = this.outOfSystem ? 'again: their fast set' : 'again: high';
-      return `${kbd('WASD')} to the spot · ${kbd('RMB')} as it reaches your hands, release in the green · ${kbd('1')}-${kbd('4')} who · ${again}${dump}`;
+      // the jump set: your body goes up by itself (Settings: Auto jump set), or it is yours
+      const jump = this.g.settings.autoJumpSet ? '' : ` · ${kbd('Space')} jump set`;
+      return `${kbd('WASD')} to the spot · ${kbd('RMB')} as it reaches your hands, release in the green${jump} · ${kbd('1')}-${kbd('4')} who · ${again}${dump}`;
     }
     return `${kbd('1')}-${kbd('4')} pick a hitter · again: their next set · ${kbd('C')} plays · ${kbd('G')} ${this.calls.frontRow ? 'back' : 'front'} row${dump}`;
   }
@@ -230,21 +234,22 @@ export class SetterDrill extends Mode {
     // before the pass the hitters walk to the start of their call's run
     if (!this.calls.locked) applyCalls(this.hitters, this.calls, false);
     syncRuns(this.hitters, this.calls);
+    const D = TIMING.setterDrill;
     switch (this.phase) {
       case 'intro':
-        if (this.t > 1.2) this.toPhase('feed');
+        if (this.t > D.intro) this.toPhase('feed');
         break;
       case 'feed':
-        // the ball waits while you jog back, and while you call a play
+        // the ball waits while you jog back, and while you call a play: then it comes after a moment to settle
         if (g.userReturning || g.wheelOpen) {
-          this.t = 0;
+          this.t = Math.min(this.t, D.feed - D.settle);
           break;
         }
-        if (!this.tossed && this.t > 0.4) {
+        if (!this.tossed && this.t > D.feed - D.wind) {
           this.tossed = true;
           this.passer.startAction('pass', g.simTime);
         }
-        if (this.tossed && this.t > 0.55) {
+        if (this.tossed && this.t > D.feed) {
           this.passer.endAction();
           // passes vary: sometimes tight, sometimes off the net
           const off = this.reps % 4 === 3 ? 1.6 : 0.6;
@@ -255,6 +260,8 @@ export class SetterDrill extends Mode {
           g.ball.launch(from, v, { x: 2, y: 0, z: 0 }, 0, g.simTime);
           g.ball.lastTouch = { athlete: this.passer, kind: 'pass', t: g.simTime, side: 1 };
           g.ballLive = true;
+          // a pass you never touch is over when it lands, not when it stops rolling
+          g.judge.arm(g.ball);
           this.set = null;
           this.setFor = null;
           this.attacked = false;
@@ -266,10 +273,10 @@ export class SetterDrill extends Mode {
         break;
       case 'live':
         this.defence.step();
-        if (g.ball.state.rest || this.t > 9) this.finish(null);
+        if (g.ball.state.rest || this.t > D.live) this.finish(null);
         break;
       case 'result':
-        if (this.t > 2.2) this.nextRep();
+        if (this.t > this.resultFor) this.nextRep();
         break;
     }
     this.passer.cmd.faceYaw = yawFromDir(SETTER_TARGET.x - this.passer.pos.x, SETTER_TARGET.z - this.passer.pos.z);
@@ -289,8 +296,8 @@ export class SetterDrill extends Mode {
   }
 
   onOutcome(o: Outcome): void {
-    if (this.phase !== 'live') return;
-    if (!this.set || this.attacked || o.side === 1) this.finish(o);
+    // the ball is down: the rep is over, whoever did or did not play it
+    if (this.phase === 'live') this.finish(o);
   }
 
   private finish(o: Outcome | null, dug = false): void {
@@ -299,6 +306,10 @@ export class SetterDrill extends Mode {
     this.toPhase('result');
     g.ballLive = false;
     this.reps++;
+    // a ball nobody played leaves nothing to watch: the next one comes sooner
+    this.resultFor = this.attacked ? TIMING.setterDrill.result : TIMING.setterDrill.resultMiss;
+    // the next ball is yours to call from now: the keys and the wheel open while the result is up
+    this.calls.nextBall(g.settings.keepSetPick);
     let pts = 0;
     let label = 'NO SET';
     let good = false;
@@ -328,7 +339,6 @@ export class SetterDrill extends Mode {
     g.ball.hide();
     this.tossed = false;
     this.outOfSystem = false;
-    this.calls.nextBall(g.settings.keepSetPick);
     for (const [k, h] of this.hitters) {
       h.brain.reset();
       const lane = callLane(this.calls, k, false);

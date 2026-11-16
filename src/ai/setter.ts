@@ -5,6 +5,7 @@ import type { V3 } from '../physics/ball';
 import { solveApex, solveFixedTime } from '../physics/solve';
 import type { Athlete } from '../game/athlete';
 import type { Game } from '../game/game';
+import { AI_TOUCH, autoSetJump, planSetJump, takeoffSpot } from '../game/setJump';
 import { moveTo, stop, type Brain } from './brain';
 
 export interface SetCall {
@@ -33,6 +34,9 @@ export class SetterBrain implements Brain {
   accuracy = AI.setterAccuracy;
   /** how hard this set is for a backup setter (0-1, `AI.backupSet`): it misses by that much more (never a set to the user) */
   sloppy = 0;
+  /** this setter jump-sets a pass in system (the team's setter; a backup setter and the drills' feeders set from the floor) */
+  jumps = false;
+  private spot = { x: 0, z: 0 };
   /** bump-set this ball (forearms) instead of hand-setting it: a libero in the front zone (see handSetAllowed) */
   private bump = false;
   private bumpFor: unknown = null;
@@ -67,6 +71,8 @@ export class SetterBrain implements Brain {
     // the action the last ball was played with (hands, or forearms for a bump set)
     const lastKind = this.bump ? 'pass' : 'set';
     if (!mine) {
+      // (back on the floor after a set jump: the next jump is not a set's)
+      if (a.grounded && a.airIntent === 'set') a.airIntent = 'attack';
       if (a.action?.kind === lastKind && a.action.resolved && g.simTime - a.action.contactT > 0.4) a.endAction();
       // hands that went up for a ball that never came: drop them, they must not block the next play
       else if (a.action?.kind === lastKind && !a.action.resolved && g.simTime - a.action.t0 > 0.8) a.endAction();
@@ -93,8 +99,17 @@ export class SetterBrain implements Brain {
     }
     pred.posAt(tc, this.p);
     // stand so the ball drops onto the hands (or the platform)
-    const sx = this.p.x - fx * reach;
-    const sz = this.p.z - fz * reach;
+    let sx = this.p.x - fx * reach;
+    let sz = this.p.z - fz * reach;
+    // in system the setter goes up for it: the feet go to where the hop takes off from, and the
+    // body jumps when its moment comes (if the hop gets the hands there: setJump.ts)
+    const jump = this.jumps && !this.bump && a.state === 'ground' ? planSetJump(a, pred, g.simTime, AI_TOUCH) : null;
+    if (jump) {
+      const off = takeoffSpot(a, jump, this.spot);
+      sx = off.x;
+      sz = off.z;
+      if (autoSetJump(a, jump, g.simTime)) a.airIntent = 'set';
+    }
     moveTo(a, sx, sz, { face: this.faceYaw, arrive: 0.35, sprintDist: 1.5 });
     const until = tc - g.simTime;
     const kindNow = this.bump ? 'pass' : 'set';

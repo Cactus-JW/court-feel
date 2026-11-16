@@ -10,13 +10,16 @@ const ON = new THREE.Color(0x3ddc84);
  * Where to stand for your set: a floor spot under where the ball comes down through your hands
  * (your feet, not where the ball would land). It fills green once your feet are on it, within
  * the touch's clean-centring distance (CONTACT.setCentreOk). Shown instead of the landing marker
- * while the ball is yours to set. A dark outline keeps it readable on the bright wood.
+ * while the ball is yours to set. A dark outline keeps it readable on the bright wood. A second,
+ * wider ring round it says your body will jump for this one (the jump set).
  */
 export class SetSpot {
   private back: THREE.Mesh;
   private ring: THREE.Mesh;
   private disc: THREE.Mesh;
+  private hop: THREE.Mesh;
   private fade = 0;
+  private hopFade = 0;
 
   constructor(scene: THREE.Scene) {
     const r = FX.setSpot.radius;
@@ -44,15 +47,20 @@ export class SetSpot {
     this.back = flat(new THREE.PlaneGeometry(r * 2.6, r * 2.6), mat(0x05070c, tex), 3);
     this.ring = flat(new THREE.PlaneGeometry(r * 2.4, r * 2.4), mat(OFF, tex), 4);
     this.disc = flat(new THREE.CircleGeometry(CONTACT.setCentreOk + 0.05, 32), mat(OFF, null), 4);
+    const j = r * 2.4 * FX.setSpot.jumpRing;
+    this.hop = flat(new THREE.PlaneGeometry(j, j), mat(OFF, tex), 4);
   }
 
-  /** `spot` your feet's spot (null: hide), `feet` where they are now */
-  update(spot: { x: number; z: number } | null, feet: THREE.Vector3, dt: number): void {
+  /** `spot` your feet's spot (null: hide), `feet` where they are now, `jump` your body will jump for it */
+  update(spot: { x: number; z: number } | null, feet: THREE.Vector3, dt: number, jump = false): void {
     this.fade += ((spot ? 1 : 0) - this.fade) * damp(10, dt);
+    this.hopFade += ((spot && jump ? 1 : 0) - this.hopFade) * damp(10, dt);
     const show = this.fade > 0.02;
     for (const m of [this.back, this.ring, this.disc]) m.visible = show;
+    this.hop.visible = show && this.hopFade > 0.02;
     if (!show) return;
     if (spot) {
+      this.hop.position.set(spot.x, 0.0125, spot.z);
       this.back.position.set(spot.x, 0.011, spot.z);
       this.ring.position.set(spot.x, 0.013, spot.z);
       this.disc.position.set(spot.x, 0.012, spot.z);
@@ -65,10 +73,14 @@ export class SetSpot {
     ringMat.opacity = this.fade;
     (this.back.material as THREE.MeshBasicMaterial).opacity = 0.55 * this.fade;
     discMat.opacity = (on ? 0.55 : 0.2) * this.fade;
+    const hopMat = this.hop.material as THREE.MeshBasicMaterial;
+    hopMat.color.copy(on ? ON : OFF);
+    hopMat.opacity = FX.setSpot.jumpOpacity * this.fade * this.hopFade;
   }
 
   hide(): void {
     this.fade = 0;
-    for (const m of [this.back, this.ring, this.disc]) m.visible = false;
+    this.hopFade = 0;
+    for (const m of [this.back, this.ring, this.disc, this.hop]) m.visible = false;
   }
 }

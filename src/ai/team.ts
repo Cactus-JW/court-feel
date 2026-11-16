@@ -5,6 +5,7 @@ import type { V3 } from '../physics/ball';
 import type { Athlete } from '../game/athlete';
 import type { Touch } from '../game/ballEntity';
 import type { Game } from '../game/game';
+import { AI_TOUCH, planSetJump } from '../game/setJump';
 import {
   attackHeight,
   BACKUP_TARGET,
@@ -112,6 +113,8 @@ export class TeamPlayer implements Brain {
     const setterFace = s === 1 ? Math.PI / 2 : -Math.PI / 2;
     this.setter = new SetterBrain(athlete, { x: SETTER_SPOT.x * s, z: SETTER_SPOT.z * s }, setterFace);
     this.setter.shouldPlay = () => this.job === 'set';
+    // the team's setter jump-sets a pass in system; anyone else setting (the libero backing up) stays on the floor
+    this.setter.jumps = slot === 'S';
     this.setter.call = (g) => team.callSet(g, this.athlete);
     this.setter.onSet = (c) => team.onSet(c.hitter);
     const laneRole: PositionId | null = slot === 'OH1' ? 'OH' : slot === 'MB' ? 'MB' : slot === 'OPP' ? 'OPP' : slot === 'OH2' ? 'L' : null;
@@ -547,7 +550,13 @@ export class TeamAI {
     const setter = this.players.get('S');
     if (!setter || lt.athlete === setter) return null;
     const pred = g.ball.ensurePrediction(g.env, g.simTime);
-    const t = pred.descendThrough(setterTouchY(setter), g.simTime);
+    // a setter going up for it (a jump set) meets the ball higher and sooner
+    const yours = setter.isUser ? g.contact.setCatch(setter) : null;
+    const jump =
+      !setter.isUser && this.brains.get(setter)?.setter.jumps && setter.state === 'ground'
+        ? planSetJump(setter, pred, g.simTime, AI_TOUCH)
+        : null;
+    const t = yours && yours.feetY > 0 ? yours.t : jump ? jump.catchT : pred.descendThrough(setterTouchY(setter), g.simTime);
     if (t < 0) return null;
     pred.posAt(t, this.qp);
     if (Math.hypot(this.qp.x - SETTER_SPOT.x * s, this.qp.z - SETTER_SPOT.z * s) > 1.5) return null;

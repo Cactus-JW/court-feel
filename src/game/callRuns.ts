@@ -92,6 +92,9 @@ export function syncRuns(hitters: CallHitters, calls: SetterCalls): void {
 
 /** where and when `setter` will touch the ball now in flight (null: it never comes down onto their hands) */
 function touchOf(g: Game, setter: Athlete): { t: number; at: { x: number; y: number; z: number } } | null {
+  // a setter going up for it meets the ball higher and sooner
+  const c = g.contact.setCatch(setter);
+  if (c && c.feetY > 0) return { t: c.t, at: { x: c.at.x, y: c.at.y, z: c.at.z } };
   const pred = g.ball.ensurePrediction(g.env, g.simTime);
   const t = pred.descendThrough(setterTouchY(setter), g.simTime);
   if (t < 0) return null;
@@ -169,6 +172,7 @@ export function passToUser(g: Game, setter: Athlete): { t: number; x: number } |
  * them for the quick).
  */
 export function callOptions(g: Game, hitters: CallHitters, calls: SetterCalls, oos: boolean): SetOption[] {
+  const W = CONTACT.setTouch.window;
   const out: SetOption[] = [];
   for (const [k, h] of hitters) {
     const asked = calls.canCall && calls.asksFast(k);
@@ -180,7 +184,7 @@ export function callOptions(g: Game, hitters: CallHitters, calls: SetterCalls, o
     if (isQuick(p) && !high) {
       // a quick is met at the top of the hitter's jump when they are up with your touch
       const q = quickSetFor(h.a, g.simTime, g.ball.pos, h.brain.releaseAt, p.inFront);
-      out.push({ ...q, label, key: k, fast: true });
+      out.push({ ...q, label, key: k, fast: true, window: W[p.tier ?? 'quick'] });
       continue;
     }
     const lane = callLane(calls, k, oos);
@@ -194,6 +198,7 @@ export function callOptions(g: Game, hitters: CallHitters, calls: SetterCalls, o
       label,
       key: k,
       fast: !high && needsGoodPass(p),
+      window: high ? W.high : W[p.tier ?? 'high'],
       outOfSystem: oos && high,
     });
   }

@@ -200,7 +200,7 @@ Settings → Hints, which is on by default.
 | Shift | Approach / sprint |
 | Space | Plant and jump. **Hold** to load a stronger jump, release to take off (auto at 0.3 s) |
 | Left mouse | Attack. **Press and hold** to wind up (the arm draws back and a ring around the crosshair fills: the longer you hold, the harder the hit, full power at ~0.3 s), **release** to swing — timing is graded on the release: Perfect from about 0.12 s to 0.025 s before the ball reaches your hand (a fully drawn arm comes through a touch faster), Good on either side, and the late side is the forgiving one: releasing just as the ball arrives is still Good. A quick **tap** = tip (short) or roll shot (deep). Landing without releasing drops the swing. Also hits your serve. |
-| Right mouse | Block (hands up, they press over the net in the air). When the ball is dropping onto you from your own side it **sets** instead: press as the ball reaches your hands (the catch), hold while the bar beside the ball fills, release in the green (the push). One press per ball. See "The timed set" below. |
+| Right mouse | Block (hands up, they press over the net in the air). When the ball is dropping onto you from your own side it **sets** instead: press as the ball reaches your hands (the catch), hold while the bar beside the ball fills, release in the green (the push). One press per ball. Off a pass in system your body jumps for it by itself (the jump set; Settings: **Auto jump set**). See "The timed set" below. |
 | E | Bump / pass / dig (press early so the platform is ready; hold it) |
 | Q | Serve toss (Free Play, feed 5 = serve practice), then hold and release Left mouse to hit — standing = float serve, jump = topspin serve |
 | V | Toggle first / third person instantly, any time (even mid-rally) |
@@ -232,7 +232,7 @@ Hold the phone sideways.
 | Right thumb, drag anywhere | Look / aim, exactly like the mouse (Settings → Touch aim sensitivity). |
 | **JUMP** | Hold to load, release to take off (auto at 0.3 s). Roll the thumb from JUMP onto HIT without lifting: you take off and the wind-up starts. |
 | **HIT** | Hold to wind up (the ring around your thumb fills), release to swing, tap = tip. Drag while holding to aim. While you are loading or in the air, **the whole right half of the screen is HIT**, so the thumb does not have to find the button after the jump. |
-| **BLOCK** | Hands up and load a jump; release to take off. The hands stay up until you land. When the ball is dropping onto you from your side the button reads **SET** and sets instead (no jump): press as the ball reaches your hands, release in the green. |
+| **BLOCK** | Hands up and load a jump; release to take off. The hands stay up until you land. When the ball is dropping onto you from your side the button reads **SET** and sets instead (it loads no jump: off a pass in system your body goes up by itself, the jump set): press as the ball reaches your hands, release in the green. |
 | **PASS** | Hold: platform ready. |
 | **TOSS** | Serve toss (Free Play). |
 | Top right | Pause, camera toggle, reset rep, and REPLAY when your last attempt can be watched again. Top left: set calls (Spike Drill, Mini Rally), SET TO chips when you set (tap a hitter to pick, again for their next set; PLAY opens the play wheel, then tap a play; Setter Drill: ROW for the front row, DUMP; Mini Rally: HELP), the opposing block toggle (Spike Drill) or feed types (Free Play). |
@@ -479,7 +479,8 @@ Setting works like a jump shot in NBA 2K, with one press per ball:
    is your feet, up is where you look, the ring is the spot: walk to the ring
    until it sits on your feet and turns green), and the bar stands beside the
    crosshair instead of beside the ball. Get near the spot and aim assist takes
-   the last steps for you (see Assist below).
+   the last steps for you (see Assist below). A second ring round the spot
+   means your body will jump for this one (the jump set, below).
 2. **The catch.** Press right mouse (SET on touch) as the ball reaches your
    hands. A ring around the ball closes onto it and reaches its green band at
    that moment; it is amber until you press. A press too early or too late
@@ -494,6 +495,32 @@ Setting works like a jump shot in NBA 2K, with one press per ball:
    you missed in orange, and the arc fades as the ball flies: a set that
    missed is seen leaving it. A green set has a small clear note; an early
    or late one sounds like the slap it was.
+
+**The jump set.** Off a pass in system a setter jumps to set: the ball is met
+at the top of a small jump, about 0.35 m higher and sooner than off the floor,
+so it has less far to go (measured in the Setter Drill, the same passes: the
+ball is at the hitter about 0.12 s sooner) and their block has that much less
+time. With **Auto jump set** on (Settings, on by default) your body times the
+jump for you: it plants about 0.3 s before the ball arrives, so the top of the
+jump is in the middle of the touch, and the catch and the release stay yours.
+It is a hop, well under a block jump. Still walking when it is time to go, you
+take off from a little short of the spot and the run carries you onto the
+ball (the steps aim assist takes for you go to that take-off point); a hard
+drift through the touch costs green, as moving feet do on the floor
+("drifting"). Your body stays down when the hop would not get the hands to the
+ball (more than 0.35 m off, or flying through it), when the pass is out of
+system (more than 1.6 m from the setter's spot: that ball is set from the
+floor, with the legs under it), or when there is no time left to get up. Turn
+the setting off and the jump is yours (Space): the ring and the bar follow the
+jump you took, a ball met on the way up or down costs green ("off the top of
+the jump"), and since you meet the ball earlier on its way down you stand a
+little towards the pass.
+
+AI setters jump set too, in system (a libero backing up the setter stays on the
+floor). And a jump set makes you an attacker: front row, with the dump on, their
+middle has to honour you until the ball leaves your hands, so it reads that set
+0.05 s later than one off the floor (`AI.middle.dumpHold`; a starting value). A
+set from the floor, or from the back row, holds nobody.
 
 Inside the **green** it is a perfect set, and a point. It goes exactly to your
 hitter at the called tempo, so the block gets nothing early and their middle
@@ -513,19 +540,31 @@ miss in their own way (early comes up short, late goes flat and long, by up to
 very rarely score.
 
 How big the green is depends on your touch, the way a coach grades a setter:
-your **feet** stopped on the spot (about 0.3 s before the ball arrives), a
+your **feet** stopped on the spot (about 0.3 s before the ball arrives; in a jump set, a straight jump met at its top), a
 clean **catch**, the ball **centred** on your hands, and how **hard** the set is
-(a back set, a long set, a fast tempo, a pass off the net). And on the level
+(the kind of set, a pass off the net). And on the level
 (Settings: **Set difficulty**). Every level has the same bar, the same slow-mo
 and the same top of the bar, so the timing you learn on Easy is the timing on
-Elite; a harder level only narrows the windows around it:
+Elite; a harder level only narrows the windows around it. For a high ball:
 
 | Level | Green on screen (best / worst touch) | Good on screen (best touch) | Clean catch on screen |
 |---|---|---|---|
-| Easy (default) | ±160 / ±80 ms | ±320 ms | any time before, to 160 ms after |
-| Normal | ±100 / ±52 ms | ±250 ms | ±100 ms |
-| Hard | ±60 / ±36 ms | ±120 ms | ±60 ms |
-| Elite | ±36 / ±24 ms | ±54 ms | ±30 ms |
+| Easy (default) | ±240 / ±120 ms | ±480 ms | any time before, to 160 ms after |
+| Normal | ±150 / ±78 ms | ±375 ms | ±100 ms |
+| Hard | ±90 / ±54 ms | ±180 ms | ±60 ms |
+| Elite | ±54 / ±36 ms | ±81 ms | ±30 ms |
+
+A high ball leaves your hitter time to go to it, so it gets the whole green. The
+faster and flatter the set, the less room there is, because the hitter is
+already running to a spot:
+
+| The set | Its share of a high ball's green |
+|---|---|
+| High balls (outside, back set, pipe, D) and the middle's 1 | all of it |
+| Hut | 90% |
+| The middle's back 1 | 85% |
+| Go, fast back, bic; the middle's push 1 and shoot | 70% |
+| The inside balls (3, 2, X, back 2, the pipe behind you); the opposite's back 1 | 60% |
 
 The ball stays in your hands 0.15 s of game time, about twice a real set touch
 (55-75 ms in studies of college setters), so the bar has room; the slow-mo (half speed for the catch,
@@ -770,13 +809,13 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 
 | Section | What it controls |
 |---|---|
-| `TIMING` | Perfect/Good windows, swing time and stretch, tap threshold, wind-up time to full charge (`chargeFull`), pass/dig lead times, the set (how long the ball loads in the hands, `setLoad`; how long it can be held; how an early or late catch costs the touch; the feet ready time), block height thresholds, input buffer |
+| `TIMING` | Perfect/Good windows, swing time and stretch, tap threshold, wind-up time to full charge (`chargeFull`), pass/dig lead times, the set (how long the ball loads in the hands, `setLoad`; how long it can be held; how an early or late catch costs the touch; the feet ready time), block height thresholds, the Setter Drill's pace (`setterDrill`: how long the result stays up, when the next pass leaves), input buffer |
 | `SET_LEVELS` | The set difficulty levels: the green window (best and worst touch), the good multiple, the clean catch, whether hands up early are free (`handsEarly`, Easy) (the slow-mo is the same on every level, in `ASSIST`) |
 | `TOUCH` | Touch controls: stick radius and dead zone, run threshold (with hysteresis), aim scale and button dead zone, air-is-HIT, roll-to-HIT, block-jumps |
-| `CONTACT` | The setter's dump (`dump`: how near the net, where it lands, how high over the tape) and how hard a fast set off the net is (`setTouch.oosFast`); Reach radii, spike/tip/serve speeds and spin, power at minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`), a hit off the outer edge of the hands is tooled (`toolEdge`, `toolEdgeP`), a jump serve met early loses its topspin (`serveEarlySpin`), the user's spike tooled more often (`userToolEdge`, `userToolEdgeP`), the side dig, the dive and the overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`), a soft ball recycled off a well-formed block (`recycleSpeed`, `recycleP`, `recyclePLate`) and the AI hitter's push into the hands (`pushSpeed`, `pushDrop`), where a covered ball is dug (`covered`: out of system), the AI's serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape), what shrinks the set window (`setTouch`) and how a set misses (spread, short / long, apex) |
+| `CONTACT` | The setter's dump (`dump`: how near the net, where it lands, how high over the tape) and how hard a fast set off the net is (`setTouch.oosFast`); Reach radii, spike/tip/serve speeds and spin, power at minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`), a hit off the outer edge of the hands is tooled (`toolEdge`, `toolEdgeP`), a jump serve met early loses its topspin (`serveEarlySpin`), the user's spike tooled more often (`userToolEdge`, `userToolEdgeP`), the side dig, the dive and the overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`), a soft ball recycled off a well-formed block (`recycleSpeed`, `recycleP`, `recyclePLate`) and the AI hitter's push into the hands (`pushSpeed`, `pushDrop`), where a covered ball is dug (`covered`: out of system), the AI's serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape), what shrinks the set window (`setTouch`; each kind of set's share of a high ball's green, `setTouch.window`; a jump set's balance, `airDrift` and `offTop`) and how a set misses (spread, short / long, apex) |
 | `ASSIST` | How slow the game runs while the play wheel is open (`playWheelSlow`); Default aim assist, air magnet strength, reach bonus, the set's footwork (`setStep`: how near the spot your body takes the last steps, how it arrives), slow-mo assist, the set slow-mo (when it starts, how slow for the catch and while the ball loads) |
 | `TUTORIAL` | The first-run lesson: its speeds (together, slow motion), how early cues show, how long the coach's lines stay, tries per rep |
-| `PLAYER` | Acceleration/deceleration, plant carry, jump weighting (approach vs load), apex hang, landing recovery, air turning, where team-mates at the net meet shoulder to shoulder (`shoulder`), the dive (`diveSpeed`, `diveDecel`, `diveArm`, `diveDown`, `diveTime`) |
+| `PLAYER` | Acceleration/deceleration, plant carry, jump weighting (approach vs load), apex hang, the set jump (`setJump`: how high the hop is, when the body goes up for it), landing recovery, air turning, where team-mates at the net meet shoulder to shoulder (`shoulder`), the dive (`diveSpeed`, `diveDecel`, `diveArm`, `diveDown`, `diveTime`) |
 | `POSITIONS` | Per-position height, jump, speeds, power, ball control |
 | `BODY` | Slider ranges for the custom height, vert and spike power (Athlete) |
 | `BALL` | Drag, Magnus scale, restitution and friction for floor/tape/antenna; the soft net (`netGive`, `netStiffness`, `netDampingRatio`, `netReturn`, `netRestitution`, `netGrip`) |
@@ -787,10 +826,10 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 | `VENUES` | The five venues: floor colours and how much the floor mirrors, the sky, the lights, haze, grade, the athletes' rim light, the crowd's light and sound, the boards, and whether the sky is open (`openSky`: no ceiling) |
 | `BALL_LOOK` | How deep the ball's seams look and how much it glows by itself |
 | `PLAYBOOK` | The play designer: how far apart two front-row hitters' sets must be hit, and the longest name |
-| `AI` | A pin hitter going inside: how far off square the run is, how much speed is kept through the plant and how much of it goes into the ball (`insideRun`); Your green set: who their middle bites on (`greenBite`, `greenBlockGuess`) and your hitter's bounce (`greenBounce`); how much an AI hitter's run across the court curves (`approach`); how late a hitter can still be asked for a fast set out of system (`oosAsk`); Reaction time and skill of hitters, blockers, defenders, setter accuracy; the Mini Rally middle blocker (`middle`: its reaction and read of the set, how often it commits on the quick or cheats to a pin, how close it closes on the pin blocker, how late it still jumps and how far it reaches sideways); how much room team-mates give each other (`giveWay`) and when the defence split-steps (`splitStep`); who the setter sets (`setWeight`) and how often the pipe (`pipe`); an overpass (`overpass`), an AI hitter misreading the user's block (`userBlockMisread`), who takes a ball (`pick`: first there takes it, the seam goes to the libero or you, the setter only when nobody else is close, a ball off a block or a second ball the libero gets to is the libero's); where an AI free ball over goes (`freeOver`: a deep corner or short, wherever they aren't); perimeter defence read spots and reaction times (`defence`), early transition and the front row's transition off the net after a block (`transition`, `approachOff`: no quick from the net) and covering our hitter in the real 3-2 spots (`cover`: when, the middle at the net, the setter on the 3 m line, the back row behind and deep, how fast a coverer reads a ball off the block); when the setter calls the pass (`setterRead`), how far off the net is out of system (`outOfSystem`) and how much higher an out-of-system set goes (`outOfSystemApex`); the AI's serves (`serve`: jump share, run-up, toss, error, where they aim); the attack: swing timing error (`attackErr`), the open spot (`openShot*`, `digReach`, `digTop`, `blockReachBand`), where a quick goes (`quickShot`), how often the setter goes to the middle (`quickWeight`), fast sets to the pins (`tempo`), tool, roll and recycle shots (`toolShot`, `rollShot`, `recycleShot`); the libero's set off a hard ball (`backupSet`: how much it misses, when it bumps instead; never a set to the user), what an AI dive does with the ball (`diveUp`: a bit up, toward the middle) and when a free ball is aimed (`freeOver.aimSpeed`), a setter too late for the hands digging it (`lateSet`); how far out a ball must land before a receiver lets it go (`outJudge`) and how much a hard ball rushes an AI passer's timing (`passPressure`); first balls overhand (`overhand`), dives (`dive`, `stretch`: a last-ditch dive at a ball just past the hands) and a second player running at a ball the first may not reach (`scramble`); your green set as a point (their middle's wrong guess, the wings' late read, the diggers' late start: `greenSet*`, `greenBlockGuess`) and how much harder your bad set is to hit (`badSetErr`, `badSetTip`); when a hitter backing off the net is ready for a called tempo run (`transitionReady`, `transitionLatest`) |
+| `AI` | How long a jump set with the dump on holds their middle (`middle.dumpHold`); A pin hitter going inside: how far off square the run is, how much speed is kept through the plant and how much of it goes into the ball (`insideRun`); Your green set: who their middle bites on (`greenBite`, `greenBlockGuess`) and your hitter's bounce (`greenBounce`); how much an AI hitter's run across the court curves (`approach`); how late a hitter can still be asked for a fast set out of system (`oosAsk`); Reaction time and skill of hitters, blockers, defenders, setter accuracy; the Mini Rally middle blocker (`middle`: its reaction and read of the set, how often it commits on the quick or cheats to a pin, how close it closes on the pin blocker, how late it still jumps and how far it reaches sideways); how much room team-mates give each other (`giveWay`) and when the defence split-steps (`splitStep`); who the setter sets (`setWeight`) and how often the pipe (`pipe`); an overpass (`overpass`), an AI hitter misreading the user's block (`userBlockMisread`), who takes a ball (`pick`: first there takes it, the seam goes to the libero or you, the setter only when nobody else is close, a ball off a block or a second ball the libero gets to is the libero's); where an AI free ball over goes (`freeOver`: a deep corner or short, wherever they aren't); perimeter defence read spots and reaction times (`defence`), early transition and the front row's transition off the net after a block (`transition`, `approachOff`: no quick from the net) and covering our hitter in the real 3-2 spots (`cover`: when, the middle at the net, the setter on the 3 m line, the back row behind and deep, how fast a coverer reads a ball off the block); when the setter calls the pass (`setterRead`), how far off the net is out of system (`outOfSystem`) and how much higher an out-of-system set goes (`outOfSystemApex`); the AI's serves (`serve`: jump share, run-up, toss, error, where they aim); the attack: swing timing error (`attackErr`), the open spot (`openShot*`, `digReach`, `digTop`, `blockReachBand`), where a quick goes (`quickShot`), how often the setter goes to the middle (`quickWeight`), fast sets to the pins (`tempo`), tool, roll and recycle shots (`toolShot`, `rollShot`, `recycleShot`); the libero's set off a hard ball (`backupSet`: how much it misses, when it bumps instead; never a set to the user), what an AI dive does with the ball (`diveUp`: a bit up, toward the middle) and when a free ball is aimed (`freeOver.aimSpeed`), a setter too late for the hands digging it (`lateSet`); how far out a ball must land before a receiver lets it go (`outJudge`) and how much a hard ball rushes an AI passer's timing (`passPressure`); first balls overhand (`overhand`), dives (`dive`, `stretch`: a last-ditch dive at a ball just past the hands) and a second player running at a ball the first may not reach (`scramble`); your green set as a point (their middle's wrong guess, the wings' late read, the diggers' late start: `greenSet*`, `greenBlockGuess`) and how much harder your bad set is to hit (`badSetErr`, `badSetTip`); when a hitter backing off the net is ready for a called tempo run (`transitionReady`, `transitionLatest`) |
 
 Player-facing settings (sensitivity, FOV, invert Y, net height, aim assist,
-slow-mo assist, set difficulty, set slow-mo, set ring and bar, keep my pick, hitter spots on the floor, landing marker, replays, camera shake, volume, hints, the venue, your
+slow-mo assist, set difficulty, set slow-mo, auto jump set, set ring and bar, keep my pick, hitter spots on the floor, landing marker, replays, camera shake, volume, hints, the venue, your
 hitting hand, and your custom height / vert / spike power per position) are in the pause menu and
 persist in `localStorage`. Camera shake also scales the
 impact FOV punch and camera kick (0 turns them off). Stored settings are
@@ -814,10 +853,14 @@ and **e2e** (below). Both should be required checks for merging into `main`.
   base defence while it flies, a touch on it by the serving team is a fault), the second ball when
   the setter digs (high to the 3 m line, the libero backs up out of system and bump-sets in front of
   the 3 m line, the user libero's set), the spike timing grades driven through the real
-  contact system (press, hold, release), the timed set (one press per ball:
+  contact system (press, hold, release), the jump set (met higher and sooner than
+  off the floor, the top of the jump in the middle of the touch, the cue true before the body
+  moves, a pass off the net set from the floor, a run carried onto the ball, a drift or a ball
+  off the top of the jump costing green, an AI setter's jump set, their middle held a beat by a jump
+  set with the dump on), the timed set (one press per ball:
   spamming cannot restart the catch, a tap is a push far too early; the ball
   sits in the hands for the load; your touch sizes the window: feet, the catch,
-  centring, back / long / fast / off the net; each level harder around the same
+  centring, the kind of set (a high ball and the 1 the whole green, fast and inside sets less), off the net; each level harder around the same
   top of the bar, Elite still
   never luck at 60 fps; green at the top of the bar; early short, late flat and
   long; a key picks the hitter wherever you look, and no key is the outside;

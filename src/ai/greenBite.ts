@@ -17,6 +17,15 @@ export function userGreen(g: Game, lt: Touch | null | undefined): boolean {
 }
 
 /**
+ * Did the user's set `lt` hold their middle? A jump set by a front-row setter with the dump on:
+ * the setter in the air at the net is an attacker until the ball leaves the hands.
+ */
+export function dumpHeld(g: Game, lt: Touch | null | undefined): boolean {
+  const us = g.contact.lastSetResult;
+  return !!lt && lt.kind === 'set' && !!us?.held && lt.athlete === us.athlete && lt.t === us.t;
+}
+
+/**
  * Does the user's green set `lt` fool their block? Not a high ball to a pin off a pass out of
  * system: with the setter off the net there is one place that ball can go, so their middle reads
  * it and closes the block as on any set. The hitter still has your perfect set to swing at: a

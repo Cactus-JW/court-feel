@@ -124,6 +124,10 @@ export class Athlete {
   lastTouchT = -10;
   /** how long (s) the feet have been still on the floor (below TIMING.setStillSpeed): a setter who beat the ball to the spot */
   stillT = 0;
+  /** this athlete jump-sets a pass in system: the body goes up by itself (the user's auto jump set, an AI setter; setJump.ts) */
+  jumpSets = false;
+  /** the plant under way is a set jump's: a hop to this height (m) off the shortest plant (null: an ordinary jump) */
+  hopH: number | null = null;
   /** a block's hands reaching sideways from the body (m along the net, world x): a late blocker stretching for the seam */
   reachX = 0;
   /** when the last split step started (the animator hops and lands into a deeper stance; no effect on movement) */
@@ -202,6 +206,7 @@ export class Athlete {
     this.lastAction = null;
     this.airNudge.set(0, 0, 0);
     this.reachX = 0;
+    this.hopH = null;
   }
 
   get grounded(): boolean {
@@ -231,9 +236,24 @@ export class Athlete {
     this.stateT = 0;
     this.loadT = 0;
     this.loadRelease = false;
+    this.hopH = null;
     this.loadApproach = this.speed;
     this.onStep?.(this, true);
     return true;
+  }
+
+  /** a set jump: a controlled hop to `h` m, off the shortest plant. Returns false if a jump can't start now. */
+  hop(h: number): boolean {
+    if (!this.jumpPress()) return false;
+    this.hopH = h;
+    this.loadRelease = true;
+    return true;
+  }
+
+  /** the take-off speed that peaks (with the apex hang) at `H` m */
+  static takeoffSpeed(H: number): number {
+    const b = PLAYER.apexBand;
+    return Math.sqrt(Math.max(2 * BALL.gravity * H + b * b * (1 - 1 / PLAYER.apexGravityScale), b * b + 0.01));
   }
 
   jumpRelease(): void {
@@ -250,14 +270,10 @@ export class Athlete {
   }
 
   private takeoff(): void {
-    const H = this.computeJumpHeight();
-    const g = BALL.gravity;
-    const b = PLAYER.apexBand;
-    const s = PLAYER.apexGravityScale;
-    // solve takeoff speed so the peak (with apex hang) equals H
-    const v2 = 2 * g * H + b * b * (1 - 1 / s);
-    const vy = Math.sqrt(Math.max(v2, b * b + 0.01));
-    this.vel.y = vy;
+    const H = this.hopH ?? this.computeJumpHeight();
+    this.hopH = null;
+    // the takeoff speed is solved so the peak (with apex hang) equals H
+    this.vel.y = Athlete.takeoffSpeed(H);
     this.jumpH = H;
     this.state = 'air';
     this.stateT = 0;
@@ -384,7 +400,7 @@ export class Athlete {
       const target = this.loadApproach * this.plantCarry;
       const sp = this.speed;
       if (sp > target) {
-        const ns = Math.max(target, sp - 24 * dt);
+        const ns = Math.max(target, sp - PLAYER.plantBrake * dt);
         const k = sp > 1e-5 ? ns / sp : 0;
         this.vel.x *= k;
         this.vel.z *= k;

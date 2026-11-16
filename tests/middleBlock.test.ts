@@ -25,7 +25,7 @@ type Set = 'outside' | 'opposite' | 'quick';
  * ball (state and prediction), the clock, the rng and a block that never touches. Their middle is
  * scripted: it stands near the net, or plants and takes off with the setter's touch (a quick).
  */
-function net(opts: { seed?: number; guess?: Guess | null; theirMiddleX?: number; quick?: boolean; wing?: boolean } = {}) {
+function net(opts: { seed?: number; guess?: Guess | null; theirMiddleX?: number; quick?: boolean; wing?: boolean; held?: boolean } = {}) {
   const state = makeBall();
   const predictor = new BallPredictor(DT, SIM.predictHorizon);
   let version = 0;
@@ -56,7 +56,13 @@ function net(opts: { seed?: number; guess?: Guess | null; theirMiddleX?: number;
       version++;
     },
   };
-  const g = { simTime: 0, env, rng: new Rng(opts.seed ?? 1), ball, contact: { tryBlock: () => false } };
+  const g = {
+    simTime: 0,
+    env,
+    rng: new Rng(opts.seed ?? 1),
+    ball,
+    contact: { tryBlock: () => false, lastSetResult: null as { athlete: Athlete; t: number; green: boolean; held: boolean } | null },
+  };
   const game = g as unknown as Game;
 
   const me = new Athlete('MB', 1);
@@ -140,7 +146,10 @@ function net(opts: { seed?: number; guess?: Guess | null; theirMiddleX?: number;
     }
     ball.touch(from, v);
     ball.lastTouch = { athlete: setter, kind: 'set', t: g.simTime, side: THEM };
+    // (opts.held) it was the user's jump set with the dump on
+    if (opts.held) g.contact.lastSetResult = { athlete: setter, t: g.simTime, green: false, held: true };
     const tSet = g.simTime;
+    let movedT = NaN;
     // where the middle closes the block on a pin set: next to the pin blocker, hands to hands
     const closeX = attackX + Math.sign(attackX) * (AI.defence.shade - AI.middle.closeGap);
     let atContact = { x: 0, y: 0, air: false, reach: 0 };
@@ -148,11 +157,12 @@ function net(opts: { seed?: number; guess?: Guess | null; theirMiddleX?: number;
     let landedX = NaN;
     while (g.simTime < tc + 0.6) {
       tick();
+      if (Number.isNaN(movedT) && me.speed > 0.5) movedT = g.simTime;
       if (g.simTime >= tc && g.simTime < tc + DT) atContact = { x: me.pos.x, y: me.pos.y, air: me.state === 'air', reach: me.reachX };
       if (opts.wing && me.state === 'air') closest = Math.min(closest, Math.abs(me.pos.x - wing.pos.x));
       if (me.state === 'land' && Number.isNaN(landedX)) landedX = me.pos.x;
     }
-    return { tSet, tc, attackX, closeX, atContact, closest, landedX };
+    return { tSet, tc, attackX, closeX, atContact, closest, landedX, movedT };
   };
 
   return { g, me, them, wing, mb, jumps, pass, set, tick, theirTakeoff: () => theirTakeoff };
@@ -191,6 +201,20 @@ describe("a player's read of a touch", () => {
 });
 
 describe('the middle blocker (Mini Rally)', () => {
+  it('a jump set with the dump on holds it a beat: it leaves for the pin later than off a set from the floor, and no more than the hold', () => {
+    for (let seed = 1; seed <= 4; seed++) {
+      const floor = net({ seed, guess: 'read' });
+      floor.pass(true);
+      const a = floor.set('outside');
+      const jump = net({ seed, guess: 'read', held: true });
+      jump.pass(true);
+      const b = jump.set('outside');
+      const later = b.movedT - b.tSet - (a.movedT - a.tSet);
+      expect(later, `seed ${seed}`).toBeGreaterThan(AI.middle.dumpHold - 2 * DT);
+      expect(later, `seed ${seed}`).toBeLessThan(AI.middle.dumpHold + 2 * DT);
+    }
+  });
+
   it('before the set it shades towards their middle but stays near the middle of the net (a spread block)', () => {
     const near = net({ guess: 'read', theirMiddleX: -0.2 });
     near.pass(true);
