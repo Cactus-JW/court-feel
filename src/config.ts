@@ -1039,6 +1039,12 @@ export const CHARACTER = {
    */
   setFollow: { reach: 0.16, speed: 2.6, time: 0.22 },
   /**
+   * A set jump has no arm swing: on the plant the hands come up in front of the chest, close to
+   * the body, and over `rise` (s) after the feet leave the floor they go up to above the forehead.
+   * `rate` is how fast the arms follow (1/s). From watching setters, not from a measurement.
+   */
+  setJumpArms: { rise: 0.2, rate: 40 },
+  /**
    * After a pass the platform stays where it met the ball. A ball slower than `firmFrom` (m/s) is lifted
    * through: `lift` (m) over `liftTime` (s). One faster than `firmTo` is taken firm: the platform gives
    * `give` (m) and comes back within `giveTime` (s). The arms hold for `hold` (s), then let go over

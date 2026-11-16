@@ -71,6 +71,8 @@ export class SetterBrain implements Brain {
     // the action the last ball was played with (hands, or forearms for a bump set)
     const lastKind = this.bump ? 'pass' : 'set';
     if (!mine) {
+      // (back on the floor after a set jump: the next jump is not a set's)
+      if (a.grounded && a.airIntent === 'set') a.airIntent = 'attack';
       if (a.action?.kind === lastKind && a.action.resolved && g.simTime - a.action.contactT > 0.4) a.endAction();
       // hands that went up for a ball that never came: drop them, they must not block the next play
       else if (a.action?.kind === lastKind && !a.action.resolved && g.simTime - a.action.t0 > 0.8) a.endAction();
@@ -106,8 +108,7 @@ export class SetterBrain implements Brain {
       const off = takeoffSpot(a, jump, this.spot);
       sx = off.x;
       sz = off.z;
-      a.airIntent = 'set';
-      autoSetJump(a, jump, g.simTime);
+      if (autoSetJump(a, jump, g.simTime)) a.airIntent = 'set';
     }
     moveTo(a, sx, sz, { face: this.faceYaw, arrive: 0.35, sprintDist: 1.5 });
     const until = tc - g.simTime;

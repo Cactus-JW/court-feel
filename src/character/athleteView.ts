@@ -82,6 +82,8 @@ const ARM_KEYS = {
   block: { w: [-0.04, 0.305, 0.07], pole: [1, -0.35, -0.6] },
   pass: { w: [-0.098, -0.24, 0.19], pole: [1, -0.8, 0.2] },
   setPrep: { w: [-0.055, 0.115, 0.09], pole: [1, -0.25, 0.25] },
+  /** the plant of a set jump: the hands in front of the chest, close to the body, elbows out and down (they go up from there with the jump) */
+  setLoad: { w: [-0.05, -0.065, 0.12], pole: [1, -0.7, 0.05] },
   setRelease: { w: [-0.04, 0.28, 0.1], pole: [1, -0.2, 0.2] },
   toss: { w: [0.0, 0.31, 0.12], pole: [1, -0.3, -0.5] },
   land: { w: [0.04, -0.13, 0.13], pole: [0.6, -0.2, -0.8] },
@@ -878,6 +880,10 @@ export class AthleteView {
       // an exact hand placement (fingers and palm directions in the world), blended in by `handBlend`
       let handBlend = 0;
 
+      // a jump to set (the body's own hop, or yours with the ball coming to your hands): not a block's, not a spike's
+      const setJump =
+        (a.hopH !== null || a.airIntent === 'set') && !(act && (act.kind === 'block' || act.kind === 'windup' || act.kind === 'swing'));
+
       // ---- base: ground locomotion / ready
       if (st === 'dive') {
         // on the floor: the arms stay stretched out ahead until the body is up again (the dig itself is the pass below)
@@ -905,10 +911,23 @@ export class AthleteView {
           w.lerp(_a, k);
           pole.lerp(_b, k);
         }
+      } else if (st === 'load' && setJump) {
+        // the plant of a set jump: no arm swing, the hands come up in front of the chest
+        this.key('setLoad', w, pole);
+        rate = CHARACTER.setJumpArms.rate;
       } else if (st === 'load') {
         // the plant: both arms go back, then start down past the hips and up in front
         this.jumpSwing(a.loadT, w, pole);
         rate = 55;
+      } else if (setJump) {
+        // a set jump: the hands go up with the body, from the chest to above the forehead
+        this.key('setLoad', w, pole);
+        this.key('setPrep', _a, _b);
+        const up = smooth01(tSinceTake / CHARACTER.setJumpArms.rise);
+        w.lerp(_a, up);
+        pole.lerp(_b, up);
+        rate = CHARACTER.setJumpArms.rate;
+        this.armsUp = 1;
       } else {
         // air: the two-arm swing carries on up, then each arm goes to what the jump is for
         const up = this.jumpSwing(a.loadT + tSinceTake, w, pole);
@@ -923,8 +942,6 @@ export class AthleteView {
             // non-hitting arm points at the ball
             this.aimArmAtBall(s, _a, _b);
           }
-        } else if (intent === 'set') {
-          this.key('setPrep', _a, _b);
         } else if (intent === 'block') {
           this.key('block', _a, _b);
         } else {
