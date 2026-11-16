@@ -141,6 +141,23 @@ describe('the set window: your touch and the level set its size', () => {
   });
 });
 
+describe('the Setter Drill gives you time to choose, not time to wait', () => {
+  const D = TIMING.setterDrill;
+  it('from the end of a rep to the next pass there are at least two seconds to pick a hitter and their set', () => {
+    expect(D.resultMiss + D.feed).toBeGreaterThanOrEqual(2);
+    expect(D.result + D.feed).toBeGreaterThanOrEqual(2.5);
+  });
+  it('a ball nobody played costs less waiting than a rally: the next pass is on its way within two seconds', () => {
+    expect(D.resultMiss).toBeLessThan(D.result);
+    expect(D.resultMiss + D.feed).toBeLessThanOrEqual(2);
+    expect(D.result + D.feed).toBeLessThan(3);
+  });
+  it('after the play wheel closes the pass still gives you a moment, never the whole wait again', () => {
+    expect(D.settle).toBeGreaterThan(D.wind);
+    expect(D.settle).toBeLessThan(D.feed);
+  });
+});
+
 describe('picking the hitter (1-4) and their set (the same key again)', () => {
   it('with no key the set goes to the outside', () => {
     const c = new SetterCalls();

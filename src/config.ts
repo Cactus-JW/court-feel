@@ -312,6 +312,17 @@ export const TIMING = {
   setStillSpeed: 0.5,
   /** while it loads, the hands give with the ball at this speed (m/s) */
   setAbsorbSpeed: 0.6,
+  /**
+   * The Setter Drill's pace (game s). Your picks and calls for the next ball open as soon as a rep
+   * ends, so the whole wait is time to choose: the result stays up `result` s after a rally your
+   * hitter played out, only `resultMiss` s after a ball that was never set or never hit (nothing
+   * to watch), and the next pass leaves `feed` s into the rep (the passer's arms `wind` s before
+   * it). That is 2.7 s to choose after a rally and 2.0 s after a miss; it was 0.55 s, after a
+   * 2.2 s wait with the keys locked. The pass waits while the play wheel is open or you jog back
+   * to your spot, then comes `settle` s later. `intro` is the wait before the first rep, and a
+   * ball still in play after `live` s ends the rep.
+   */
+  setterDrill: { intro: 0.6, feed: 1.2, wind: 0.15, settle: 0.4, result: 1.5, resultMiss: 0.8, live: 9 },
   /** block: fraction of max jump height at contact */
   blockPerfectHeight: 0.88,
   blockGoodHeight: 0.66,
