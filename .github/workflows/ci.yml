@@ -1,5 +1,6 @@
 # Continuous integration on every pull request and on main. Deployments are handled by
-# Vercel's Git integration: every PR gets a preview deployment, merges to main go to production.
+# Vercel's Git integration: every PR gets a preview deployment and merges to main go to the dev
+# site. Production ships on a version tag (release.yml).
 #
 # Two jobs run in parallel:
 #   check - typecheck, lint, formatting, unit tests, production build (about a minute)

@@ -64,11 +64,18 @@ When you make a call that someone would otherwise argue about again, write the r
 - A pull request is merged once CI is green, it has been reviewed and, for a change to the feel, a volleyball player has tried its Vercel preview.
 - GitHub deletes a branch when its pull request is merged. Start the next change on a new branch from `main`.
 
+## Releasing
+
+- Merging to `main` updates the dev site, [court-feel-dev.jackzxq.dev](https://court-feel-dev.jackzxq.dev). The public site, [court-feel.jackzxq.dev](https://court-feel.jackzxq.dev), changes only when a version tag is pushed.
+- `vercel.json` tells search engines not to index the dev site. Vercel does that itself for preview URLs, but not for a custom domain assigned to a branch. If the dev domain changes, change it there too.
+- To release: bump `version` in `package.json` in a pull request (`npm version <x.y.z> --no-git-tag-version`), merge it, then tag that commit on `main` as `v<x.y.z>` and push the tag. [.github/workflows/release.yml](.github/workflows/release.yml) checks the tag, runs `npm run check` and the build, and fast-forwards the `release` branch, which Vercel deploys to production.
+- `release` is moved by that workflow only. To take a bad release back, use Instant Rollback in Vercel, then fix `main` and tag again. After a rollback Vercel holds the next release until someone promotes it.
+
 ## Boundaries
 
 - **Always:** run `npm run check` before committing, and verify user-facing changes in the app.
 - **Ask first:** anything that changes how the game plays (timing windows, physics constants, controls, AI decisions, a new drill or mechanic), a new dependency, and any art or audio asset. Assets need an MIT-compatible licence and an entry in [CREDITS.md](CREDITS.md).
-- **Never:** skip, weaken or delete a test to get CI green, or commit directly to `main`.
+- **Never:** skip, weaken or delete a test to get CI green, or commit directly to `main` or `release`.
 
 ## Agent conventions
 
