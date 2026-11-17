@@ -62,7 +62,8 @@ When you make a call that someone would otherwise argue about again, write the r
 
 ## Releasing
 
-- Merging to `main` updates the dev site. The public site changes only when a version tag is pushed.
+- Merging to `main` updates the dev site, [court-feel-dev.jackzxq.dev](https://court-feel-dev.jackzxq.dev). The public site, [court-feel.jackzxq.dev](https://court-feel.jackzxq.dev), changes only when a version tag is pushed.
+- `vercel.json` tells search engines not to index the dev site. Vercel does that itself for preview URLs, but not for a custom domain assigned to a branch. If the dev domain changes, change it there too.
 - To release: bump `version` in `package.json` in a pull request (`npm version <x.y.z> --no-git-tag-version`), merge it, then tag that commit on `main` as `v<x.y.z>` and push the tag. [.github/workflows/release.yml](.github/workflows/release.yml) checks the tag, runs `npm run check` and the build, and fast-forwards the `release` branch, which Vercel deploys to production.
 - `release` is moved by that workflow only. To take a bad release back, use Instant Rollback in Vercel, then fix `main` and tag again. After a rollback Vercel holds the next release until someone promotes it.
 
