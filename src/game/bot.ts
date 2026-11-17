@@ -5,9 +5,9 @@ import { AIM_DEPTH, aimPitchFor, aimPitchRange, ContactSystem, tossGroove } from
 import { clamp, yawFromDir } from '../core/mathx';
 import type { V3 } from '../physics/ball';
 import type { Game } from './game';
-import { planApproach, planQuick, type ApproachPlan } from '../ai/approach';
+import { planApproach, planQuick, type ApproachPlan } from './approach';
 import { quickSpot, setterTouchY } from './plays';
-import type { TeamAI } from '../ai/team';
+import type { AiHost } from './brains';
 import { SETTER_KEYS, type SetterKey } from './setterCalls';
 
 /**
@@ -16,8 +16,16 @@ import { SETTER_KEYS, type SetterKey } from './setterCalls';
  * setter drill's options. Drills do not implement this on purpose (the bots are test and
  * attract-mode tooling), so every field is optional.
  */
+/** what an autopilot reads of the user's team (the Mini Rally's team coordinator has it) */
+interface TeamView {
+  setFor: Athlete | null;
+  receiver: Athlete | null;
+  touches: number;
+  passToSetter(g: AiHost): { t: number; x: number } | null;
+}
+
 interface DrillView {
-  home?: Pick<TeamAI, 'setFor' | 'receiver' | 'touches' | 'passToSetter'>;
+  home?: TeamView;
   zone?: { x0: number; x1: number; z0: number; z1: number };
   earlyPlan?: ApproachPlan | null;
   earlyFor?: unknown;

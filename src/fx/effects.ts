@@ -487,7 +487,7 @@ export class Effects {
 
   private applySquash(dt: number): void {
     const sq = this.sq;
-    const mesh = this.g.ball.mesh;
+    const mesh = this.g.ballView.mesh;
     if (sq.amount <= 0) return;
     sq.t += dt;
     // a damped wobble: compressed, overshoots long, settles (~0.2 s)
@@ -603,7 +603,7 @@ export class Effects {
     const h = g.renderer.domElement.clientHeight || 720;
     this.dust.setScale(h, cam.fov);
     this.glow.setScale(h, cam.fov);
-    const ballPos = this.replaying ? g.ball.mesh.position : g.ball.rpos;
+    const ballPos = this.replaying ? g.ballView.mesh.position : g.ball.rpos;
     this.trail.update(dt, ballPos, this.replaying ? 20 : g.ball.speed(), cam);
     if (!g.ball.active && !this.replaying) this.trail.fade();
     for (const r of this.rings) {
@@ -817,7 +817,7 @@ export class Effects {
   replayStep(dt: number): boolean {
     const g = this.g;
     const r = this.replay;
-    const live = r.advance(dt, g.ball.mesh);
+    const live = r.advance(dt, g.ballView.mesh);
     const rig = g.rig;
     const u = smooth01((r.cursor - r.contactT + 0.05) / Math.max(0.2, r.impactT - r.contactT + 0.1));
     rig.mode = 'cine';
@@ -846,7 +846,7 @@ export class Effects {
     this.replaying = false;
     document.body.classList.remove('replaying');
     g.rig.setMode(g.settings.firstPerson ? 'fp' : 'tp');
-    g.ball.mesh.visible = g.ball.active;
+    g.ballView.mesh.visible = g.ball.active;
   }
 
   onModeStart(): void {

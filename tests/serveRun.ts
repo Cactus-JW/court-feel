@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { COURT, SERVE, SIM, type ServeKind } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import { ContactSystem, type ContactEvent, type ContactHost } from '../src/game/contact';
-import type { Game } from '../src/game/game';
+import type { AiHost } from '../src/game/brains';
 import { makeBall, stepBall, type BallState } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';
 import { ServerBrain } from '../src/ai/server';
@@ -146,7 +146,7 @@ export function serveRun(o: ServeRunOptions = {}) {
     in: false,
   };
   for (let i = 0; i < SIM.hz * 8; i++) {
-    brain.step(DT, g as unknown as Game);
+    brain.step(DT, g as unknown as AiHost);
     host.simTime += DT;
     a.step(DT, host.simTime);
     contact.step([a]);

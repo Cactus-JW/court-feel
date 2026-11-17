@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { AI, COURT, SERVE, type ServeKind } from '../config';
 import type { Rng } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
-import type { Game } from '../game/game';
+import type { AiHost, Brain } from '../game/brains';
 import { ContactSystem } from '../game/contact';
-import { planApproach, type ApproachPlan } from './approach';
-import { moveTo, netYaw, stop, type Brain } from './brain';
+import { planApproach, type ApproachPlan } from '../game/approach';
+import { moveTo, netYaw, stop } from './brain';
 
 /**
  * A server: walks behind the end line, tosses, and serves at a target through the normal
@@ -53,7 +53,7 @@ export class ServerBrain implements Brain {
     return { x: this.spotX, z: this.athlete.side * (COURT.halfLength + this.back) };
   }
 
-  step(dt: number, g: Game): void {
+  step(dt: number, g: AiHost): void {
     const a = this.athlete;
     const face = netYaw(a.side);
     const now = g.simTime;
@@ -141,7 +141,7 @@ export class ServerBrain implements Brain {
    * error grades the contact (`aiErr`); a late arm still swings, at the last moment the hand can
    * reach the ball: a server never lets the toss drop past untouched.
    */
-  private swingAt(g: Game, look: number): void {
+  private swingAt(g: AiHost, look: number): void {
     const a = this.athlete;
     const info = g.contact.ideal(a, g.simTime, look);
     if (info && g.simTime >= info.t - ContactSystem.swingLead(1) + Math.min(this.err, 0)) {

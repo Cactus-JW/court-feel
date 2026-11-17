@@ -145,6 +145,7 @@ npm run dev        # http://localhost:5173
 npm run build      # typecheck + static build in dist/ (open with any static server, e.g. npm run preview)
 npm run check      # typecheck, lint, formatting and unit tests: run this before pushing
 npm run e2e        # end-to-end check in headless Chromium (see Testing)
+npm run trace:compare   # for a refactor: does it play exactly like main? (see Testing)
 npm run format     # format the code with Prettier
 ```
 
@@ -929,6 +930,8 @@ in `SETTING_RANGES` in `src/config.ts`.
 CI (`.github/workflows/ci.yml`) runs two jobs on every pull request and on
 `main`: **check** (typecheck, ESLint, Prettier, unit tests, production build)
 and **e2e** (below). Both should be required checks for merging into `main`.
+A third job, **trace**, runs for a `refactor` pull request and on the refactor
+branch: the change has to play exactly like `main` (`npm run trace:compare`, below).
 
 * `npm test` — the Vitest suite in `tests/`: set apex, spike landing point, topspin dip,
   net/tape/antenna collisions, women's net, floor bounce, determinism,
@@ -1003,6 +1006,25 @@ and **e2e** (below). Both should be required checks for merging into `main`.
   changes it; `SOAK` sets the soak length in seconds and `PERF_FRAMES` the
   frames the perf numbers are taken over, 120 each; CI runs 30 of both). First time: `npx
   playwright install chromium`.
+* `npm run trace:compare` — for a refactor, which must change nothing for the
+  player ([decision record 0010](docs/adr/0010-the-simulation-runs-on-its-own.md)).
+  It builds this checkout and the commit it left `main` at, plays every drill on
+  both with a seeded autopilot (a minute each, on the manual clock, in headless
+  Chromium) and compares the whole simulation state after every frame: the
+  clock, the ball, every athlete, the score, the random stream, every contact
+  and outcome. It **fails** on the first difference and prints the drill, the
+  moment and the values. Nothing is stored, so a feature that changes the play
+  on purpose has nothing to re-record. `npm run trace:compare -- <ref>` compares
+  with another commit, `npm run trace` plays this checkout twice to show a run
+  is repeatable, and `TRACE_SECONDS` sets the seconds per drill (60). It proves
+  what the autopilots play: the touch controls, the lesson and the menus are
+  the end-to-end run's job.
+* `tests/architecture.test.ts` (part of `npm test`) holds the shape of the code
+  (the same decision record): every import points down a fixed order of layers,
+  physics imports only `config`, and the simulation has no DOM and uses three.js
+  for maths only. What still breaks this is listed by name in
+  `tests/architecture.known.ts`. The test fails on anything new, and on an entry
+  that has been fixed and not taken out, so the lists only get shorter.
 * URL shortcuts for quick testing: `?mode=spike&pos=OH&cam=fp&bot=perfect`
   (modes: free, spike, block, receive, setter, rally; bots: perfect, good,
   sloppy, tip; `&hand=left` plays as a lefty, `&venue=seaside` moves the court for that visit). Unknown values are ignored: an
@@ -1067,6 +1089,8 @@ play it and tell us where it doesn't feel like the court.
 
 * **Played it?** [Write a feel report](https://github.com/LemonPhase/court-feel/issues/new?template=feel-report.yml):
   what you did, what the game did, and what happens on a real court.
+* **Want to try what's coming?** [court-feel-dev.jackzxq.dev](https://court-feel-dev.jackzxq.dev)
+  has everything merged but not yet released.
 * **Something broke?** [Report a bug](https://github.com/LemonPhase/court-feel/issues/new?template=bug-report.yml).
 * **Have an idea?** [Suggest it](https://github.com/LemonPhase/court-feel/issues/new?template=idea.yml).
 * **Want to write code?** Read [AGENTS.md](AGENTS.md): the commands, the
