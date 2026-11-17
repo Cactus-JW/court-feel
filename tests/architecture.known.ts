@@ -51,7 +51,6 @@ export const KNOWN_SCENE: readonly string[] = [
 
 /** tests that fake the game with a cast (to `Game`, or to the `AiHost` the brains see), because a real one cannot be built without a browser */
 export const KNOWN_FAKE_GAME: readonly string[] = [
-  'tests/giveWay.test.ts',
   'tests/middleBlock.test.ts',
   'tests/serve.test.ts',
   'tests/serveRun.ts',
