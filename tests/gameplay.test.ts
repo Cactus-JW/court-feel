@@ -28,7 +28,7 @@ import { AthleteView } from '../src/character/athleteView';
 import { makeKit } from '../src/character/kits';
 import { AudioEngine } from '../src/audio/audio';
 import { bodyStats, isCustomBody, resolveBody, sanitizeBodies, setBodyValue, spikeReach, topSpikeKmh, type Bodies } from '../src/game/body';
-import { loadSettings, saveSettings } from '../src/core/settings';
+import { loadSettings, saveSettings } from '../src/app/settings';
 
 const DT = 1 / SIM.hz;
 

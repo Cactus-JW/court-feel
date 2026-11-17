@@ -1,8 +1,8 @@
 import './ui/styles.css';
 import { BUILD_ID } from './core/build';
 import { ErrorReporter, type ErrorReport } from './core/errors';
-import { parseLaunchParams, parseVenueParam } from './core/launch';
-import { loadSettings, saveSettings } from './core/settings';
+import { parseLaunchParams, parseVenueParam } from './app/launch';
+import { defaultSettings, loadSettings, saveSettings, systemPrefersReducedMotion } from './app/settings';
 import { Game } from './game/game';
 import { Menu } from './ui/menu';
 import type { ModeId } from './game/modes/mode';
@@ -39,7 +39,7 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 const settings = loadSettings();
-const game = new Game(app, settings, parseVenueParam(location.search));
+const game = new Game(app, settings, parseVenueParam(location.search), saveSettings);
 window.__court = game;
 // game keys stay with the browser while a menu or the crash screen is up (Tab, Space and the arrows work on its controls)
 game.input.captureKeys = () => !game.inMenu && !game.paused && !game.stopped;
@@ -92,6 +92,7 @@ function startTutorial(replay: boolean, lesson: Lesson = 'spike'): void {
 let skipNavAt = 0;
 
 const menu = new Menu(app, settings, {
+  defaultSettings: () => defaultSettings(systemPrefersReducedMotion()),
   play(mode, pos) {
     if (game.stopped) return;
     game.fx.audio.unlock();
