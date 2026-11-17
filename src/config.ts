@@ -300,7 +300,7 @@ export const TIMING = {
    * fills in setLoad / ASSIST.setSlowmoLoad real seconds on every level). Levels: SET_LEVELS.
    */
   setLoad: 0.15,
-  /** held this long (game s) past the top of the bar: the push goes anyway, late (longer than Easy's late good band) */
+  /** held this long (game s) past the top of the bar: the ball has come to rest in the hands, a lift (the point is theirs). Longer than Easy's late good band */
   setHoldMax: 0.13,
   /** a catch this early or more (game s, beyond the level's clean catch) costs the touch the most */
   setCatchEarly: 0.3,
@@ -342,7 +342,7 @@ export const SET_LEVEL_IDS: readonly SetLevel[] = ['easy', 'normal', 'hard', 'el
  * These are a high ball's windows: a harder set gets a share of them (CONTACT.setTouch.window).
  * - `green`: the green half-window around the top of the bar, with your best and your worst touch
  * - `goodMul`: a good (white) set reaches this many green half-windows either side. It stays under
- *   TIMING.setHoldMax, so holding until the push goes by itself is never a good set
+ *   TIMING.setHoldMax, so a set held on until it is a lift was never a good one
  * - `catch`: a catch this close to the ball reaching your hands is clean (at the catch slow-mo)
  * - `handsEarly`: hands up before the ball comes cost nothing (Easy). It is what coaches teach,
  *   and it leaves a beginner one thing to time, the release; from Normal up the catch is timed too
