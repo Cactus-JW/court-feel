@@ -13,8 +13,9 @@
 # has write access to this repository). Turned down:
 #   - GITHUB_TOKEN: GitHub refuses to let it move a branch across commits that change a file in
 #     .github/workflows/, so a release would fail whenever CI had changed since the last one.
-#   - Deploying from here with the Vercel CLI: needs an account-wide Vercel token, and the build
-#     would stop being the one every pull request preview already goes through.
+#   - Deploying from here with the Vercel CLI, which is Vercel's own guide for tag releases: the
+#     production build would move to the Actions runner and stop being the one every pull
+#     request preview and the dev site go through, and it adds a Vercel token to look after.
 #
 # `release` only moves forward. To take a bad release back, use Instant Rollback in Vercel, then
 # fix main and tag again (Vercel holds the next release until it is promoted after a rollback).
