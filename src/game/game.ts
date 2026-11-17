@@ -28,6 +28,7 @@ import { bodyStats } from './body';
 import { UserController } from './userController';
 import { DebugOverlay, type DebugInfo } from '../ui/debug';
 import { BallEntity, type TouchKind } from './ballEntity';
+import { BallView } from '../world/ballView';
 import { DebugGizmos } from './debugGizmos';
 import type { BallEnv } from '../physics/ball';
 import { AthleteView } from '../character/athleteView';
@@ -84,6 +85,8 @@ export class Game implements AiHost {
   athletes: Athlete[] = [];
   me!: Athlete;
   readonly ball: BallEntity;
+  /** the ball as it is drawn */
+  readonly ballView: BallView;
   readonly env: BallEnv = { netTop: COURT.netHeightMen };
   readonly rng = new Rng(2024);
   readonly gizmos: DebugGizmos;
@@ -187,8 +190,9 @@ export class Game implements AiHost {
     this.debug = new DebugOverlay(container);
     this.hud = new Hud(container);
     this.hud.camera = this.rig.camera;
-    this.ball = new BallEntity(this.scene);
-    this.ball.mesh.layers.enable(REFLECT_LAYER);
+    this.ball = new BallEntity();
+    this.ballView = new BallView(this.scene, this.ball);
+    this.ballView.mesh.layers.enable(REFLECT_LAYER);
     this.ball.hide();
     this.gizmos = new DebugGizmos(this.scene);
 
@@ -711,7 +715,7 @@ export class Game implements AiHost {
 
   private renderReplay(dt: number, draw: boolean): void {
     this.mode?.replayFrame();
-    this.arena.netPress(this.ball.mesh.visible ? this.ball.mesh.position : null);
+    this.arena.netPress(this.ballView.mesh.visible ? this.ballView.mesh.position : null);
     this.rig.update(dt, null);
     this.fx.update(dt * this.fx.replay.speed);
     this.arena.update(dt);
@@ -911,6 +915,7 @@ export class Game implements AiHost {
     const alpha = this.accum / (1 / SIM.hz);
     for (const a of this.athletes) a.interpolate(alpha);
     this.ball.interpolate(alpha, this.hitStop > 0);
+    this.ballView.sync();
     // the net's mesh goes with a ball that is in it
     this.arena.netPress(this.ball.active ? this.ball.rpos : null);
     const step = 1 / SIM.hz;
@@ -927,12 +932,12 @@ export class Game implements AiHost {
       v.netTop = this.env.netTop;
       v.update(animDt, tr);
     }
-    this.ball.updateVisuals(realDt, this.simTime, this.env);
+    this.ballView.update(realDt, this.simTime, this.env);
     // the buffer holds live play (plus a short tail for the ball settling) only: a dead ball
     // does not push the last highlight out of it. A ball in the air always counts (the toss
     // and wind-up of a serve come before the rally goes live)
     if (!this.fx.ballDead() || this.ball.active) this.recordUntil = tr + 1.0;
-    if (tr <= this.recordUntil) this.fx.replay.record(tr, this.ball.mesh, this.ball.mesh.visible);
+    if (tr <= this.recordUntil) this.fx.replay.record(tr, this.ballView.mesh, this.ballView.mesh.visible);
     this.fx.update(animDt);
     this.rig.ballPos = this.ball.active ? this.ball.rpos : null;
     if (this.ball.active && this.debug.visible) this.gizmos.updatePath(this.ball.ensurePrediction(this.env, this.simTime), this.simTime);

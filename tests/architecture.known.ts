@@ -3,12 +3,14 @@
 // purpose, and a fixed one has to be taken out.
 //
 // The lists only get shorter. A pull request that was open before this file existed adds its own
-// entries when it rebases; nothing else adds to them. Keep each list sorted, one entry per line.
+// entries when it rebases; nothing else adds to them. One thing can look like an addition and is
+// not: a refactor step that takes a breach out of the simulation can leave it with `Game`, the
+// shell that still builds the display (the ball's meshes became `game.ts -> world/ballView.ts`).
+// That is the same breach, one step nearer to where it ends. Keep each list sorted, one entry per line.
 
 /** imports that reach a layer the importing file may not see, as 'importer -> imported' (type-only imports count) */
 export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/athlete.ts -> src/character/rig.ts',
-  'src/game/ballEntity.ts -> src/world/textures.ts',
   'src/game/body.ts -> src/character/rig.ts',
   'src/game/game.ts -> src/camera/cameraRig.ts',
   'src/game/game.ts -> src/character/athleteView.ts',
@@ -22,6 +24,7 @@ export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/game.ts -> src/ui/debug.ts',
   'src/game/game.ts -> src/ui/hud.ts',
   'src/game/game.ts -> src/world/arena.ts',
+  'src/game/game.ts -> src/world/ballView.ts',
   'src/game/game.ts -> src/world/floorReflection.ts',
   'src/game/game.ts -> src/world/textures.ts',
   'src/game/game.ts -> src/world/venue.ts',
@@ -37,7 +40,6 @@ export const KNOWN_DOM: readonly string[] = ['src/game/game.ts', 'src/game/tutor
 
 /** simulation files that build scene objects: three.js classes that are not maths */
 export const KNOWN_SCENE: readonly string[] = [
-  'src/game/ballEntity.ts',
   'src/game/debugGizmos.ts',
   'src/game/game.ts',
   'src/game/modes/freePlay.ts',
