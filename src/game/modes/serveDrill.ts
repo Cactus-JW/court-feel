@@ -1,5 +1,5 @@
 import { COURT, SERVE, SERVE_DRILL, SERVE_KINDS, type ServeKind } from '../../config';
-import { planApproach, simulateApproach } from '../../ai/approach';
+import { planApproach, simulateApproach } from '../approach';
 import { SLOT_ROLE, TeamAI, type Slot } from '../../ai/team';
 import { ApproachGuide } from '../../fx/approachGuide';
 import { Athlete } from '../athlete';

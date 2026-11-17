@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { COURT, SERVE, SIM, type ServeKind } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import { ContactSystem, type ContactEvent, type ContactHost } from '../src/game/contact';
-import type { AiHost } from '../src/ai/host';
+import type { AiHost } from '../src/game/brains';
 import { makeBall, stepBall, type BallState } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';
 import { ServerBrain } from '../src/ai/server';

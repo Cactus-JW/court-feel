@@ -8,7 +8,7 @@ import type { ContactEvent, SetOption } from '../contact';
 import { outcomeLabel, type Outcome } from '../judge';
 import { attackHeight, laneFor, quickSetFor, SETTER_SPOT, SETTER_TARGET, setterTouchY } from '../plays';
 import { kbd, makeFloorRing, Mode } from './mode';
-import type { AiHost } from '../../ai/host';
+import type { AiHost } from '../brains';
 
 type Phase = 'intro' | 'feed' | 'live' | 'result';
 type Lane = 'OH' | 'MB' | 'OPP';

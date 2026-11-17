@@ -1,9 +1,9 @@
 import { AI, BALL, COURT, PLAYER } from '../config';
 import { clamp } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
-import type { AiHost } from './host';
+import type { AiHost, Brain } from '../game/brains';
 import type { V3 } from '../physics/ball';
-import { moveTo, netYaw, stop, type Brain } from './brain';
+import { moveTo, netYaw, stop } from './brain';
 
 /**
  * AI blocker: when the other team sets, predicts where the hitter will meet

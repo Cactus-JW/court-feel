@@ -4,7 +4,7 @@ import { clamp, lerp, smooth01, yawFromDir } from '../core/mathx';
 import type { V3 } from '../physics/ball';
 import type { Athlete } from '../game/athlete';
 import type { Touch } from '../game/ballEntity';
-import type { AiHost } from './host';
+import type { AiHost, Brain } from '../game/brains';
 import {
   attackHeight,
   BACKUP_TARGET,
@@ -17,7 +17,7 @@ import {
   type SetPlay,
 } from '../game/plays';
 import { BlockerBrain } from './blocker';
-import { moveTo, netYaw, stop, type Brain } from './brain';
+import { moveTo, netYaw, stop } from './brain';
 import { attackKind, readSpots, seamSpot } from './defence';
 import { giveWay, shoulderToShoulder, type Mate } from './giveWay';
 import { HitterBrain } from './hitter';

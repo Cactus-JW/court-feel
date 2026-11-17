@@ -1,7 +1,7 @@
 import { yawFromDir } from '../../core/mathx';
 import { solveApex } from '../../physics/solve';
 import { HitterBrain } from '../../ai/hitter';
-import type { AiHost } from '../../ai/host';
+import type { AiHost } from '../brains';
 import { SetterBrain } from '../../ai/setter';
 import type { PositionId } from '../../config';
 import { Athlete } from '../athlete';

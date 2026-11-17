@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { AI, COURT, SERVE, type ServeKind } from '../config';
 import type { Rng } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
-import type { AiHost } from './host';
+import type { AiHost, Brain } from '../game/brains';
 import { ContactSystem } from '../game/contact';
-import { planApproach, type ApproachPlan } from './approach';
-import { moveTo, netYaw, stop, type Brain } from './brain';
+import { planApproach, type ApproachPlan } from '../game/approach';
+import { moveTo, netYaw, stop } from './brain';
 
 /**
  * A server: walks behind the end line, tosses, and serves at a target through the normal
