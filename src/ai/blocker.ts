@@ -1,7 +1,7 @@
 import { AI, BALL, COURT, PLAYER } from '../config';
 import { clamp } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
-import type { Game } from '../game/game';
+import type { AiHost } from './host';
 import type { V3 } from '../physics/ball';
 import { moveTo, netYaw, stop, type Brain } from './brain';
 
@@ -53,7 +53,7 @@ export class BlockerBrain implements Brain {
     this.tJump = -1;
   }
 
-  step(_dt: number, g: Game): void {
+  step(_dt: number, g: AiHost): void {
     const a = this.athlete;
     if (!this.enabled) return;
     const now = g.simTime;

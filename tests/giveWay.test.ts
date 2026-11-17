@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AI, COURT, SIM } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import type { Touch } from '../src/game/ballEntity';
-import type { Game } from '../src/game/game';
+import type { AiHost } from '../src/ai/host';
 import { laneFor, SETTER_SPOT } from '../src/game/plays';
 import { makeBall, type BallEnv } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';
@@ -136,8 +136,8 @@ describe('the split step (Mini Rally)', () => {
         return predictor;
       },
     };
-    const g = { simTime: 0, env, rng: new Rng(5), ballLive: true, ball, setBrain() {}, hud: { message() {} }, contact: { lastSet: null } };
-    const team = new TeamAI(1, g as unknown as Game);
+    const g = { simTime: 0, env, rng: new Rng(5), ballLive: true, ball, setBrain() {}, contact: { lastSet: null } };
+    const team = new TeamAI(1, g as unknown as AiHost);
     for (const slot of SLOTS) team.add(slot, new Athlete(SLOT_ROLE[slot], 1), false);
     team.place('defense');
     // their setter sets their outside, high
