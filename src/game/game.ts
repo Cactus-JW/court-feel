@@ -16,7 +16,6 @@ import {
 } from '../config';
 import { Emitter } from '../core/events';
 import { Input } from '../core/input';
-import { saveSettings } from '../core/settings';
 import { clamp01, damp, lerp, Rng } from '../core/mathx';
 import { CameraRig, type FollowTarget } from '../camera/cameraRig';
 import { BODY_LIGHT } from '../character/bodyMaterial';
@@ -157,6 +156,8 @@ export class Game implements AiHost {
     public settings: Settings,
     /** a venue asked for by the link: it wins over the saved one until the player picks a venue in Settings */
     private venueOverride: VenueId | null = null,
+    /** keeps the settings after a change. The app decides where (the browser's storage): the game does not know */
+    private persist: (s: Settings) => void = () => {},
   ) {
     this.venueSetting = settings.venue;
     setVenue(venueOverride ?? settings.venue);
@@ -496,13 +497,13 @@ export class Game implements AiHost {
     this.hud.showHints = s.showHints;
     this.fx?.audio.setVolume(s.volume);
     this.applyUserBody();
-    saveSettings(s);
+    this.persist(s);
   }
 
   toggleCamera(): void {
     this.settings.firstPerson = !this.settings.firstPerson;
     this.rig.setMode(this.settings.firstPerson ? 'fp' : 'tp');
-    saveSettings(this.settings);
+    this.persist(this.settings);
     this.hud.setCam(this.settings.firstPerson);
     this.events.emit('toggleCam', { fp: this.settings.firstPerson });
   }

@@ -7,9 +7,6 @@
 
 /** imports that reach a layer the importing file may not see, as 'importer -> imported' (type-only imports count) */
 export const KNOWN_IMPORTS: readonly string[] = [
-  'src/core/launch.ts -> src/game/bot.ts',
-  'src/core/launch.ts -> src/game/modes/mode.ts',
-  'src/core/settings.ts -> src/game/body.ts',
   'src/game/athlete.ts -> src/character/rig.ts',
   'src/game/ballEntity.ts -> src/world/textures.ts',
   'src/game/body.ts -> src/character/rig.ts',

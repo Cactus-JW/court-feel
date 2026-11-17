@@ -16,7 +16,6 @@ import {
   type VenueId,
 } from '../config';
 import { BUILD_LABEL } from '../core/build';
-import { defaultSettings, systemPrefersReducedMotion } from '../core/settings';
 import { isCustomBody, resolveBody, setBodyValue, spikeReach, topSpikeKmh } from '../game/body';
 import { isModeId, MODE_INFO, type ModeId } from '../game/modes/mode';
 import type { Lesson } from '../game/tutorial';
@@ -121,6 +120,8 @@ function courtGlyph(id: PositionId, on: boolean): string {
 }
 
 export interface MenuCallbacks {
+  /** the settings a first visit starts with on this device (Settings, Reset) */
+  defaultSettings(): Settings;
   play(mode: ModeId, pos: PositionId): void;
   /** the welcome's main button: start the lesson, or carry on from where it was left */
   playTutorial(): void;
@@ -1250,7 +1251,7 @@ export class Menu {
         reset.textContent = 'Reset every group?';
         return;
       }
-      const d = defaultSettings(systemPrefersReducedMotion());
+      const d = this.cb.defaultSettings();
       Object.assign(s, { ...d, bodies: s.bodies, hand: s.hand });
       changed();
       this.openSheet('settings');
