@@ -1,11 +1,12 @@
 import { COURT, SERVE, SERVE_DRILL, SERVE_KINDS, type ServeKind } from '../../config';
-import { planApproach } from '../../ai/approach';
+import { planApproach, simulateApproach } from '../../ai/approach';
 import { SLOT_ROLE, SLOTS, TeamAI } from '../../ai/team';
 import { ApproachGuide } from '../../fx/approachGuide';
 import { Athlete } from '../athlete';
 import { aimPitchFor, type ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { BACKUP_TARGET } from '../plays';
+import type { ApproachLine } from '../tutorial';
 import { kbd, Mode } from './mode';
 import { ratePass } from './receiveDrill';
 
@@ -60,6 +61,20 @@ export class ServeDrill extends Mode {
   private pulse = 0;
   /** when, in the result phase, the receiving team's play on the pass was over (s) */
   private doneAt = 0;
+  /** the run-up under the toss, for a serve lesson (as the Spike Drill gives it for a set) */
+  private line: ApproachLine = {
+    tGo: -1,
+    tPlant: -1,
+    hold: 0,
+    dirX: 0,
+    dirZ: -1,
+    yaw: 0,
+    spot: { x: 0, z: 0 },
+    start: { x: 0, z: 0 },
+    plant: null,
+  };
+  /** a serve lesson has been told this rep's ball is in the server's hand */
+  private fed = false;
 
   get kind(): ServeKind {
     return SERVE_KINDS[this.kindIdx];
@@ -82,19 +97,33 @@ export class ServeDrill extends Mode {
     }
     this.guide = new ApproachGuide();
     this.add(this.guide.group);
+    // a serve lesson teaches one serve: it is picked for the player and the keys stay quiet
+    const lesson = g.tutorial.serving ? SERVE_KINDS.indexOf(g.tutorial.lesson as ServeKind) : -1;
+    if (lesson >= 0) this.kindIdx = lesson;
     g.serveKind = this.kind;
     g.placeUser(this.start.x, this.start.z, 0);
     if (!g.settings.firstPerson) g.rig.pitch = aimPitchFor(SERVE_DRILL.lookDepth, false);
     this.reset();
     g.hud.gradeAside = true;
-    g.hud.setTitle('Serve Drill');
-    this.updateScore();
+    this.refreshHud();
     // (on touch the key names become the buttons': "toss: Q" reads "toss: TOSS")
-    g.hud.message('Pick your serve: 1 2 3 · hold to toss higher: Q · serve at the seams', 3.5);
+    // the lesson speaks through the coach line: the drill's own intro stays down
+    if (!g.tutorial.serving) g.hud.message('Pick your serve: 1 2 3 · hold to toss higher: Q · serve at the seams', 3.5);
+  }
+
+  refreshHud(): void {
+    this.g.hud.setTitle(this.g.tutorial.serving ? `Serve Drill · ${SERVE[this.kind].name}` : 'Serve Drill');
+    this.updateScore();
+  }
+
+  /** the run-up under the toss in the air (a serve lesson reads it) */
+  approachLine(): ApproachLine {
+    return this.line;
   }
 
   /** pick the serve for the next toss (0-based: standing float, jump float, jump serve) */
   selectCall(i: number): void {
+    if (this.g.tutorial.serving) return;
     if (i < 0 || i >= SERVE_KINDS.length || i === this.kindIdx) return;
     this.kindIdx = i;
     const g = this.g;
@@ -123,10 +152,19 @@ export class ServeDrill extends Mode {
     this.pass = null;
     this.spot = null;
     this.goAt = -1;
+    this.line.tGo = this.line.tPlant = -1;
+    this.line.plant = null;
+    this.fed = false;
     this.toPhase('ready');
   }
 
   private updateScore(): void {
+    if (this.g.tutorial.serving) {
+      // the lesson's line leaves off the average: one serve, one story
+      const rep = this.phase === 'result' ? this.reps : this.reps + 1;
+      this.g.hud.setScore(`${SERVE[this.kind].name} · rep ${rep}`);
+      return;
+    }
     const k = this.sums[this.kind];
     const avg = k.n ? ` · avg ${(k.sum / k.n).toFixed(2)} of 4` : '';
     const last = this.last ? ` · last ${this.last.rating}${this.last.kmh ? ` (${this.last.kmh.toFixed(0)} km/h)` : ''}` : '';
@@ -163,7 +201,9 @@ export class ServeDrill extends Mode {
   }
 
   canServe(a: Athlete): boolean {
-    return a === this.g.me && this.phase === 'ready' && !this.g.userReturning;
+    const g = this.g;
+    // a lesson's welcome, and the coach's line about the last serve, hold the toss
+    return a === g.me && this.phase === 'ready' && !g.userReturning && !g.tutorial.holdingFeed() && !g.tutorial.holdingResult();
   }
 
   passTarget(a: Athlete) {
@@ -190,11 +230,13 @@ export class ServeDrill extends Mode {
   frame(dt: number): void {
     const g = this.g;
     for (let i = 0; i < SERVE_KINDS.length; i++) if (g.input.consumePress('Digit' + (i + 1))) this.selectCall(i);
+    const teach = g.tutorial.serving;
+    const toss = this.phase === 'toss' && !!this.spot;
     this.guide.update(
       {
-        spot: g.settings.landingMarker && this.phase === 'toss' ? this.spot : null,
-        from: null,
-        plant: null,
+        spot: (g.settings.landingMarker || teach) && toss ? this.spot : null,
+        from: teach && toss && g.tutorial.showPath() ? this.line.start : null,
+        plant: teach && toss ? this.line.plant : null,
         feet: g.me.rpos,
         pulse: this.pulse,
         urge: false,
@@ -210,13 +252,18 @@ export class ServeDrill extends Mode {
     this.pulse = Math.max(0, this.pulse - dt * 2.5);
     switch (this.phase) {
       case 'ready':
+        // a serve lesson's rep starts once the ball is in the server's hand and the coach is quiet
+        if (!this.fed && g.tutorial.serving && this.canServe(g.me)) {
+          this.fed = true;
+          g.tutorial.noteFeed();
+        }
         if (g.contact.serving === g.me) this.tossed();
         break;
       case 'toss': {
         // GO: when a full run-up under this toss would start
         if (this.goAt > 0 && g.simTime >= this.goAt) {
           this.goAt = -1;
-          if (g.settings.landingMarker) {
+          if (g.settings.landingMarker || g.tutorial.serving) {
             g.hud.go();
             this.pulse = 1;
           }
@@ -242,7 +289,8 @@ export class ServeDrill extends Mode {
           g.ballLive = false;
           this.doneAt = this.t;
         }
-        if (!g.ballLive && this.t > Math.max(SERVE_DRILL.result, this.doneAt + SERVE_DRILL.after)) {
+        // a serve lesson: the next toss waits until the coach's line about this serve has been read
+        if (!g.ballLive && !g.tutorial.holdingResult() && this.t > Math.max(SERVE_DRILL.result, this.doneAt + SERVE_DRILL.after)) {
           this.reset();
           this.toStart();
         }
@@ -262,12 +310,30 @@ export class ServeDrill extends Mode {
     if (!plan) return;
     this.spot = { x: plan.feet.x, z: plan.feet.z };
     this.goAt = plan.tStart;
+    // the same run for a serve lesson: when it starts and plants, which way, and where it plants
+    const l = this.line;
+    const me = g.me;
+    l.tGo = plan.tStart;
+    l.tPlant = plan.tPress;
+    l.hold = plan.hold;
+    l.dirX = plan.dir.x;
+    l.dirZ = plan.dir.z;
+    l.yaw = plan.runYaw;
+    l.spot.x = plan.feet.x;
+    l.spot.z = plan.feet.z;
+    l.start.x = me.pos.x;
+    l.start.z = me.pos.z;
+    const at = simulateApproach(me, g.simTime, plan.tStart, plan.tPress, plan.hold, plan.dir, plan.runYaw, plan.airYaw, plan.tPress);
+    l.plant = { x: at.pos.x, z: at.pos.z };
   }
 
   onContact(ev: ContactEvent): void {
     const g = this.g;
     if (ev.athlete === g.me) {
-      if (this.phase !== 'toss' || ev.kind !== 'serve') return;
+      if (this.phase !== 'toss') return;
+      // (a swing at a toss still going up is a Miss, and the lesson hears about it too)
+      if (ev.grade) g.tutorial.noteContact(ev.grade, ev.note ?? '');
+      if (ev.kind !== 'serve') return;
       this.kmh = ev.speed * 3.6;
       if (ev.footFault) {
         this.finish(0, 'FOOT FAULT');
@@ -329,6 +395,7 @@ export class ServeDrill extends Mode {
     g.hud.showBanner(`${label} · ${rating}`, rating >= 3 ? 'good' : rating === 0 ? 'bad' : 'neutral');
     if (rating >= 3) g.crowd(rating === 4 ? 0.8 : 0.4);
     this.updateScore();
+    g.tutorial.noteRepEnd(!fault, fault ? label.split(' · ')[0] : '');
   }
 
   private toPhase(p: Phase): void {

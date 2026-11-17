@@ -678,6 +678,15 @@ export const TUTORIAL = {
   sweetErr: 0.015,
   /** together: the coach aims your swing this deep (m) into their court, straight down your line */
   aimDepth: 6.5,
+  /**
+   * The serve lessons (one per serve, on the Serve Drill: toss, then the spike's run, jump, draw
+   * and hit). Together, the coach aims the serve `serveAimDepth` m deep (a full-power jump serve
+   * aimed shorter than about 7 m is in the net), and a standing float's draw cue comes
+   * `floatDraw` s before its best contact: time to draw the arm all the way (`TIMING.chargeFull`)
+   * and a reaction time more.
+   */
+  serveAimDepth: 7.8,
+  floatDraw: 0.55,
   /** slow motion rep: the speed from the set to your landing */
   slowScale: 0.6,
   /** tries at the together rep, the slow rep and the full-speed rep before the lesson moves on anyway */

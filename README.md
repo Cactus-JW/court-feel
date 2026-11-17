@@ -154,7 +154,7 @@ The start screen has four sections:
 | **Home** | One press back into your last drill and position (**Continue**). On a first visit: the tutorial. |
 | **Train** | The six drills. The one you pick shows what it scores, its own keys and **Play as** (your position). |
 | **Play** | The games: Mini Rally today. Sets and full matches will go here. |
-| **Learn** | The tutorial, and every control for the keyboard and for touch. |
+| **Learn** | The tutorial, a lesson for each serve, and every control for the keyboard and for touch. |
 
 Pick a drill and click **PLAY** (or press Enter); the game captures the mouse
 (pointer lock). **Esc** pauses: the pause menu shows the keys of the drill you
@@ -195,6 +195,22 @@ taking it again once it is done or skipped changes nothing. The lesson is
 under **Learn** on the start screen (**Take it again**). The lesson does
 not teach the tip (a tap of the attack button) or aiming. First and third
 person both stay available (V).
+
+### Serve lessons
+
+**Learn** also has **The serve, in three balls**: one lesson for each serve
+(**Standing float**, **Jump float**, **Jump serve**), taken from its button,
+on the Serve Drill. They are the same three balls (together, slow motion,
+full speed) with the toss first: the strip reads **TOSS › RUN › JUMP › DRAW ›
+HIT**, and **TOSS › DRAW › HIT** for the standing float, which is hit from
+the floor. The toss ring shows a white mark at the serve's own toss; in the
+together ball the coach lets go of a held toss there, keeps you behind the
+line until GO and, for the float, stops the toss as it tops out until you
+draw. A serve that goes out, into the net or over the line (a foot fault) is
+not a clean serve, however good the contact, and the coach says which it
+was. Each lesson ends with **Keep serving** or **Choose another drill**, and
+a finished one is ticked under Learn (`courtFeel.serveLessons.v1`). They do
+not change the spike lesson's flag.
 
 In the air, a collar around the charge ring shows where a release *now*
 would land: gold is Perfect, cyan is Good, wood is early or late. It follows
@@ -643,7 +659,7 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 | `CONTACT` | Reach radii, spike/tip/serve speeds and spin, power at minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`), a hit off the outer edge of the hands is tooled (`toolEdge`, `toolEdgeP`), a jump serve met early loses its topspin (`serveEarlySpin`; the player's three serves are under `SERVE`), the user's spike tooled more often (`userToolEdge`, `userToolEdgeP`), the side dig, the dive and the overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`), a soft ball recycled off a well-formed block (`recycleSpeed`, `recycleP`, `recyclePLate`) and the AI hitter's push into the hands (`pushSpeed`, `pushDrop`), where a covered ball is dug (`covered`: out of system), the AI's serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape; `floatSafe`, `floatSafeTries`, `floatSafeCut`, `floatSafeMin` for its float), how much a float floats by the grade of its contact (`floatClean`) |
 | `SERVE` | The player's three serves: each one's toss (how far ahead, how high) and where the Serve Drill stands you (`back`), the jump float's speed and the run-up that gives it (`jumpFloatSpeed`, `floatRun`), a jump serve hit off the floor (`standingSpin`), the foot fault (`foot`), no hitting a toss on its way up (`tossRising`), how the hold on Q sets the toss's height (`hold`) and how much further ahead a higher jump toss comes down (each serve's `ahead`). `SERVE_DRILL`: the drill's start spot and its timings |
 | `ASSIST` | Default aim assist, air magnet strength, reach bonus, slow-mo assist |
-| `TUTORIAL` | The first-run lesson: its speeds (together, slow motion), how early cues show, how long the coach's lines stay, tries per rep |
+| `TUTORIAL` | The first-run lesson and the serve lessons: their speeds (together, slow motion), how early cues show, how long the coach's lines stay, tries per rep, where the coach aims a serve and when a float's draw cue comes |
 | `PLAYER` | Acceleration/deceleration, plant carry, jump weighting (approach vs load), apex hang, landing recovery, air turning, where team-mates at the net meet shoulder to shoulder (`shoulder`), the dive (`diveSpeed`, `diveDecel`, `diveArm`, `diveDown`, `diveTime`) |
 | `POSITIONS` | Per-position height, jump, speeds, power, ball control |
 | `BODY` | Slider ranges for the custom height, vert and spike power (Athlete) |
@@ -719,7 +735,8 @@ and **e2e** (below). Both should be required checks for merging into `main`.
   sloppy, tip; `&hand=left` plays as a lefty, `&venue=seaside` moves the court for that visit). Unknown values are ignored: an
   unknown mode opens the menu, an unknown position falls back to OH.
   `?tutorial=0` starts the first-run lesson at the welcome (0 welcome,
-  1 together, 2 slow motion, 3 full speed). `cam=fp` and `touch=1`
+  1 together, 2 slow motion, 3 full speed); add `&lesson=float`,
+  `jumpFloat` or `jump` for that serve's lesson. `cam=fp` and `touch=1`
   still apply.
 
 ## Errors and bug reports

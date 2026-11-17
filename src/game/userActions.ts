@@ -96,6 +96,16 @@ export class UserActions {
     return true;
   }
 
+  /** let go of the toss now (the together rep of a serve lesson lets go at the serve's own toss) */
+  releaseToss(): void {
+    this.toss();
+  }
+
+  /** how long the toss button has been held (s), -1 while it is up */
+  tossHeld(): number {
+    return this.tossAt < 0 ? -1 : this.g.simTime - this.tossAt;
+  }
+
   private toss(): void {
     const g = this.g;
     if (this.tossAt < 0) return;

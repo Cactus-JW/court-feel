@@ -245,6 +245,8 @@ body.touchmode .set-row.only-tc { display: grid !important; }
 .lesson .play-btn { max-width: 100%; white-space: normal; }
 .lesson-t { font-weight: 900; font-style: italic; font-size: 24px; line-height: 1.1; }
 .lesson-b { font-size: 13px; line-height: 1.5; color: #d5d9e2; }
+.lesson-picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.lesson-picks .done { border-color: rgba(255,210,63,0.6); }
 .key-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 24px 36px; flex: 1; align-content: start; }
 
 /* pause */
@@ -479,6 +481,10 @@ body.replaying .hud { opacity: 0.25; }
   transition: opacity 0.1s; --p: 0%;
   background: conic-gradient(from 180deg, #ffd23f, #ff8a3d var(--p), rgba(255,255,255,0.1) 0);
   -webkit-mask: radial-gradient(circle, transparent 21px, #000 22px, #000 25px, transparent 26px); mask: radial-gradient(circle, transparent 21px, #000 22px, #000 25px, transparent 26px); }
+/* a tick on the ring: where to let go of a held toss for the serve's own height */
+.charge-mark { display: none; position: absolute; left: 50%; top: 50%; width: 4px; height: 13px; margin: -6.5px 0 0 -2px; border-radius: 2px; pointer-events: none;
+  background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.55), 0 0 6px rgba(255,255,255,0.8); transform: rotate(var(--m, 180deg)) translateY(-23.5px); }
+.charge-mark.on { display: block; }
 .charge-ring.full { background: conic-gradient(#ff6a2a 100%, transparent 0); filter: drop-shadow(0 0 8px rgba(255,120,40,0.95)); animation: chargeFull 0.5s ease-in-out infinite alternate; }
 @keyframes chargeFull { from { transform: scale(1); } to { transform: scale(1.08); } }
 @keyframes sweetPulse { from { transform: scale(1); } to { transform: scale(1.08); } }

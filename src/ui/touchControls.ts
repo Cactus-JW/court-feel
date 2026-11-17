@@ -284,7 +284,8 @@ export class TouchControls {
     const skipDisplay = g.tutorial.teaching ? 'flex' : 'none';
     if (this.skipBtn.style.display !== skipDisplay) this.skipBtn.style.display = skipDisplay;
     const dim = new Set<string>();
-    if (g.tutorial.quiet()) for (const id of ['block', 'pass', 'toss']) dim.add(id);
+    // (a serve lesson teaches the toss: it stays lit)
+    if (g.tutorial.quiet()) for (const id of g.tutorial.serving ? ['block', 'pass'] : ['block', 'pass', 'toss']) dim.add(id);
     for (const [id, e] of this.buttons) if (e.classList.contains('t-btn')) e.classList.toggle('dim', dim.has(id));
     // BLOCK reads SET when a press would set
     const blockLabel = this.buttons.get('block')!.querySelector('.t-label')!;
@@ -336,7 +337,8 @@ export class TouchControls {
       chip('d3', '3');
     }
     if (g.modeId === 'spike' && !g.tutorial.active) chip('vsblock', 'VS BLOCK');
-    if (g.modeId === 'serve') {
+    // a serve lesson teaches one serve: no chips to pick another
+    if (g.modeId === 'serve' && !g.tutorial.active) {
       el('span', 't-chip-l', this.chips, 'SERVE');
       chip('d1', '1');
       chip('d2', '2');
