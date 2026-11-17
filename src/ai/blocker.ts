@@ -60,6 +60,9 @@ export class BlockerBrain implements Brain {
   /** the set a wing decided on, and whether it helps on that inside ball (it can get there in time) */
   private helpFor: unknown = null;
   private helps = false;
+  /** when our middle last pressed for a jump (a wing beside it goes up with it), and its state then */
+  private midPressT = -1;
+  private midWas = '';
 
   /**
    * @param lateralRange how far from home this blocker will go along the net
@@ -110,6 +113,9 @@ export class BlockerBrain implements Brain {
     }
     // a wing's hands in the air keep going for its spot: late, a side block (as the middle's)
     if (this.wing) {
+      const mid = this.mate();
+      if (mid?.state === 'load' && this.midWas !== 'load') this.midPressT = now;
+      this.midWas = mid?.state ?? '';
       const want =
         a.state === 'air' && a.action?.kind === 'block' && this.handsTo !== null
           ? clamp(this.handsTo - a.pos.x, -AI.middle.reach, AI.middle.reach)
@@ -216,8 +222,15 @@ export class BlockerBrain implements Brain {
     // squaring up to the net to jump
     const arrive = Math.max(0.3, (a.speed * a.speed) / (2 * PLAYER.decel));
     moveTo(a, this.targetX, a.side * 0.45, { face: d > 1.2 ? undefined : netYaw(a.side), arrive, sprintDist: 1.2 });
+    // a block goes up together: beside our middle a wing goes up with it (its press for this ball,
+    // near the wing's own time or later), waiting `wait` s for it at most, and never past the hit;
+    // on its own hitter, and beside you, on its own time
+    let go = now >= this.tJump;
+    if (mid && mateX !== null && !mid.isUser && attackKind(this.b.x, off) !== 'pin') {
+      go = this.midPressT >= this.tJump - AI.wing.together ? now >= this.midPressT : now >= Math.min(this.tJump + AI.wing.wait, tc);
+    }
     // on time from wherever it got to, if near enough; never once the ball is hit
-    if (a.canJump() && atNet(a) && now >= this.tJump && d <= AI.wing.lateReach && (d < 0.8 || now <= tc)) this.goUp(now);
+    if (a.canJump() && atNet(a) && go && d <= AI.wing.lateReach && (d < 0.8 || now <= tc)) this.goUp(now);
     return true;
   }
 

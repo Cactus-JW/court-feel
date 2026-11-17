@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AI, COURT, SIM } from '../src/config';
+import { AI, BALL, COURT, PLAYER, SIM } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
 import type { Touch } from '../src/game/ballEntity';
@@ -21,7 +21,7 @@ const MEET = 3.25;
  * Our Mini Rally pin blockers (`BlockerBrain.wing`, as TeamAI makes them) against their set, on a
  * stand-in for the Game: the ball (state and prediction), the clock, the rng and a block that never
  * touches. Each wing starts at its base spot at the net (x = ±3); with `midX`, our middle stands at
- * the net there (it does not move).
+ * the net there (it does not move along it, and jumps when a set's `midPresses` say).
  */
 function net(seed = 1, midX: number | null = null) {
   const state = makeBall();
@@ -61,8 +61,16 @@ function net(seed = 1, midX: number | null = null) {
   const wings = [wing(3), wing(-3)];
   const setter = new Athlete('S', THEM);
 
-  /** their set from their setter's hands to `to` (x along the net, z off it on their side), met on the way down at MEET; `apexAbove` over it, or in `flight` s */
-  const set = (to: { x: number; off: number }, shape: { apexAbove?: number; flight?: number }) => {
+  /**
+   * their set from their setter's hands to `to` (x along the net, z off it on their side), met on
+   * the way down at MEET; `apexAbove` over it, or in `flight` s. Our middle presses for a jump at
+   * each of `midPresses(onTime)`, given when it would press to block on time
+   */
+  const set = (
+    to: { x: number; off: number },
+    shape: { apexAbove?: number; flight?: number },
+    midPresses: (onTime: number, setT: number) => number[] = () => [],
+  ) => {
     const from = { x: SETTER_TARGET.x * THEM, y: 2.5, z: SETTER_TARGET.z * THEM };
     const target = { x: to.x, y: MEET, z: to.off * THEM };
     const v = { x: 0, y: 0, z: 0 };
@@ -79,9 +87,19 @@ function net(seed = 1, midX: number | null = null) {
     const at = new Map<Athlete, { state: string; x: number; reach: number; hands: number }>();
     const was = new Map<Athlete, string>();
     const startX = new Map(wings.map((w) => [w.a, w.a.pos.x]));
+    // (as BlockerBrain times a block: the hands at the top 0.12 s after the hit)
+    const vy = Math.sqrt(2 * BALL.gravity * mid.jumpMax * mid.stats.standingJumpFrac * 1.1);
+    const onTime = tc + 0.12 - (vy / BALL.gravity + 0.05) - PLAYER.loadMin;
+    const presses = midPresses(onTime, g.simTime);
     while (g.simTime < tc + 0.3) {
       g.simTime += DT;
       stepBall(state, DT, env, []);
+      if (presses.length && g.simTime >= presses[0] && mid.canJump()) {
+        presses.shift();
+        mid.jumpPress();
+        mid.jumpRelease();
+      }
+      mid.step(DT, g.simTime);
       for (const w of wings) {
         w.brain.step(DT, game);
         w.a.step(DT, g.simTime);
@@ -91,7 +109,7 @@ function net(seed = 1, midX: number | null = null) {
           at.set(w.a, { state: w.a.state, x: w.a.pos.x, reach: w.a.reachX, hands: w.a.pos.x + w.a.reachX });
       }
     }
-    return { tc, at, startX };
+    return { tc, at, startX, onTime };
   };
   return { g, wings, set, right: wings[0], left: wings[1] };
 }
@@ -151,7 +169,7 @@ describe('our pin blockers against their set (Mini Rally)', () => {
     const midX = LANES.L.x;
     for (let seed = 1; seed <= 6; seed++) {
       const s = net(seed, midX);
-      const r = s.set({ x: LANES.L.x, off: LANES.L.z }, { apexAbove: LANES.L.apexAbove });
+      const r = s.set({ x: LANES.L.x, off: LANES.L.z }, { apexAbove: LANES.L.apexAbove }, (onTime) => [onTime]);
       // the pipe is a little to our right of the middle of the net: the left wing is nearer
       const near = r.at.get(s.left.a)!;
       const far = r.at.get(s.right.a)!;
@@ -159,6 +177,48 @@ describe('our pin blockers against their set (Mini Rally)', () => {
       expect(Math.abs(near.hands - (midX - AI.middle.closeGap))).toBeLessThan(AI.defence.handHalf);
       expect(far.state).toBe('air');
       expect(Math.abs(far.hands - (midX + AI.middle.closeGap))).toBeLessThan(AI.wing.lateReach - AI.middle.reach);
+    }
+  });
+
+  it('a block goes up together: beside the middle the wings jump with it', () => {
+    const midX = LANES.L.x;
+    for (let seed = 1; seed <= 6; seed++) {
+      const s = net(seed, midX);
+      let midT = 0;
+      s.set({ x: LANES.L.x, off: LANES.L.z }, { apexAbove: LANES.L.apexAbove }, (onTime) => [(midT = onTime)]);
+      // the near wing is there in time: it goes with the middle (the far one with it, or as soon as it gets there)
+      expect(Math.abs(s.left.presses[0] - midT)).toBeLessThan(2 * DT);
+      expect(s.right.presses[0]).toBeGreaterThanOrEqual(midT - DT);
+    }
+  });
+
+  it('a middle late on the pipe (up with another hitter first) takes the whole block up late: the wings wait for it, still rising at the hit', () => {
+    const midX = LANES.L.x;
+    for (let seed = 1; seed <= 6; seed++) {
+      const s = net(seed, midX);
+      let again = 0;
+      const r = s.set({ x: LANES.L.x, off: LANES.L.z }, { apexAbove: LANES.L.apexAbove }, (onTime, setT) => [
+        setT + 0.05,
+        (again = onTime + 0.25),
+      ]);
+      for (const w of s.wings) {
+        expect(w.presses.length).toBe(1);
+        expect(w.presses[0]).toBeGreaterThanOrEqual(again - DT);
+        expect(w.presses[0]).toBeLessThan(r.tc);
+        // a beat behind: not at the top of the jump when the pipe is hit
+        expect(r.at.get(w.a)!.state === 'load' || w.a.vel.y > 0 || r.at.get(w.a)!.state === 'air').toBe(true);
+      }
+    }
+  });
+
+  it('beside a middle that does not go, a wing waits a moment for it, then goes on its own before the hit', () => {
+    const midX = LANES.L.x;
+    for (let seed = 1; seed <= 6; seed++) {
+      const s = net(seed, midX);
+      const r = s.set({ x: LANES.L.x, off: LANES.L.z }, { apexAbove: LANES.L.apexAbove });
+      expect(s.left.presses.length).toBe(1);
+      expect(s.left.presses[0]).toBeGreaterThan(r.onTime + AI.wing.wait / 2);
+      expect(s.left.presses[0]).toBeLessThanOrEqual(r.tc + DT);
     }
   });
 

@@ -420,6 +420,8 @@ screen show them. Only your player uses them; AI players keep the defaults.
    late to close it. A quick in front of the setter is left to the middle: a pin that
    can't get there stays on its own hitter. On the pipe all three at the net go up,
    both wings closing on the middle's shoulders; the far one is often a beat late.
+   The block goes up together: beside the middle a wing jumps with it, so a middle late
+   on the ball takes the whole block up late.
 
    **Your team-mates give way.** Whoever is playing the ball keeps their line and the
    others step around them, and your team-mates step around you. As their hitter
