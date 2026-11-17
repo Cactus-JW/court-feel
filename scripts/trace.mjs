@@ -208,10 +208,21 @@ async function record(dist, label) {
   try {
     const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
     const errors = [];
-    page.on('pageerror', (e) => errors.push(String(e)));
+    // an app that throws while it starts never comes up: say why at once, not after the whole wait
+    let starting = true;
+    let failStart = () => {};
+    const threw = new Promise((_, reject) => (failStart = reject));
+    threw.catch(() => {});
+    page.on('pageerror', (e) => {
+      errors.push(String(e));
+      if (starting) failStart(new Error(`${label}: the app threw while it was starting: ${e.message}`));
+    });
     await page.addInitScript(holdTheClock);
     await page.goto(server.url, { timeout: PAGE_MS });
-    await page.waitForFunction(() => window.__court && window.__menu, null, { timeout: PAGE_MS, polling: 250 });
+    const up = page.waitForFunction(() => window.__court && window.__menu, null, { timeout: PAGE_MS, polling: 250 });
+    up.catch(() => {});
+    await Promise.race([up, threw]);
+    starting = false;
     const runs = [];
     for (const run of RUNS) {
       const name = `${run.mode}/${run.pos}/${run.bot}${run.slowmo ? '/slow-mo assist' : ''}`;
