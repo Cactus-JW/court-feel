@@ -21,7 +21,7 @@ import { Judge } from '../src/game/judge';
 import { copyBall, makeBall, R, stepBall, type BallState, type CollisionEvent } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';
 import { flyFor, solveApex, solveFixedTime } from '../src/physics/solve';
-import { planQuick } from '../src/ai/approach';
+import { planQuick } from '../src/game/approach';
 import { laneFor, QUICK, quickSetFor, quickSpot, SET_PLAYS, SETTER_TARGET } from '../src/game/plays';
 import { HitterBrain } from '../src/ai/hitter';
 import { AthleteView } from '../src/character/athleteView';

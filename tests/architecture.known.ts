@@ -13,9 +13,6 @@ export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/athlete.ts -> src/character/rig.ts',
   'src/game/ballEntity.ts -> src/world/textures.ts',
   'src/game/body.ts -> src/character/rig.ts',
-  'src/game/bot.ts -> src/ai/approach.ts',
-  'src/game/bot.ts -> src/ai/team.ts',
-  'src/game/game.ts -> src/ai/brain.ts',
   'src/game/game.ts -> src/camera/cameraRig.ts',
   'src/game/game.ts -> src/character/athleteView.ts',
   'src/game/game.ts -> src/character/bodyMaterial.ts',
@@ -34,7 +31,6 @@ export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/modes/mode.ts -> src/world/textures.ts',
   'src/game/modes/serveDrill.ts -> src/fx/approachGuide.ts',
   'src/game/modes/spikeDrill.ts -> src/fx/approachGuide.ts',
-  'src/game/plays.ts -> src/ai/approach.ts',
   'src/game/tutorial.ts -> src/game/modes/mode.ts',
   'src/game/userController.ts -> src/camera/cameraRig.ts',
 ];

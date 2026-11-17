@@ -2,11 +2,11 @@ import { AI, BALL, PLAYER } from '../config';
 import { clamp } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
 import type { Touch } from '../game/ballEntity';
-import type { AiHost } from './host';
+import type { AiHost, Brain } from '../game/brains';
 import { laneFor, SETTER_SPOT } from '../game/plays';
 import type { V3 } from '../physics/ball';
-import { predictJump } from './approach';
-import { moveTo, netYaw, stop, type Brain } from './brain';
+import { predictJump } from '../game/approach';
+import { moveTo, netYaw, stop } from './brain';
 import { BallRead } from './read';
 
 /** what a middle expects before the set: nothing in particular (read it), the quick, or one of their pins */

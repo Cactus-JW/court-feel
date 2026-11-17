@@ -1,15 +1,6 @@
 import * as THREE from 'three';
 import { clamp, wrapAngle, yawFromDir } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
-import type { AiHost } from './host';
-
-/** An AI controller for one athlete. */
-export interface Brain {
-  athlete: Athlete;
-  step(dt: number, g: AiHost): void;
-  /** optional reset at the start of a rally / rep */
-  reset?(g: AiHost): void;
-}
 
 /**
  * Steering helper: walk/run towards (x,z) with an arrive radius so the

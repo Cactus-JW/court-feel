@@ -37,7 +37,7 @@ import type { Kit } from '../character/rig';
 import { aimTargetFromLook, ContactSystem, tossGroove, type ContactEvent, type IdealInfo } from './contact';
 import { Judge, type Outcome } from './judge';
 import { Hud } from '../ui/hud';
-import type { Brain } from '../ai/brain';
+import type { AiHost, Brain } from './brains';
 import { kbd, type Mode, type ModeId } from './modes/mode';
 import { createMode } from './modes/registry';
 import { makeRingTexture } from '../world/textures';
@@ -70,7 +70,7 @@ export type GameEvents = {
  * Owns the renderer, the fixed-timestep simulation, the current drill and
  * the render loop.
  */
-export class Game {
+export class Game implements AiHost {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly rig: CameraRig;

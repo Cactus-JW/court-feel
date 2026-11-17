@@ -4,8 +4,8 @@ import { handSetAllowed } from '../game/plays';
 import type { V3 } from '../physics/ball';
 import { solveApex, solveFixedTime } from '../physics/solve';
 import type { Athlete } from '../game/athlete';
-import type { AiHost } from './host';
-import { moveTo, stop, type Brain } from './brain';
+import type { AiHost, Brain } from '../game/brains';
+import { moveTo, stop } from './brain';
 
 export interface SetCall {
   /** ball centre target (on the descending branch) */

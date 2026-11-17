@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AI, COURT, SIM } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import type { Touch } from '../src/game/ballEntity';
-import type { AiHost } from '../src/ai/host';
+import type { AiHost } from '../src/game/brains';
 import { laneFor, SETTER_SPOT } from '../src/game/plays';
 import { makeBall, type BallEnv } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';

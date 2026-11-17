@@ -3,7 +3,7 @@ import { AI, COURT, SIM } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
 import type { Touch, TouchKind } from '../src/game/ballEntity';
-import type { AiHost } from '../src/ai/host';
+import type { AiHost } from '../src/game/brains';
 import { MiniRally } from '../src/game/modes/miniRally';
 import { laneFor, SETTER_SPOT } from '../src/game/plays';
 import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';

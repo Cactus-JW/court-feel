@@ -3,7 +3,7 @@ import { AI, CONTACT, COURT, PLAYER, SIM } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
 import type { Touch } from '../src/game/ballEntity';
-import type { AiHost } from '../src/ai/host';
+import type { AiHost } from '../src/game/brains';
 import { attackHeight, laneFor, quickSpot, SETTER_SPOT, SETTER_TARGET } from '../src/game/plays';
 import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';
