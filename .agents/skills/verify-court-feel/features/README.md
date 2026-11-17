@@ -50,6 +50,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Pause and settings](./pause-settings.md) covers pausing, resuming, restarting, quitting, the quick settings, the Settings sheet and its tabs, the Athlete sheet, resetting to defaults, and persistence.
 - [Quick-start links](./quick-start-links.md) covers the URL parameters and their fallbacks for bad values.
 - [Serve Drill](./serve-drill.md) covers picking one of the three serves, the toss, serving a float, a jump float and a jump serve by hand, the 0 to 4 rating by the pass forced, and the toss and foot faults.
+- [Serve lessons](./serve-lessons.md) covers Learn's lesson for each serve: entering it, the together ball for the standing float and the jump serve, the toss ring's white mark, the end dialog and the tick under Learn.
 - [Mini Rally](./mini-rally.md) covers the 6 v 6 rally: the serve, your set call, the point and the score, and re-serving.
 - [Touch controls](./touch-controls.md) covers the phone layout: the stick, the hold buttons, aiming, the top-row buttons and the setting that turns them on.
 
