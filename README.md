@@ -795,6 +795,8 @@ play it and tell us where it doesn't feel like the court.
 
 * **Played it?** [Write a feel report](https://github.com/LemonPhase/court-feel/issues/new?template=feel-report.yml):
   what you did, what the game did, and what happens on a real court.
+* **Want to try what's coming?** [court-feel-dev.jackzxq.dev](https://court-feel-dev.jackzxq.dev)
+  has everything merged but not yet released.
 * **Something broke?** [Report a bug](https://github.com/LemonPhase/court-feel/issues/new?template=bug-report.yml).
 * **Have an idea?** [Suggest it](https://github.com/LemonPhase/court-feel/issues/new?template=idea.yml).
 * **Want to write code?** Read [AGENTS.md](AGENTS.md): the commands, the
