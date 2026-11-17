@@ -8,7 +8,7 @@ import type { ContactEvent, SetOption } from '../contact';
 import { outcomeLabel, type Outcome } from '../judge';
 import { attackHeight, laneFor, quickSetFor, SETTER_SPOT, SETTER_TARGET, setterTouchY } from '../plays';
 import { kbd, makeFloorRing, Mode } from './mode';
-import type { Game } from '../game';
+import type { AiHost } from '../brains';
 
 type Phase = 'intro' | 'feed' | 'live' | 'result';
 type Lane = 'OH' | 'MB' | 'OPP';
@@ -76,11 +76,11 @@ export class SetterDrill extends Mode {
   }
 
   /** while the pass is coming: when and where it reaches your hands */
-  private passToMe(g: Game): { t: number; x: number } | null {
+  private passToMe(g: AiHost): { t: number; x: number } | null {
     const lt = g.ball.lastTouch;
     if (!g.ball.active || lt?.athlete !== this.passer || lt.kind !== 'pass') return null;
     const pred = g.ball.ensurePrediction(g.env, g.simTime);
-    const t = pred.descendThrough(setterTouchY(g.me), g.simTime);
+    const t = pred.descendThrough(setterTouchY(this.g.me), g.simTime);
     if (t < 0) return null;
     const p = { x: 0, y: 0, z: 0 };
     pred.posAt(t, p);

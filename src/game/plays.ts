@@ -1,7 +1,7 @@
 import { AI, COURT, PLAYER, type PositionId } from '../config';
 import { clamp } from '../core/mathx';
 import type { V3 } from '../physics/ball';
-import { predictJump } from '../ai/approach';
+import { predictJump } from './approach';
 import type { Athlete } from './athlete';
 import type { SetOption } from './contact';
 

@@ -47,6 +47,8 @@ Loading the app
                               load the app, e.g. open '?mode=spike&pos=OH&bot=perfect'.
                               --fresh: clear saved settings first (a first visit)
                               --manual: manual clock from the first frame (repeatable runs)
+  resize <width> <height>     change the window size in CSS pixels (launch starts at 1280x720, or 844x390
+                              with --touch); the layout follows at once and the size lasts the session
 
 Real input (DOM events, the path a player's hardware takes)
   click <selector>            mouse click (Playwright selector: css, text=, role=button[name="Train"])
@@ -807,6 +809,14 @@ async function supervisor() {
           await page.evaluate((q) => window.__court.enableBot(q), quality);
         } else throw new Error('usage: bot <perfect|good|sloppy|tip|off>');
         return { bot: quality, hook: 'window.__court.enableBot (same as &bot= in a quick-start link)' };
+      },
+      async resize([w, hh]) {
+        const width = Number(w);
+        const height = Number(hh);
+        if (!Number.isInteger(width) || !Number.isInteger(height) || width < 200 || height < 200)
+          throw new Error('usage: resize <width> <height> (whole CSS pixels, at least 200 each)');
+        await page.setViewportSize({ width, height });
+        return { viewport: await page.evaluate(() => ({ width: innerWidth, height: innerHeight })) };
       },
       async state() {
         return await snap();

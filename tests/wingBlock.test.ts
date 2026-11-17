@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { AI, BALL, COURT, PLAYER, SIM } from '../src/config';
-import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
-import type { Touch } from '../src/game/ballEntity';
-import type { Game } from '../src/game/game';
 import { LANES, SETTER_TARGET } from '../src/game/plays';
-import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
+import { Simulation } from '../src/game/simulation';
+import type { V3 } from '../src/physics/ball';
 import { solveApex, solveFixedTime } from '../src/physics/solve';
 import { BlockerBrain, wingSpot } from '../src/ai/blocker';
+import { NO_HOOKS } from './simHooks';
 
 const DT = 1 / SIM.hz;
 /** the other team: we (the home side, +z) block their attack */
@@ -18,37 +16,14 @@ const NO_SPIN: V3 = { x: 0, y: 0, z: 0 };
 const MEET = 3.25;
 
 /**
- * Our Mini Rally pin blockers (`BlockerBrain.wing`, as TeamAI makes them) against their set, on a
- * stand-in for the Game: the ball (state and prediction), the clock, the rng and a block that never
- * touches. Each wing starts at its base spot at the net (x = ±3); with `midX`, our middle stands at
- * the net there (it does not move along it, and jumps when a set's `midPresses` say).
+ * Our Mini Rally pin blockers (`BlockerBrain.wing`, as TeamAI makes them) against their set, in a
+ * real simulation built with no browser: they read its ball, its clock and its random stream. Each
+ * wing starts at its base spot at the net (x = ±3); with `midX`, our middle stands at the net there
+ * (it does not move along it, and jumps when a set's `midPresses` say).
  */
 function net(seed = 1, midX: number | null = null) {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let predicted = -1;
-  const env: BallEnv = { netTop: COURT.netHeightMen };
-  const ball = {
-    state,
-    active: true,
-    lastTouch: null as Touch | null,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    ensurePrediction(e: BallEnv, t: number) {
-      if (predicted !== version) {
-        predictor.compute(state, e, t);
-        predicted = version;
-      }
-      return predictor;
-    },
-  };
-  const g = { simTime: 0, env, rng: new Rng(seed), ball, contact: { tryBlock: () => false } };
-  const game = g as unknown as Game;
+  const sim = new Simulation(NO_HOOKS);
+  sim.rng.reseed(seed);
   const mid = new Athlete('MB', 1);
   mid.place(midX ?? 0, midX === null ? 3 : 0.45, 0);
   const wing = (x: number) => {
@@ -76,13 +51,10 @@ function net(seed = 1, midX: number | null = null) {
     const v = { x: 0, y: 0, z: 0 };
     if (shape.flight) solveFixedTime(from, target, shape.flight, NO_SPIN, v);
     else solveApex(from, target, MEET + (shape.apexAbove ?? 1.45), NO_SPIN, v);
-    Object.assign(state.p, from);
-    Object.assign(state.v, v);
-    state.rest = false;
-    version++;
-    ball.lastTouch = { athlete: setter, kind: 'set', t: g.simTime, side: THEM };
-    const pred = ball.ensurePrediction(env, g.simTime);
-    let tc = pred.descendThrough(MEET, g.simTime);
+    sim.ball.launch(from, v, NO_SPIN, 0, sim.simTime);
+    sim.ball.lastTouch = { athlete: setter, kind: 'set', t: sim.simTime, side: THEM };
+    const pred = sim.ball.ensurePrediction(sim.env, sim.simTime);
+    let tc = pred.descendThrough(MEET, sim.simTime);
     if (tc < 0) tc = pred.apex().t;
     const at = new Map<Athlete, { state: string; x: number; reach: number; hands: number }>();
     const was = new Map<Athlete, string>();
@@ -90,28 +62,28 @@ function net(seed = 1, midX: number | null = null) {
     // (as BlockerBrain times a block: the hands at the top 0.12 s after the hit)
     const vy = Math.sqrt(2 * BALL.gravity * mid.jumpMax * mid.stats.standingJumpFrac * 1.1);
     const onTime = tc + 0.12 - (vy / BALL.gravity + 0.05) - PLAYER.loadMin;
-    const presses = midPresses(onTime, g.simTime);
-    while (g.simTime < tc + 0.3) {
-      g.simTime += DT;
-      stepBall(state, DT, env, []);
-      if (presses.length && g.simTime >= presses[0] && mid.canJump()) {
+    const presses = midPresses(onTime, sim.simTime);
+    while (sim.simTime < tc + 0.3) {
+      sim.simTime += DT;
+      sim.ball.step(DT, sim.env);
+      if (presses.length && sim.simTime >= presses[0] && mid.canJump()) {
         presses.shift();
         mid.jumpPress();
         mid.jumpRelease();
       }
-      mid.step(DT, g.simTime);
+      mid.step(DT, sim.simTime);
       for (const w of wings) {
-        w.brain.step(DT, game);
-        w.a.step(DT, g.simTime);
-        if (w.a.state === 'load' && was.get(w.a) !== 'load') w.presses.push(g.simTime);
+        w.brain.step(DT, sim);
+        w.a.step(DT, sim.simTime);
+        if (w.a.state === 'load' && was.get(w.a) !== 'load') w.presses.push(sim.simTime);
         was.set(w.a, w.a.state);
-        if (g.simTime >= tc && g.simTime < tc + DT)
+        if (sim.simTime >= tc && sim.simTime < tc + DT)
           at.set(w.a, { state: w.a.state, x: w.a.pos.x, reach: w.a.reachX, hands: w.a.pos.x + w.a.reachX });
       }
     }
     return { tc, at, startX, onTime };
   };
-  return { g, wings, set, right: wings[0], left: wings[1] };
+  return { sim, wings, set, right: wings[0], left: wings[1] };
 }
 
 describe('where a pin blocker goes up (Mini Rally, AI.wing)', () => {

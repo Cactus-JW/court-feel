@@ -284,7 +284,8 @@ export class TouchControls {
     const skipDisplay = g.tutorial.teaching ? 'flex' : 'none';
     if (this.skipBtn.style.display !== skipDisplay) this.skipBtn.style.display = skipDisplay;
     const dim = new Set<string>();
-    if (g.tutorial.quiet()) for (const id of ['block', 'pass', 'toss']) dim.add(id);
+    // (a serve lesson teaches the toss: it stays lit)
+    if (g.tutorial.quiet()) for (const id of g.tutorial.serving ? ['block', 'pass'] : ['block', 'pass', 'toss']) dim.add(id);
     for (const [id, e] of this.buttons) if (e.classList.contains('t-btn')) e.classList.toggle('dim', dim.has(id));
     // BLOCK reads SET when a press would set
     const blockLabel = this.buttons.get('block')!.querySelector('.t-label')!;
@@ -318,7 +319,7 @@ export class TouchControls {
 
   private buildChips(): void {
     const g = this.g;
-    for (const id of ['feed', 'auto', 'vsblock', 'd1', 'd2', 'd3', 'd4', 'd5'] as PadButton[]) this.buttons.delete(id);
+    for (const id of ['feed', 'auto', 'vsblock', 'd1', 'd2', 'd3', 'd4'] as PadButton[]) this.buttons.delete(id);
     this.chips.innerHTML = '';
     const chip = (id: PadButton, label: string) => {
       const e = el('div', 't-tap t-chip', this.chips, label);
@@ -326,7 +327,7 @@ export class TouchControls {
       this.buttons.set(id, e);
     };
     const toss = this.buttons.get('toss')!;
-    toss.style.display = g.modeId === 'free' ? '' : 'none';
+    toss.style.display = g.modeId === 'free' || g.modeId === 'serve' ? '' : 'none';
     // tutorial reps: no set-call chips and no block toggle (one Outside story, block off)
     const calls = !g.tutorial.active && (g.modeId === 'spike' || g.modeId === 'rally') && SET_PLAYS[g.position];
     if (calls) {
@@ -336,9 +337,16 @@ export class TouchControls {
       chip('d3', '3');
     }
     if (g.modeId === 'spike' && !g.tutorial.active) chip('vsblock', 'VS BLOCK');
+    // a serve lesson teaches one serve: no chips to pick another
+    if (g.modeId === 'serve' && !g.tutorial.active) {
+      el('span', 't-chip-l', this.chips, 'SERVE');
+      chip('d1', '1');
+      chip('d2', '2');
+      chip('d3', '3');
+    }
     if (g.modeId === 'free') {
       el('span', 't-chip-l', this.chips, 'FEED');
-      for (let i = 1; i <= 5; i++) chip(`d${i}` as PadButton, String(i));
+      for (let i = 1; i <= 4; i++) chip(`d${i}` as PadButton, String(i));
       chip('feed', 'FEED');
       chip('auto', 'AUTO');
     }

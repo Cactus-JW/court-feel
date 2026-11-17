@@ -41,6 +41,7 @@ export class MiniRally extends Mode {
     this.home.opponents = this.away;
     this.away.opponents = this.home;
     this.home.onRead = (r) => this.setterCall(r);
+    for (const team of [this.home, this.away]) team.onUserSet = () => g.hud.message('Set to you · attack!', 1.2);
     const userSlot = USER_SLOT[this.position];
     let seed = 50;
     for (const slot of SLOTS) {
