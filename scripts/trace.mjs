@@ -43,6 +43,7 @@ const RUNS = [
   { mode: 'block', pos: 'MB', bot: 'good' },
   { mode: 'receive', pos: 'L', bot: 'good' },
   { mode: 'setter', pos: 'S', bot: 'good' },
+  { mode: 'serve', pos: 'OH', bot: 'good' },
   { mode: 'rally', pos: 'OH', bot: 'good' },
   { mode: 'rally', pos: 'OPP', bot: 'good' },
   { mode: 'rally', pos: 'MB', bot: 'good' },

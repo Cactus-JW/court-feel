@@ -32,6 +32,7 @@ export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/game.ts -> src/world/textures.ts',
   'src/game/game.ts -> src/world/venue.ts',
   'src/game/modes/mode.ts -> src/world/textures.ts',
+  'src/game/modes/serveDrill.ts -> src/fx/approachGuide.ts',
   'src/game/modes/spikeDrill.ts -> src/fx/approachGuide.ts',
   'src/game/plays.ts -> src/ai/approach.ts',
   'src/game/tutorial.ts -> src/game/modes/mode.ts',
@@ -56,9 +57,9 @@ export const KNOWN_SCENE: readonly string[] = [
 /** tests that fake a `Game` with a cast, because a real one cannot be built without a browser */
 export const KNOWN_FAKE_GAME: readonly string[] = [
   'tests/giveWay.test.ts',
-  'tests/jumpServe.test.ts',
   'tests/middleBlock.test.ts',
   'tests/serve.test.ts',
+  'tests/serveRun.ts',
   'tests/setterCall.test.ts',
   'tests/teamDefence.test.ts',
 ];
