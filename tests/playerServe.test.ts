@@ -355,14 +355,13 @@ describe('the toss button is held: the longer, the higher the toss', () => {
 
 describe('a serve is rated by the pass it forces (0-4, as coaches chart serves)', () => {
   it('a perfect pass is worth 1 to the server, a pass off the net 2, an out-of-system pass or an overpass 3', () => {
-    expect(rateServe(3, false, true).rating).toBe(1);
-    expect(rateServe(2, false, true).rating).toBe(2);
-    expect(rateServe(1, false, true).rating).toBe(3);
-    expect(rateServe(0, true, false).rating).toBe(3);
+    expect(rateServe(3, false).rating).toBe(1);
+    expect(rateServe(2, false).rating).toBe(2);
+    expect(rateServe(1, false).rating).toBe(3);
+    expect(rateServe(0, true).rating).toBe(3);
   });
 
-  it('a shank nobody can play a second time is an ace; one that a team-mate saves is out of system', () => {
-    expect(rateServe(0, false, false).rating).toBe(4);
-    expect(rateServe(0, false, true).rating).toBe(3);
+  it('the rep stops at the pass: a shank, a pass that leaves the court, is charted as an ace', () => {
+    expect(rateServe(0, false)).toEqual({ rating: 4, label: 'ACE · SHANKED' });
   });
 });

@@ -564,9 +564,11 @@ export const SERVE = {
  * The Serve drill (src/game/modes/serveDrill.ts). The server starts `x` m right of the middle of
  * the end line (servers come from right back) and is walked back there between reps when more
  * than `startSlack` m off. A serve nobody has played or called `flightMax` s after the hit is
- * out; a shanked pass nobody has saved after `playMax` s is an ace. Once a serve is rated the
- * receiving team plays its pass out (their attack, or `playOn` s at most): the next rep starts
- * `result` s after the rating at the earliest, and `after` s after their play has ended.
+ * out. The rep ends when the serve is rated (their pass, an ace or a fault): the ball is dead and
+ * the next rep starts `result` s later, long enough to see the pass leave the passer's arms and
+ * read the rating (the Spike Drill's next set comes 1.9 s after a rep). It used to wait for the
+ * receiving team to play the pass out to their attack; that made a rep twice as long, for what the
+ * rating already says. Owner's call, after playing it.
  * A third-person camera starts the drill looking `lookDepth` m into their court, where a serve
  * goes: a full-power jump serve aimed shorter than about 7 m is in the net (the start screen
  * leaves the camera on mid-court, a spike's aim). In first person you look up at your toss, which
@@ -581,10 +583,7 @@ export const SERVE_DRILL = {
   lookDepth: 7.8,
   startSlack: 0.5,
   flightMax: 6,
-  playMax: 4,
-  playOn: 5,
-  result: 2.6,
-  after: 1.2,
+  result: 1.5,
 } as const;
 
 export const ASSIST = {

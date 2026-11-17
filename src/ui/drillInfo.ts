@@ -103,9 +103,9 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
   },
   serve: {
     tag: 'Serve',
-    short: 'Three serves at a team in serve receive.',
+    short: 'Three serves at three passers.',
     about:
-      'Pick your serve: a standing float, a jump float or a jump serve, each harder to hit and harder to pass. You toss from behind the end line and serve at six in serve receive: aim at the seams and the deep corners.',
+      'Pick your serve: a standing float, a jump float or a jump serve, each harder to hit and harder to pass. You toss from behind the end line and serve at three passers, the two outsides and the libero: aim at the seams and the deep corners. The rep ends at their pass.',
     scored: 'the pass you force, 0 to 4: 0 a fault (net, out, foot fault, a toss not hit), 1 a perfect pass, 4 an ace',
     keys: [
       { k: '1  2  3', a: 'Standing float, jump float, jump serve' },

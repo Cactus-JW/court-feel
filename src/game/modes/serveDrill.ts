@@ -1,6 +1,6 @@
 import { COURT, SERVE, SERVE_DRILL, SERVE_KINDS, type ServeKind } from '../../config';
 import { planApproach, simulateApproach } from '../../ai/approach';
-import { SLOT_ROLE, SLOTS, TeamAI } from '../../ai/team';
+import { SLOT_ROLE, TeamAI, type Slot } from '../../ai/team';
 import { ApproachGuide } from '../../fx/approachGuide';
 import { Athlete } from '../athlete';
 import { aimPitchFor, type ContactEvent } from '../contact';
@@ -14,10 +14,18 @@ import { ratePass } from './receiveDrill';
  * - `ready`: behind the end line with the ball, nothing tossed yet
  * - `toss`: the toss is up
  * - `flight`: the serve is on its way and nobody has played it
- * - `play`: they passed it; what the pass was worth is not settled yet (a shank may still drop)
- * - `result`: the serve is rated
+ * - `result`: the serve is rated (by their pass, an ace or a fault) and the ball is dead
  */
-type Phase = 'ready' | 'toss' | 'flight' | 'play' | 'result';
+type Phase = 'ready' | 'toss' | 'flight' | 'result';
+
+/**
+ * Who the serve is served at: a three-player reception, the two outside hitters and the libero in
+ * their receive spots. In a real reception those three take every serve while the setter, the
+ * middle and the opposite stand out of the way (the team AI never gives them a serve either), so
+ * the other three are left out: the rep ends on the pass, and nobody plays it on (turned down: the
+ * receiving team playing the pass out to their attack, which made every rep wait for a rally).
+ */
+const RECEIVERS: readonly Slot[] = ['OH1', 'OH2', 'L'];
 
 /**
  * How a serve is rated, the way coaches chart serves: by the pass it forces (0-4). Their pass is
@@ -25,18 +33,22 @@ type Phase = 'ready' | 'toss' | 'flight' | 'play' | 'result';
  */
 export type ServeRating = 0 | 1 | 2 | 3 | 4;
 
-/** the serve's rating for a pass rated `pass` (0-3), `over` the net, or played a second time (`second`) */
-export function rateServe(pass: number, over: boolean, second: boolean): { rating: ServeRating; label: string } {
+/**
+ * the serve's rating for a pass rated `pass` (0-3) or going `over` the net. A pass rated 0 (one
+ * that leaves the court, where nobody can play it) is charted as an ace, as coaches chart a shank.
+ */
+export function rateServe(pass: number, over: boolean): { rating: ServeRating; label: string } {
   if (over) return { rating: 3, label: 'OVERPASS' };
   if (pass >= 3) return { rating: 1, label: 'PASSED TO TARGET' };
   if (pass === 2) return { rating: 2, label: 'PASSED OFF THE NET' };
-  if (pass === 1 || second) return { rating: 3, label: 'OUT OF SYSTEM' };
+  if (pass === 1) return { rating: 3, label: 'OUT OF SYSTEM' };
   return { rating: 4, label: 'ACE · SHANKED' };
 }
 
 /**
- * Serve drill: the player serves at a team in serve receive, with the serve they picked (keys
- * 1-3: standing float, jump float, jump serve). Every serve is rated by the pass it forces.
+ * Serve drill: the player serves at a three-player reception, with the serve they picked (keys
+ * 1-3: standing float, jump float, jump serve). Every serve is rated by the pass it forces, and the
+ * rep ends there.
  */
 export class ServeDrill extends Mode {
   readonly id = 'serve' as const;
@@ -44,8 +56,6 @@ export class ServeDrill extends Mode {
   private phase: Phase = 'ready';
   private t = 0;
   private kindIdx = 0;
-  /** the pass they made of this serve, until it is settled */
-  private pass: { rating: number; over: boolean } | null = null;
   private last: { rating: ServeRating; label: string; kmh: number } | null = null;
   /** ratings so far, by serve */
   private sums: Record<ServeKind, { n: number; sum: number }> = {
@@ -59,8 +69,6 @@ export class ServeDrill extends Mode {
   private spot: { x: number; z: number } | null = null;
   private goAt = -1;
   private pulse = 0;
-  /** when, in the result phase, the receiving team's play on the pass was over (s) */
-  private doneAt = 0;
   /** the run-up under the toss, for a serve lesson (as the Spike Drill gives it for a set) */
   private line: ApproachLine = {
     tGo: -1,
@@ -89,7 +97,7 @@ export class ServeDrill extends Mode {
     const g = this.g;
     this.away = new TeamAI(-1, g);
     let seed = 70;
-    for (const slot of SLOTS) {
+    for (const slot of RECEIVERS) {
       const a = new Athlete(SLOT_ROLE[slot], -1);
       g.addAthlete(a, seed++);
       this.spawned.push(a);
@@ -149,7 +157,6 @@ export class ServeDrill extends Mode {
     g.contact.serving = null;
     this.away.serving = false;
     this.away.place('receive');
-    this.pass = null;
     this.spot = null;
     this.goAt = -1;
     this.line.tGo = this.line.tPlant = -1;
@@ -275,27 +282,14 @@ export class ServeDrill extends Mode {
       case 'flight':
         if (this.t > SERVE_DRILL.flightMax) this.finish(0, 'OUT');
         break;
-      case 'play':
-        // the pass is settled by their second touch, or by the floor (onOutcome)
-        if (this.away.touches >= 2) this.settle(true);
-        else if (this.t > SERVE_DRILL.playMax) this.settle(false);
-        break;
-      case 'result': {
-        // they play the pass out: what your serve let them run is the other half of its rating.
-        // Once their third ball is on its way over (or it has taken too long) the rep is done
-        const lt = g.ball.lastTouch;
-        const over = lt?.side === this.away.side && (this.away.touches >= 3 || g.ball.pos.z > 0);
-        if (g.ballLive && (over || g.ball.state.rest || this.t > SERVE_DRILL.playOn)) {
-          g.ballLive = false;
-          this.doneAt = this.t;
-        }
-        // a serve lesson: the next toss waits until the coach's line about this serve has been read
-        if (!g.ballLive && !g.tutorial.holdingResult() && this.t > Math.max(SERVE_DRILL.result, this.doneAt + SERVE_DRILL.after)) {
+      case 'result':
+        // the ball is dead (the pass flies on, nobody plays it); a serve lesson's next toss also
+        // waits until the coach's line about this serve has been read
+        if (!g.tutorial.holdingResult() && this.t > SERVE_DRILL.result) {
           this.reset();
           this.toStart();
         }
         break;
-      }
     }
   }
 
@@ -343,47 +337,34 @@ export class ServeDrill extends Mode {
       this.toPhase('flight');
       return;
     }
-    // their first touch of the serve: the pass it forced
+    // their first touch of the serve: the pass it forced, and the end of the rep (a whiffed pass
+    // carries on to the floor: an ace)
     if (this.phase === 'flight' && ev.athlete.side === this.away.side && ev.grade !== 'Miss') {
-      const r = ratePass(g, this.away.side);
-      this.pass = { rating: r.rating, over: r.over };
-      // a pass the setter can play, or one going straight back over, is settled now; a shank is an ace unless somebody saves it
-      if (r.over || r.rating >= 1) this.settle(false);
-      else this.toPhase('play');
+      const p = ratePass(g, this.away.side);
+      const r = rateServe(p.rating, p.over);
+      this.finish(r.rating, r.label);
     }
   }
 
   onOutcome(o: Outcome): void {
     const g = this.g;
-    if (this.phase === 'result' && g.ballLive) {
-      // their play on the pass has ended (a kill into the empty court, a ball they dropped)
-      g.ballLive = false;
-      this.doneAt = this.t;
-    } else if (this.phase === 'flight') {
+    if (this.phase === 'flight') {
       const lt = g.ball.lastTouch;
       if (lt?.kind !== 'serve') return;
       if (o.kind === 'in' && o.side === this.away.side) this.finish(4, 'ACE');
       else if (o.netTouch && (o.kind === 'under-net' || o.kind === 'in')) this.finish(0, 'IN THE NET');
       else this.finish(0, o.kind === 'in' || o.kind === 'under-net' ? 'SHORT' : 'OUT');
-    } else if (this.phase === 'play') this.settle(false);
-  }
-
-  /** their pass is settled: `second`, somebody got a second touch on it */
-  private settle(second: boolean): void {
-    const p = this.pass;
-    if (!p) return;
-    const r = rateServe(p.rating, p.over, second);
-    this.finish(r.rating, r.label);
+    }
   }
 
   private finish(rating: ServeRating, label: string): void {
     const g = this.g;
     if (this.phase === 'result') return;
     const fault = rating === 0;
-    // a serve that is a fault is dead: nobody plays it
-    if (fault || rating === 4) g.ballLive = false;
+    // the rep ends here: the ball is dead, nobody plays it on, and where the pass lands is not judged
+    g.ballLive = false;
+    if (this.phase === 'flight') g.judge.disarm();
     g.contact.serving = null;
-    this.doneAt = 0;
     this.toPhase('result');
     this.reps++;
     this.score += rating;

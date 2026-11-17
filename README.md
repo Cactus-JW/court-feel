@@ -111,7 +111,7 @@ Real frames from the game: no paint-overs, no staged cameras.
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/screenshots/serve-drill-jump-serve.jpg" alt="Serve Drill from behind the server: in the air over the end line, the arm through the ball, PERFECT 95 km/h full power to one side of the flight, six receivers waiting on the far court">
+      <img src="docs/screenshots/serve-drill-jump-serve.jpg" alt="Serve Drill from behind the server: in the air over the end line, the arm through the ball, PERFECT 95 km/h full power to one side of the flight, the libero waiting on the far court, the two outside hitters behind the server">
       <b>Your serve.</b> Standing float, jump float or jump serve: the toss, then a spike's run-up, jump and swing. This one took off a metre behind the end line.
     </td>
     <td width="50%" valign="top">
@@ -353,7 +353,7 @@ screen show them. Only your player uses them; AI players keep the defaults.
 5. **Setter Drill** — passes come in; look at a hitter (outside, quick, back
    set — the target ring lights up) and press right mouse as the ball drops.
    Your hitters attack against a live blocker.
-6. **Serve Drill** — you serve at six in serve receive. Pick the serve before
+6. **Serve Drill** — you serve at three passers (the two outsides and the libero, a real reception). Pick the serve before
    the toss, as on a court (1 / 2 / 3), and each one is harder to hit and
    harder to pass than the one before:
 
@@ -400,13 +400,14 @@ screen show them. Only your player uses them; AI players keep the defaults.
 
    A serve is rated by the pass it forces, the way coaches chart serves:
    **0** a fault, **1** passed to target, **2** passed off the net, **3** out
-   of system or an overpass, **4** an ace (or a shank nobody saves). Faults
+   of system or an overpass, **4** an ace (or a shank, a pass that leaves the court). Faults
    are the real ones: in the net, out, a toss you did not hit (one toss only,
    FIVB rule 12.4.2) and the **foot fault** (rule 12.4.3): on or over the end
    line at the hit, or at the take-off of a jump serve; landing in the court
    afterwards is fine. A mistimed float usually still lands in; a jump serve met
-   early loses its topspin and sails long. The receiving team plays its pass
-   out, so you see what your serve let them run.
+   early loses its topspin and sails long. The rep ends at the pass: the
+   rating comes up, the ball is dead and the next serve is yours a moment
+   later, so you can serve rep after rep.
 7. **Mini Rally** — 6 v 6 with you in your position. The AI receives, sets
    (often to you), attacks, blocks and digs: AI defenders also dig to the side,
    pass slow balls overhand and dive for balls they can't reach on foot. A dive
