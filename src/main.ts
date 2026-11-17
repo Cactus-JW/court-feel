@@ -9,7 +9,7 @@ import type { ModeId } from './game/modes/mode';
 import type { PositionId } from './config';
 import { showCrashScreen } from './ui/crashScreen';
 import { TouchControls, wantsTouch } from './ui/touchControls';
-import { readTutorialFlag, tutorialOffer, writeTutorialFlag } from './game/tutorial';
+import { isLesson, readServeLessons, readTutorialFlag, tutorialOffer, writeTutorialFlag, type Lesson } from './game/tutorial';
 
 const app = document.getElementById('app')!;
 
@@ -75,12 +75,13 @@ function resume(): void {
   game.input.requestLock();
 }
 
-function startTutorial(replay: boolean): void {
+/** start a lesson: the spike (from where it was left, or `replay` from the top), or a serve's */
+function startTutorial(replay: boolean, lesson: Lesson = 'spike'): void {
   game.fx.audio.unlock();
-  lastPlay = { mode: 'spike', pos: 'OH' };
+  lastPlay = { mode: lesson === 'spike' ? 'spike' : 'serve', pos: 'OH' };
   menu.showStart(false);
   menu.showPause(false);
-  game.beginTutorial({ replay });
+  game.beginTutorial({ replay, lesson });
   game.paused = false;
   game.hud.setVisible(true);
   game.input.requestLock();
@@ -122,6 +123,12 @@ const menu = new Menu(app, settings, {
   tutorialActive() {
     return game.tutorial.active;
   },
+  playServeLesson(kind) {
+    startTutorial(true, kind);
+  },
+  serveLessonsDone() {
+    return readServeLessons();
+  },
   playing() {
     return game.inMenu ? null : lastPlay;
   },
@@ -130,7 +137,7 @@ const menu = new Menu(app, settings, {
     if (game.stopped) return;
     menu.showPause(false);
     // restarting during the lesson restarts the rep it is on
-    if (game.tutorial.active) game.beginTutorial({ step: game.tutorial.step });
+    if (game.tutorial.active) game.beginTutorial({ step: game.tutorial.step, lesson: game.tutorial.lesson });
     else game.startMode(lastPlay.mode, lastPlay.pos);
     game.input.clearEdges();
     game.paused = false;
@@ -228,10 +235,11 @@ game.onTutorialSkipped = (where) => {
 
 // the lesson's three balls are done: say so and offer what to do next (carry on here, or choose a drill).
 // The drill underneath is paused, with the mouse free for the buttons.
-game.onTutorialDone = (clean) => {
+game.onTutorialDone = (clean, lesson) => {
   if (game.stopped) return;
   game.paused = true;
-  menu.showFinished(clean);
+  menu.showFinished(clean, lesson);
+  menu.syncTutorial();
   game.input.exitLock();
 };
 
@@ -294,18 +302,22 @@ app.addEventListener('mousedown', () => {
 });
 
 // quick-start links for automation and sharing a drill: ?mode=spike&pos=OH&bot=perfect&cam=fp&hand=left
-// ?tutorial=N starts the first-run lesson at that step (replay, so it runs even after done)
+// ?tutorial=N starts the first-run lesson at that step (replay, so it runs even after done),
+// and &lesson=float|jumpFloat|jump the lesson for that serve instead
 enterMenu();
 const q = new URLSearchParams(location.search);
 if (q.get('tutorial') !== null) {
   const n = Number(q.get('tutorial'));
   const cam = q.get('cam');
+  const l = q.get('lesson');
+  const lesson: Lesson = isLesson(l) ? l : 'spike';
+  const mode = lesson === 'spike' ? 'spike' : 'serve';
   menu.showStart(false);
   menu.selectPos('OH');
-  menu.selectMode('spike');
-  lastPlay = { mode: 'spike', pos: 'OH' };
+  menu.selectMode(mode);
+  lastPlay = { mode, pos: 'OH' };
   if (cam === 'fp' || cam === 'tp') settings.firstPerson = cam === 'fp';
-  game.beginTutorial({ replay: true, step: Number.isFinite(n) ? n : 0 });
+  game.beginTutorial({ replay: true, step: Number.isFinite(n) ? n : 0, lesson });
   game.hud.setVisible(true);
 } else {
   const launch = parseLaunchParams(location.search);
