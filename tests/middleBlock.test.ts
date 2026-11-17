@@ -3,7 +3,7 @@ import { AI, CONTACT, COURT, PLAYER, SIM } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
 import type { Touch } from '../src/game/ballEntity';
-import type { Game } from '../src/game/game';
+import type { AiHost } from '../src/ai/host';
 import { attackHeight, laneFor, quickSpot, SETTER_SPOT, SETTER_TARGET } from '../src/game/plays';
 import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
 import { BallPredictor } from '../src/physics/predict';
@@ -57,7 +57,7 @@ function net(opts: { seed?: number; guess?: Guess | null; theirMiddleX?: number;
     },
   };
   const g = { simTime: 0, env, rng: new Rng(opts.seed ?? 1), ball, contact: { tryBlock: () => false } };
-  const game = g as unknown as Game;
+  const game = g as unknown as AiHost;
 
   const me = new Athlete('MB', 1);
   me.place(0, 0.5, 0);
