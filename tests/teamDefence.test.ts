@@ -3,7 +3,7 @@ import { AI, COURT, SIM } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
 import type { Touch, TouchKind } from '../src/game/ballEntity';
-import type { Game } from '../src/game/game';
+import type { AiHost } from '../src/game/brains';
 import { MiniRally } from '../src/game/modes/miniRally';
 import { laneFor, SETTER_SPOT } from '../src/game/plays';
 import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
@@ -60,10 +60,9 @@ function homeTeam() {
     ball,
     setBrain() {},
     onAiContact() {},
-    hud: { message() {} },
     contact: { lastSet: null, tryPass: () => false, tryBlock: () => false },
   };
-  const game = g as unknown as Game;
+  const game = g as unknown as AiHost;
   const team = new TeamAI(1, game);
   for (const slot of SLOTS) team.add(slot, new Athlete(SLOT_ROLE[slot], 1), false);
   team.place('defense');
@@ -305,7 +304,7 @@ describe('the second ball (Mini Rally)', () => {
     // the libero's pass sails over the net, coming down 3 m into their court
     t.touch('pass', 1, { x: L.pos.x, y: 0.8, z: L.pos.z }, { x: 0.5, y: 0.5, z: -3 }, 4.6, L);
     t.run(AI.setterRead + 0.2);
-    expect(t.team.overpass(t.g as unknown as Game)).toBe(true);
+    expect(t.team.overpass(t.g as unknown as AiHost)).toBe(true);
     expect(t.brain('S').job).not.toBe('set');
     expect(t.team.read).toBeNull();
     for (const slot of ['OH1', 'MB', 'OPP'] as const) expect(t.brain(slot).job).toBe('block');
@@ -317,7 +316,7 @@ describe('the second ball (Mini Rally)', () => {
     const L = t.team.players.get('L')!;
     t.touch('pass', 1, { x: L.pos.x, y: 0.8, z: L.pos.z }, { x: SETTER_SPOT.x, y: 2.4, z: SETTER_SPOT.z }, 4.6, L);
     t.run(AI.setterRead + 0.2);
-    expect(t.team.overpass(t.g as unknown as Game)).toBe(false);
+    expect(t.team.overpass(t.g as unknown as AiHost)).toBe(false);
     expect(t.brain('S').job).toBe('set');
   });
 
@@ -332,7 +331,7 @@ describe('the second ball (Mini Rally)', () => {
     t.touch('pass', 1, { x: L.pos.x, y: 0.8, z: L.pos.z }, { x: -3.8, y: 0.75, z: 8.2 }, 5.5, L);
     t.run(AI.setterRead + 0.2);
     expect(t.team.read?.call).toBe('help');
-    expect(t.team.freeBall(t.g as unknown as Game)).toBe(you);
+    expect(t.team.freeBall(t.g as unknown as AiHost)).toBe(you);
   });
 
   /** a pass from the back-row outside the setter (away right, at the net) can't get to, down at `to` */
@@ -351,14 +350,14 @@ describe('the second ball (Mini Rally)', () => {
     expect(t.team.read?.call).toBe('help');
     expect(t.brain('L').job).toBe('set');
     expect(t.team.secondBy).toBe(L);
-    expect(t.team.freeBall(t.g as unknown as Game)).toBeNull();
+    expect(t.team.freeBall(t.g as unknown as AiHost)).toBeNull();
   });
 
   it("a shanked pass the libero runs down by the end line is too hard to set: it doesn't try, it bumps it up high", () => {
     const { t, L } = helpBall({ x: -2.6, z: 8.3 }, 3.6);
     expect(t.team.read?.call).toBe('help');
     expect(t.brain('L').job).toBe('free');
-    expect(t.team.freeBall(t.g as unknown as Game)).toBe(L);
+    expect(t.team.freeBall(t.g as unknown as AiHost)).toBe(L);
   });
 
   it('a second ball nobody could set goes up high to the 3 m line, not to the net, for a free ball over from there', () => {
@@ -418,7 +417,7 @@ describe('a hard ball is played as well as it can be, and no better (Mini Rally)
       L.place(0, 4);
       // the ball drops onto the libero's hands
       t.put({ x: -0.14, y: L.height + 0.22, z: 4 }, { x: 0, y: -2, z: 0 }, t.team.players.get('OH2')!);
-      sb.step(DT, t.g as unknown as Game);
+      sb.step(DT, t.g as unknown as AiHost);
       expect(t.ball.lastTouch?.athlete).toBe(L);
       // where the set comes down through the hitter's contact height
       const b = makeBall();
@@ -473,7 +472,7 @@ describe('a hard ball is played as well as it can be, and no better (Mini Rally)
     for (let i = 0; i < 0.6 * SIM.hz && !dug; i++) {
       t.g.simTime += DT;
       stepBall(t.ball.state, DT, t.g.env, []);
-      b.step(DT, t.g as unknown as Game);
+      b.step(DT, t.g as unknown as AiHost);
       S.step(DT, t.g.simTime);
       dug = S.action?.kind === 'pass' || S.state === 'dive';
     }

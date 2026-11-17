@@ -53,6 +53,12 @@ describe('architecture: every import points down', () => {
     }
   });
 
+  it('a brain knows the game only as AiHost: nothing under src/ai imports the Game', () => {
+    for (const file of SRC.filter((f) => layerOf(f) === 'ai')) {
+      expect(importsOf(file).files, `${file} imports the Game`).not.toContain('src/game/game.ts');
+    }
+  });
+
   it('config imports nothing', () => {
     const { files, packages } = importsOf('src/config.ts');
     expect([...files, ...packages]).toEqual([]);
@@ -77,8 +83,9 @@ describe('architecture: the simulation runs with no page and no renderer', () =>
 });
 
 describe('architecture: tests build the real thing', () => {
-  it('no test fakes a Game with a cast, apart from the ones already known', () => {
-    const faking = filesUnder('tests').filter((f) => f !== 'tests/architecture.test.ts' && /as unknown as Game\b/.test(read(f)));
+  it('no test fakes the game with a cast, apart from the ones already known', () => {
+    // a fake is a hand-made object cast to the game, or to the part of it the brains see
+    const faking = filesUnder('tests').filter((f) => f !== 'tests/architecture.test.ts' && /as unknown as (Game|AiHost)\b/.test(read(f)));
     expect(drift(faking, KNOWN_FAKE_GAME, 'build what the code under test needs, not a cast')).toEqual([]);
   });
 });

@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { AI, BALL, CONTACT, COURT, PLAYER } from '../config';
 import { clamp, yawFromDir } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
-import type { Game } from '../game/game';
+import type { AiHost, Brain } from '../game/brains';
 import { attackHeight, quickSpot, type AttackLane } from '../game/plays';
-import { planApproach, planQuick, planToPoint, type ApproachPlan } from './approach';
-import { moveTo, netYaw, stop, type Brain } from './brain';
+import { planApproach, planQuick, planToPoint, type ApproachPlan } from '../game/approach';
+import { moveTo, netYaw, stop } from './brain';
 import { blockHands, ContactSystem } from '../game/contact';
 import type { V3 } from '../physics/ball';
 import { openShot, type BlockHands, type Digger } from './openShot';
@@ -21,7 +21,7 @@ export class HitterBrain implements Brain {
   plan: ApproachPlan | null = null;
   skill = AI.hitterSkill;
   /** is the ball in the air a set for me? */
-  isMySet: (g: Game) => boolean = () => false;
+  isMySet: (g: AiHost) => boolean = () => false;
   /** opposing blockers to read */
   blockers: () => Athlete[] = () => [];
   /** everyone on the other side who could dig it (the hitter looks for the open spot) */
@@ -39,7 +39,7 @@ export class HitterBrain implements Brain {
    * leaves the floor with the setter's touch; a pin hitter on a fast set is mid-run then.
    * If the set goes elsewhere the run was a decoy.
    */
-  passToSetter: ((g: Game) => { t: number; x: number } | null) | null = null;
+  passToSetter: ((g: AiHost) => { t: number; x: number } | null) | null = null;
   private quickFor: unknown = null;
   /** this approach is a pin hitter's fast set, run before the setter touches the ball */
   tempo = false;
@@ -74,7 +74,7 @@ export class HitterBrain implements Brain {
     return this.plan && (this.phase === 'approach' || this.phase === 'load') ? this.plan.tPress + this.plan.hold : undefined;
   }
 
-  step(_dt: number, g: Game): void {
+  step(_dt: number, g: AiHost): void {
     const a = this.athlete;
     const now = g.simTime;
     if (!this.enabled) return;
@@ -195,7 +195,7 @@ export class HitterBrain implements Brain {
    * The open spot for a full-speed spike from `from` (see openShot), against the defence as it
    * stands: they can move `read` s after the hit (a blocker in the air comes down first).
    */
-  private openSpot(g: Game, from: V3, tHit: number, read: number, misread: boolean) {
+  private openSpot(g: AiHost, from: V3, tHit: number, read: number, misread: boolean) {
     const a = this.athlete;
     const diggers: Digger[] = this.defenders().map((d) => {
       // a blocker in the air comes down first
@@ -233,7 +233,7 @@ export class HitterBrain implements Brain {
    * (a middle: steep and short, behind the off-blocker), steering away from the block's hands;
    * against a closed block a roll shot over it or a wipe off the outside hand.
    */
-  chooseAim(g: Game, hitX: number, from?: V3, tHit = g.simTime): THREE.Vector3 {
+  chooseAim(g: AiHost, hitX: number, from?: V3, tHit = g.simTime): THREE.Vector3 {
     const a = this.athlete;
     const opp = -a.side; // the other court
     const hw = COURT.halfWidth;

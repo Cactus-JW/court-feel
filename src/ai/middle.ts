@@ -2,11 +2,11 @@ import { AI, BALL, PLAYER } from '../config';
 import { clamp } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
 import type { Touch } from '../game/ballEntity';
-import type { Game } from '../game/game';
+import type { AiHost, Brain } from '../game/brains';
 import { laneFor, SETTER_SPOT } from '../game/plays';
 import type { V3 } from '../physics/ball';
-import { predictJump } from './approach';
-import { moveTo, netYaw, stop, type Brain } from './brain';
+import { predictJump } from '../game/approach';
+import { moveTo, netYaw, stop } from './brain';
 import { BallRead } from './read';
 
 /** what a middle expects before the set: nothing in particular (read it), the quick, or one of their pins */
@@ -66,7 +66,7 @@ export class MiddleBlocker implements Brain {
     this.handsTo = null;
   }
 
-  step(dt: number, g: Game): void {
+  step(dt: number, g: AiHost): void {
     const a = this.athlete;
     const now = g.simTime;
     const face = netYaw(a.side);
@@ -102,7 +102,7 @@ export class MiddleBlocker implements Brain {
   }
 
   /** their first ball: line up across from their middle, guess once it has been read */
-  private readPass(g: Game, lt: Touch): void {
+  private readPass(g: AiHost, lt: Touch): void {
     const a = this.athlete;
     const now = g.simTime;
     this.passRead.look(lt, now, g.rng);
@@ -123,7 +123,7 @@ export class MiddleBlocker implements Brain {
     this.targetX = lineX + Math.sign(pin) * M.cheatShift;
   }
 
-  private makeGuess(g: Game): Guess {
+  private makeGuess(g: AiHost): Guess {
     const r = g.rng.next();
     if (r < AI.middle.commit) return 'quick';
     if (r < AI.middle.commit + AI.middle.cheat) return g.rng.next() < 0.5 ? 'outside' : 'opposite';
@@ -131,7 +131,7 @@ export class MiddleBlocker implements Brain {
   }
 
   /** will their setter take the pass near their spot (a quick is on)? */
-  private passGood(g: Game): boolean {
+  private passGood(g: AiHost): boolean {
     const now = g.simTime;
     const pred = g.ball.ensurePrediction(g.env, now);
     const t = pred.descendThrough(2.6, now);
@@ -142,7 +142,7 @@ export class MiddleBlocker implements Brain {
   }
 
   /** a commit block: up with their middle's quick, timed off their plant and take-off */
-  private commit(g: Game): void {
+  private commit(g: AiHost): void {
     const a = this.athlete;
     const now = g.simTime;
     const them = this.theirMiddle();
@@ -159,7 +159,7 @@ export class MiddleBlocker implements Brain {
   }
 
   /** their set: react, read where it is going, run to close the block, jump on time or late with a gap */
-  private readSet(g: Game, lt: Touch): void {
+  private readSet(g: AiHost, lt: Touch): void {
     const a = this.athlete;
     const now = g.simTime;
     if (this.setRead.look(lt, now, g.rng)) this.tc = -1;

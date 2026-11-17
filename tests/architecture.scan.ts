@@ -13,7 +13,7 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
  *   ai      the brains (src/ai)
  *   drills  the rules of each drill (src/game/modes)
  *   display everything a player sees or hears (src/ui, fx, audio, camera, world, character)
- *   app     the one place that builds every part (src/main.ts)
+ *   app     the one place that builds every part, and what only it needs: the quick-start link, the stored settings (src/main.ts, src/app)
  */
 export type Layer = 'config' | 'core' | 'physics' | 'sim' | 'ai' | 'drills' | 'display' | 'app';
 
@@ -40,7 +40,7 @@ export function layerOf(file: string): Layer | null {
   if (parts[0] !== 'src') return null;
   if (parts.length === 2) return parts[1] === 'config.ts' ? 'config' : parts[1] === 'main.ts' ? 'app' : null;
   const dir = parts[1];
-  if (dir === 'core' || dir === 'physics' || dir === 'ai') return dir;
+  if (dir === 'core' || dir === 'physics' || dir === 'ai' || dir === 'app') return dir;
   if (dir === 'game') return parts[2] === 'modes' ? 'drills' : 'sim';
   return DISPLAY_DIRS.has(dir) ? 'display' : null;
 }
