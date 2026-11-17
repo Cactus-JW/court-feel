@@ -1,5 +1,19 @@
 import * as THREE from 'three';
-import { ASSIST, CAMERA, CHARACTER, COURT, PLAYER, SIM, TIMING, TUTORIAL, type PositionId, type Settings, type VenueId } from '../config';
+import {
+  ASSIST,
+  CAMERA,
+  CHARACTER,
+  COURT,
+  PLAYER,
+  SERVE,
+  SIM,
+  TIMING,
+  TUTORIAL,
+  type PositionId,
+  type ServeKind,
+  type Settings,
+  type VenueId,
+} from '../config';
 import { Emitter } from '../core/events';
 import { Input } from '../core/input';
 import { saveSettings } from '../core/settings';
@@ -23,7 +37,7 @@ import type { Kit } from '../character/rig';
 import { wheelPlays } from './playbook';
 import { setStepAssist } from './setAssist';
 import { autoSetJump, takeoffSpot } from './setJump';
-import { aimTargetFromLook, ContactSystem, type ContactEvent, type IdealInfo, type SetPreview } from './contact';
+import { aimTargetFromLook, ContactSystem, tossGroove, type ContactEvent, type IdealInfo, type SetPreview } from './contact';
 import { SetGuide } from '../fx/setGuide';
 import { SetRing } from '../fx/setRing';
 import { SetSpot } from '../fx/setSpot';
@@ -38,9 +52,9 @@ import { createMode } from './modes/registry';
 import { makeRingTexture } from '../world/textures';
 import { UserActions } from './userActions';
 import { defaultPassTarget, defaultSetOptions } from './plays';
-import { BlockBot, isBotQuality, SpikeBot, TouchBot, type BotQuality } from './bot';
+import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
 import { Effects } from '../fx/effects';
-import { reached, Tutorial, type TutorialBegin } from './tutorial';
+import { reached, Tutorial, type Lesson, type TutorialBegin } from './tutorial';
 
 /** consecutive frames that throw before the game stops and shows the crash screen */
 const MAX_FAILED_FRAMES = 10;
@@ -51,6 +65,8 @@ export type GameEvents = {
   aiContact: { athlete: Athlete; kind: TouchKind; speed: number };
   outcome: Outcome;
   ballEvent: { kind: string; x: number; y: number; z: number; impact: number };
+  /** a float serve has just broken (`BALL.float`): how hard, 0..1 */
+  floatBreak: { strength: number };
   crowd: { amount: number; cheer: boolean };
   step: { athlete: Athlete; speed: number };
   land: { athlete: Athlete; impact: number };
@@ -142,7 +158,7 @@ export class Game {
   /** called once per render frame after the HUD (the touch overlay draws itself here) */
   onFrame: (() => void) | null = null;
   /** the lesson's three balls are done (`clean`: the last one was a Perfect or a Good): offer what to do next */
-  onTutorialDone: ((clean: boolean) => void) | null = null;
+  onTutorialDone: ((clean: boolean, lesson: Lesson) => void) | null = null;
   /** Skip tutorial: 'menu' from the welcome, 'drill' once a rep is underway */
   onTutorialSkipped: ((where: 'menu' | 'drill') => void) | null = null;
   tutorial!: Tutorial;
@@ -154,6 +170,8 @@ export class Game {
   ballLive = false;
   /** test hook: the user's athlete is driven by the team AI */
   autoUser = false;
+  /** the serve the player has picked (keys 1-3 in the Serve drill): their next toss is that serve's toss */
+  serveKind: ServeKind = 'float';
   /**
    * Errors caught by the game: a frame or an event handler that threw. `fatal` means the
    * game has stopped (frames kept throwing). Without a handler they go to the console.
@@ -413,6 +431,8 @@ export class Game {
     this.mode?.teardown();
     this.bot = null;
     this.ballLive = false;
+    this.serveKind = 'float';
+    this.contact.serving = null;
     this.me.isUser = true;
     this.input.releaseAll();
     this.judge.disarm();
@@ -434,12 +454,13 @@ export class Game {
   /**
    * Guided first session: Spike Drill, Outside, block off. Camera stays whatever
    * the player picked (FP and TP both stay available). `replay` starts at the welcome.
+   * A serve lesson (`lesson`: the serve) runs on the Serve Drill, as an Outside Hitter.
    */
   beginTutorial(opts: TutorialBegin = {}): void {
     this.hud.setVisible(true);
     this.paused = false;
     this.tutorial.begin(opts);
-    this.startMode('spike', 'OH');
+    this.startMode(this.tutorial.lesson === 'spike' ? 'spike' : 'serve', 'OH');
     this.tutorial.present();
   }
 
@@ -549,7 +570,8 @@ export class Game {
   aimTargetFor(a: Athlete, out: THREE.Vector3): THREE.Vector3 {
     if (a.isUser) {
       // the lesson's together rep: the coach aims it too (deep, down the hitter's line). Aiming comes later.
-      if (this.tutorial.ownsButtons()) return out.set(a.pos.x, 0, -a.side * TUTORIAL.aimDepth);
+      if (this.tutorial.ownsButtons())
+        return out.set(a.pos.x, 0, -a.side * (this.tutorial.serving ? TUTORIAL.serveAimDepth : TUTORIAL.aimDepth));
       const from = a.action && a.action.kind === 'swing' ? a.action.contactPoint : a.pos;
       return aimTargetFromLook(from.x, from.z, this.rig.yaw, this.rig.pitch, this.rig.mode === 'fp', a.side, out);
     }
@@ -851,7 +873,9 @@ export class Game {
           ? new TouchBot(this, 'pass', quality)
           : this.modeId === 'setter' || (this.modeId === 'rally' && role === 'S')
             ? new TouchBot(this, 'set', quality)
-            : new SpikeBot(this, quality);
+            : this.modeId === 'serve'
+              ? new ServeBot(this, quality)
+              : new SpikeBot(this, quality);
   }
 
   /** start-screen background: the bot runs the spike drill under an orbiting camera */
@@ -975,6 +999,7 @@ export class Game {
     }
     this.ball.step(dt, this.env);
     for (const e of this.ball.events) this.events.emit('ballEvent', e);
+    if (this.ball.broke > 0) this.events.emit('floatBreak', { strength: this.ball.broke });
     const out = this.judge.step(this.ball, this.ball.events, this.env.netTop);
     if (out) {
       this.events.emit('outcome', out);
@@ -1116,7 +1141,8 @@ export class Game {
     // spike wind-up: power ring, a tick at full charge, a swish on release
     const wind = me.action?.kind === 'windup' ? me.action : null;
     const charge = wind ? ContactSystem.chargeFor(this.simTime - wind.t0) : -1;
-    this.hud.setCharge(wind && !this.inMenu ? charge : null);
+    // (the same ring shows how high a toss being held will go, with a mark at the serve's own height)
+    this.hud.setCharge(this.inMenu ? null : wind ? charge : this.actions.tossHold(), wind ? null : tossGroove() / SERVE.hold.full);
     const collarErr =
       this.idealValid && me.state === 'air' && !this.inMenu
         ? this.simTime + ContactSystem.swingLead(wind ? charge : 0) - this.idealCache.t
@@ -1137,7 +1163,14 @@ export class Game {
   private updateAimReticle(dt: number): void {
     const me = this.me;
     const mat = this.aimReticle.material as THREE.MeshBasicMaterial;
-    const show = !this.inMenu && (me.state === 'air' || me.state === 'load' || me.action?.kind === 'toss' || me.action?.kind === 'windup');
+    // (a serve is aimed from the toss to the hit: the run-up under a jump serve's toss is longer than the toss's own pose)
+    const show =
+      !this.inMenu &&
+      (me.state === 'air' ||
+        me.state === 'load' ||
+        me.action?.kind === 'toss' ||
+        me.action?.kind === 'windup' ||
+        this.contact.serving === me);
     mat.opacity = lerp(mat.opacity, show ? 0.75 : 0, damp(12, dt));
     this.aimReticle.visible = mat.opacity > 0.02;
     if (this.aimReticle.visible) {
