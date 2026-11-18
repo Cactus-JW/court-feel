@@ -786,6 +786,8 @@ export const ASSIST = {
   /** slow-mo assist (settings toggle): timescale while lining up a contact, and how early it kicks in */
   slowmoScale: 0.55,
   slowmoWindow: 0.35,
+  /** how fast the play eases into and out of every assist slow-mo (1/s): the speed never jumps. Tuned by play */
+  slowmoEase: 12,
   /**
    * set slow-mo (settings toggle, on by default), the same on every level so the bar always looks
    * the same: from `setSlowmoWindow` s before the ball reaches your hands the game runs at
@@ -868,6 +870,8 @@ export const TOUCH = {
  * speed. Speeds are fractions of real time. None of this touches the grading windows.
  */
 export const TUTORIAL = {
+  /** how fast the lesson's clock eases to the speed a moment asks for (1/s). A moment the ball waits at is taken at once. Tuned by play */
+  clockEase: 10,
   /** the welcome line, before the first toss (s, real time; any key moves on) */
   welcome: 2.2,
   /** the coach's line after a rep (s, real time; any key moves on after `resultMin`) */
@@ -1575,6 +1579,26 @@ export const AUDIO = {
  * `nameMax`: the longest name that fits the wheel.
  */
 export const PLAYBOOK = { minGap: 0.6, nameMax: 16 } as const;
+
+/**
+ * The quality governor (src/app/quality.ts): the picture gets cheaper when the machine cannot keep
+ * up, so the play never slows. Level 0 is full (MSAA, pixel ratio up to 1.5), 1 has no MSAA and a
+ * pixel ratio of 1, `lowest` draws at 0.8x with smaller shadows and no floor mirror. Tuned on a
+ * laptop with integrated graphics.
+ */
+export const QUALITY = {
+  lowest: 2,
+  /** frames are averaged over this long (s) */
+  window: 2,
+  /** a window averaging below this many frames a second is slow */
+  slowFps: 50,
+  /** this many slow windows in a row step the quality down one level */
+  slowWindows: 2,
+  /** no step for this long after the game starts (s): loading costs frames */
+  startCooldown: 3,
+  /** nor for this long after a change (s): the change itself costs frames */
+  changeCooldown: 4,
+} as const;
 
 export const AI = {
   reactionTime: 0.18,

@@ -1016,6 +1016,7 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 | `VENUES` | The five venues: floor colours and how much the floor mirrors, the sky, the lights, haze, grade, the athletes' rim light, the crowd's light and sound, the boards, and whether the sky is open (`openSky`: no ceiling) |
 | `BALL_LOOK` | How deep the ball's seams look and how much it glows by itself |
 | `PLAYBOOK` | The play designer: how far apart two front-row hitters' sets must be hit, and the longest name |
+| `QUALITY` | The quality governor: how slow a machine has to be, and for how long, before the picture gets cheaper |
 | `AI` | How long a jump set with the dump on holds their middle (`middle.dumpHold`); A pin hitter going inside: how far off square the run is, how much speed is kept through the plant and how much of it goes into the ball (`insideRun`); Your green set: who their middle bites on (`greenBite`, `greenBlockGuess`) and your hitter's bounce (`greenBounce`); how much an AI hitter's run across the court curves (`approach`); how late a hitter can still be asked for a fast set out of system (`oosAsk`); How often the pipe's hitter looks for the open spot (`pipe.open`), the 3 m line kept clear by a back-row hitter's take-off and the libero's hand set (`backRow`), where a scramble's ups go (`up`, `diveUp`), no approach for a set out of reach (`approachMiss`), no overhand free ball from deep (`freeOver.bumpFrom`); Reaction time and skill of hitters, blockers, defenders, setter accuracy; the Mini Rally middle blocker (`middle`: its reaction and read of the set, how often it commits on the quick or cheats to a pin, how close it closes on the pin blocker, how late it still jumps and how far it reaches sideways) and pin blockers (`wing`: how late a pin still goes up, how far out it goes at the antenna); how much room team-mates give each other (`giveWay`) and when the defence split-steps (`splitStep`); who the setter sets (`setWeight`) and how often the pipe (`pipe`); an overpass (`overpass`), an AI hitter misreading the user's block (`userBlockMisread`), who takes a ball (`pick`: first there takes it, the seam goes to the libero or you, the setter only when nobody else is close, a ball off a block or a second ball the libero gets to is the libero's, and so is their free ball when it gets there comfortably: `liberoFree`; no HELP call on a ball that is down `dive` s before anyone arrives); a block only from the net (`blockNet`), what players without the ball do in each of the ten situations (`sit`: the back row moving along the net with the ball, pin blockers fronting their hitters, the serve-receive transition and back-up, following the pass, waiting deeper out of system, closing on a scramble, each player's own offset for the rally), arriving on the hitter's contact instead of early (`pace`), turning to run a ball down (`chase`); where an AI free ball over goes (`freeOver`: a deep corner or short, wherever they aren't); perimeter defence read spots and reaction times (`defence`), early transition and the front row's transition off the net after a block (`transition`, `approachOff`: no quick from the net) and covering our hitter in the real 3-2 spots (`cover`: when, the middle at the net, the setter on the 3 m line, the back row behind and deep, how fast a coverer reads a ball off the block); when the setter calls the pass (`setterRead`), how far off the net is out of system (`outOfSystem`) and how much higher an out-of-system set goes (`outOfSystemApex`); the AI's serves (`serve`: jump share, run-up, toss, error, where they aim); the attack: swing timing error (`attackErr`), the open spot (`openShot*`, `digReach`, `digTop`, `blockReachBand`), where a quick goes (`quickShot`), how often the setter goes to the middle (`quickWeight`), fast sets to the pins (`tempo`), tool, roll and recycle shots (`toolShot`, `rollShot`, `recycleShot`), what a hitter under the ball does instead of a weak swing (`offSpeed`: a wipe off the block, a tip, a roll to the open court, or a hard swing through it); a backup's set off a hard ball (`backupSet`: the libero's or anyone's, how hard it is by time, distance and the run under it, how much it misses, the one barely reached that is bumped instead; never a set to the user), what an AI dive does with the ball (`diveUp`: a bit up, toward the middle) and when a free ball is aimed (`freeOver.aimSpeed`), a setter too late for the hands digging it (`lateSet`); how far out a ball must land before a receiver lets it go (`outJudge`) and how much a hard ball rushes an AI passer's timing (`passPressure`); first balls overhand (`overhand`), dives (`dive`, `stretch`: a last-ditch dive at a ball just past the hands; `anyway`, `anywayFar`: now and then a dive at one out of reach) and a second player running at a ball the first may not reach (`scramble`); your green set as a point (their middle's wrong guess, the wings' late read, the diggers' late start: `greenSet*`, `greenBlockGuess`) and how much harder your bad set is to hit (`badSetErr`, `badSetTip`); when a hitter backing off the net is ready for a called tempo run (`transitionReady`, `transitionLatest`) |
 
 Player-facing settings (sensitivity, FOV, invert Y, key hints, net height; under
@@ -1140,8 +1141,13 @@ branch it goes into and fails when the known lists grow
   is drawn and shown: every call the HUD gets, the camera, and where the ball,
   the athletes (every joint) and the drill's floor markers are. That is the data
   the picture is made from, not screenshots, so it is the same on every machine
-  (`TRACE_DISPLAY_SECONDS`, 30 per drill). It proves what the autopilots play:
-  the lessons, the menus, the touch controls, effects and sound are not in it.
+  (`TRACE_DISPLAY_SECONDS`, 30 per drill). The four lessons are taken the same
+  way with scripted hands (`TRACE_LESSON_SECONDS`, 75 each). Last, every drill is
+  played again from the hands the game logged the first time, with no autopilot
+  and no key pressed, and has to give the same play: nothing reaches the
+  simulation from a player except their logged intent. It proves what the
+  autopilots and the scripted hands play: the menus, the touch controls, effects
+  and sound are not in it.
 * `tests/properties.test.ts` (part of `npm test`) states facts that must hold for
   every input and tries each on hundreds of seeded ones (`tests/forAll.ts`), for
   the bugs nobody wrote a case for: for any launch the ball lands where the
@@ -1201,23 +1207,36 @@ branch it goes into and fails when the known lists grow
 
 ## Project layout
 
+Every import points down this list: a file may import from the lines above its
+own and never from the ones below ([decision record 0010](docs/adr/0010-the-simulation-runs-on-its-own.md),
+held by `tests/architecture.test.ts`). The simulation is everything down to the
+drills. It has no renderer and no DOM, and it takes nothing from a player but
+their intent, so it can be built and stepped in a unit test.
+
 ```
 src/config.ts          all tunables
-src/core/              input (with buffering), touch pad model, settings (validated), quick-start links,
-                       error reporter, build info, math, events
+src/core/              input (with buffering), touch pad model, error reporter, build info, math, events
 src/physics/           ball physics, predictor, trajectory solvers (pure, tested)
+src/game/              the simulation: athletes, the ball, contacts and timing, the judge, the plays;
+                       a player's intent, their seat and their actions; the lesson
+src/ai/                the brains: setter, hitter, blocker, server, team coordinator
+src/game/modes/        the drills, and the markers they ask for
+---------------------- everything below draws the simulation or drives it
 src/character/         procedural rig, sculpted mesh, face and number decals, animator (poses + IK), kits
-src/game/              game loop, athlete kinematics, contact/timing system, judge, modes, bots
-src/ai/                setter, hitter, blocker, server, team coordinator
-src/fx/                particles, trails, effects director, replay, post-processing
-src/audio/             Web Audio synthesis
 src/world/             arena, the venues (stands and crowd, sky, what stands round the court), floor mirror,
-                       procedural textures
+                       the ball as it is drawn, procedural textures
+src/camera/            the camera rig
+src/fx/                particles, trails, effects director, replay, post-processing, the drills' markers
+src/audio/             Web Audio synthesis
 src/ui/                HUD, menus (start screen sections, pause, Settings and Athlete sheets), each drill's
                        menu text and keys, icons, touch controls overlay, crash screen, debug overlay
-tests/                 unit tests
-scripts/               e2e and screenshot tooling
-docs/screenshots/      the README screenshots (real frames from the game)
+src/app/               the one place that builds every part: the game shell and its frame loop, how fast
+                       the play runs, the quality governor, the autopilots, stored settings, quick-start links
+src/main.ts            the page: menus, pause, errors
+tests/                 unit tests, the architecture rules (tests/architecture.*) and their lists
+scripts/               e2e, the trace comparison, the check that judges a pull request by its base branch
+docs/                  decision records (docs/adr), how the checks are arranged (docs/verification.md),
+                       the README screenshots (real frames from the game)
 .github/               CI, issue forms (feel report, bug, idea) and the pull request template
 ```
 

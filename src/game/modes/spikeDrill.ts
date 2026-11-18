@@ -19,9 +19,9 @@ import {
   type SetPlay,
 } from '../plays';
 import type { ApproachLine } from '../tutorial';
-import { ApproachGuide } from '../../fx/approachGuide';
 import { kbd } from '../../core/kbd';
-import { Mode, ZoneMarker } from './mode';
+import type { GuideMark, ShadowMark, ZoneMark } from './markers';
+import { Mode } from './mode';
 import { planApproach, planQuick, planToPoint, simulateApproach, type ApproachPlan } from '../approach';
 import { BlockerBrain } from '../../ai/blocker';
 import { blockShadowOnCourt, HANDS_WIDTH, type HandSpan } from '../blockShadow';
@@ -31,9 +31,6 @@ export type BlockLevel = 0 | 1 | 2;
 const BLOCK_NAMES = ['off', 'single', 'double'] as const;
 /** how far above the net top the blockers' hands are taken to reach (the shadow's wall height) */
 const HANDS_ABOVE_NET = 0.35;
-/** the shadow is at most two polygons (one per blocker, or one closed wall) of up to this many corners */
-const SHADOW_POLYS = 2;
-const SHADOW_CORNERS = 8;
 
 interface Zone {
   name: string;
@@ -77,9 +74,9 @@ export class SpikeDrill extends Mode {
   private phase: Phase = 'intro';
   private t = 0;
   private zone!: Zone;
-  private zoneMarker = new ZoneMarker();
+  private zoneMarker!: ZoneMark;
   /** where your feet go: the plant spot (and, in the first-run lesson, the arrows to it) */
-  private guide!: ApproachGuide;
+  private guide!: GuideMark;
   private line: ApproachLine = {
     tGo: -1,
     tPlant: -1,
@@ -109,11 +106,7 @@ export class SpikeDrill extends Mode {
   blockLevel: BlockLevel = 0;
   private blockers: { a: Athlete; brain: BlockerBrain }[] = [];
   /** the block's shadow on their floor: where a straight ball from your contact cannot go */
-  private shadow!: THREE.Mesh;
-  private shadowEdge!: THREE.LineSegments;
-  private shadowPos = new Float32Array(SHADOW_POLYS * SHADOW_CORNERS * 3);
-  private shadowIdx = new Uint16Array(SHADOW_POLYS * (SHADOW_CORNERS - 2) * 3);
-  private shadowEdgePos = new Float32Array(SHADOW_POLYS * SHADOW_CORNERS * 2 * 3);
+  private shadow!: ShadowMark;
 
   private get play(): SetPlay | null {
     return this.plays ? this.plays[this.callIdx] : null;
@@ -192,40 +185,6 @@ export class SpikeDrill extends Mode {
     return this.blockers.slice(0, this.blockLevel).map((b) => b.a);
   }
 
-  private buildShadow(): void {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(this.shadowPos, 3));
-    geo.setIndex(new THREE.BufferAttribute(this.shadowIdx, 1));
-    geo.setDrawRange(0, 0);
-    // the court floor is pulled towards the camera with a polygon offset: pull the overlay further, or
-    // it loses the depth test at grazing angles (the far court seen from behind the hitter)
-    const offset = { polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 };
-    this.shadow = new THREE.Mesh(
-      geo,
-      new THREE.MeshBasicMaterial({
-        color: 0xff4a3a,
-        transparent: true,
-        opacity: 0.3,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        ...offset,
-      }),
-    );
-    this.shadow.renderOrder = 2;
-    this.shadow.visible = false;
-    this.add(this.shadow);
-    const egeo = new THREE.BufferGeometry();
-    egeo.setAttribute('position', new THREE.BufferAttribute(this.shadowEdgePos, 3));
-    egeo.setDrawRange(0, 0);
-    this.shadowEdge = new THREE.LineSegments(
-      egeo,
-      new THREE.LineBasicMaterial({ color: 0xff7a68, transparent: true, opacity: 0.85, ...offset }),
-    );
-    this.shadowEdge.renderOrder = 3;
-    this.shadowEdge.visible = false;
-    this.add(this.shadowEdge);
-  }
-
   /** where your contact will be (the set when it is up, otherwise the lane) */
   private contactPoint(out: { x: number; y: number; z: number }): void {
     const g = this.g;
@@ -265,47 +224,12 @@ export class SpikeDrill extends Mode {
 
   /** the shadow on their floor of hands at these x along the net, for a ball hit from `contact` */
   private drawShadow(show: boolean, contact: { x: number; y: number; z: number }, handsX: number[]): void {
-    this.shadow.visible = show;
-    this.shadowEdge.visible = show;
-    if (!show) return;
-    const spans: HandSpan[] = handsX.map((x) => ({ x0: x - HANDS_WIDTH / 2, x1: x + HANDS_WIDTH / 2 }));
-    const polys = blockShadowOnCourt(contact, spans, this.g.env.netTop + HANDS_ABOVE_NET, COURT.halfWidth, COURT.halfLength);
-    const P = this.shadowPos;
-    const I = this.shadowIdx;
-    const E = this.shadowEdgePos;
-    const y = 0.013;
-    let nv = 0;
-    let ni = 0;
-    let ne = 0;
-    for (const poly of polys.slice(0, SHADOW_POLYS)) {
-      const n = Math.min(poly.length, SHADOW_CORNERS);
-      const base = nv;
-      for (let k = 0; k < n; k++) {
-        P[nv * 3] = poly[k][0];
-        P[nv * 3 + 1] = y;
-        P[nv * 3 + 2] = poly[k][1];
-        nv++;
-        // edge k -> k+1
-        const nx = poly[(k + 1) % n];
-        E.set([poly[k][0], y, poly[k][1], nx[0], y, nx[1]], ne * 3);
-        ne += 2;
-      }
-      // triangle fan
-      for (let k = 1; k < n - 1; k++) {
-        I[ni++] = base;
-        I[ni++] = base + k;
-        I[ni++] = base + k + 1;
-      }
+    if (!show) {
+      this.shadow.draw(null);
+      return;
     }
-    const geo = this.shadow.geometry;
-    (geo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-    geo.index!.needsUpdate = true;
-    geo.setDrawRange(0, ni);
-    geo.computeBoundingSphere();
-    const egeo = this.shadowEdge.geometry;
-    (egeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-    egeo.setDrawRange(0, ne);
-    egeo.computeBoundingSphere();
+    const spans: HandSpan[] = handsX.map((x) => ({ x0: x - HANDS_WIDTH / 2, x1: x + HANDS_WIDTH / 2 }));
+    this.shadow.draw(blockShadowOnCourt(contact, spans, this.g.env.netTop + HANDS_ABOVE_NET, COURT.halfWidth, COURT.halfLength));
   }
 
   /** choose the set call for the next ball (0-based) */
@@ -357,10 +281,9 @@ export class SpikeDrill extends Mode {
     this.spawned.push(this.coach);
     this.coach.airIntent = 'neutral';
 
-    this.add(this.zoneMarker.group);
-    this.guide = new ApproachGuide();
-    this.add(this.guide.group);
-    this.buildShadow();
+    this.zoneMarker = g.markers.zone();
+    this.guide = g.markers.approachGuide();
+    this.shadow = g.markers.blockShadow();
     this.pickZone();
     this.setTitle();
     this.updateScore();
@@ -548,14 +471,14 @@ export class SpikeDrill extends Mode {
     );
     // one Outside set, block off: swallow the call and block keys until the lesson ends
     if (this.g.tutorial.active) {
-      if (this.plays) for (let i = 0; i < this.plays.length; i++) this.g.input.consumePress('Digit' + (i + 1));
-      this.g.input.consumePress('KeyB');
+      if (this.plays) for (let i = 0; i < this.plays.length; i++) this.g.keyPressed('Digit' + (i + 1));
+      this.g.keyPressed('KeyB');
       return;
     }
     if (this.plays) {
-      for (let i = 0; i < this.plays.length; i++) if (this.g.input.consumePress('Digit' + (i + 1))) this.selectCall(i);
+      for (let i = 0; i < this.plays.length; i++) if (this.g.keyPressed('Digit' + (i + 1))) this.selectCall(i);
     }
-    if (this.g.input.consumePress('KeyB')) this.cycleBlock();
+    if (this.g.keyPressed('KeyB')) this.cycleBlock();
   }
 
   private feedBall(): void {

@@ -12,28 +12,13 @@
 // Keep each list sorted, one entry per line.
 
 /** imports that reach a layer the importing file may not see, as 'importer -> imported' (type-only imports count) */
-export const KNOWN_IMPORTS: readonly string[] = [
-  'src/game/athlete.ts -> src/character/rig.ts',
-  'src/game/body.ts -> src/character/rig.ts',
-  'src/game/modes/mode.ts -> src/world/textures.ts',
-  'src/game/modes/serveDrill.ts -> src/fx/approachGuide.ts',
-  'src/game/modes/spikeDrill.ts -> src/fx/approachGuide.ts',
-  'src/game/userController.ts -> src/camera/cameraRig.ts',
-];
+export const KNOWN_IMPORTS: readonly string[] = [];
 
 /** simulation files that touch the DOM (window, document, storage) */
 export const KNOWN_DOM: readonly string[] = [];
 
 /** simulation files that build scene objects: three.js classes that are not maths */
-export const KNOWN_SCENE: readonly string[] = [
-  'src/game/debugGizmos.ts',
-  'src/game/modes/freePlay.ts',
-  'src/game/modes/miniRally.ts',
-  'src/game/modes/mode.ts',
-  'src/game/modes/receiveDrill.ts',
-  'src/game/modes/setterDrill.ts',
-  'src/game/modes/spikeDrill.ts',
-];
+export const KNOWN_SCENE: readonly string[] = [];
 
 /** tests that fake the game with a cast (to `Game`, or to the `AiHost` the brains see), because a real one cannot be built without a browser */
 export const KNOWN_FAKE_GAME: readonly string[] = [

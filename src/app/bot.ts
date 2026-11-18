@@ -8,6 +8,7 @@ import type { Game } from './game';
 import { planApproach, planQuick, type ApproachPlan } from '../game/approach';
 import { quickSpot, setterTouchY } from '../game/plays';
 import type { AiHost } from '../game/brains';
+import type { Intent } from '../game/intent';
 import { SETTER_KEYS, type SetterKey } from '../game/setterCalls';
 
 /**
@@ -37,6 +38,18 @@ const drillView = (g: Game): DrillView | null => g.mode as unknown as DrillView 
 export const BOT_QUALITIES = ['perfect', 'good', 'sloppy', 'tip'] as const;
 export type BotQuality = (typeof BOT_QUALITIES)[number];
 export const isBotQuality = (v: unknown): v is BotQuality => BOT_QUALITIES.includes(v as BotQuality);
+
+/**
+ * An autopilot's feet. Keys can only run along eight directions, so an autopilot says where it
+ * goes outright, in the intent (the buttons and the look it does go through `Input` and the camera,
+ * like a person). It steers to the centimetre, so it takes no help with its steps.
+ */
+function steerExactly(intent: Intent, moveX: number, moveZ: number, sprint: boolean): void {
+  intent.moveX = moveX;
+  intent.moveZ = moveZ;
+  intent.sprint = sprint;
+  intent.helped = false;
+}
 
 /**
  * An autopilot stands in for a player, and a player's hands are not part of the simulation: the
@@ -229,11 +242,8 @@ export class SpikeBot {
   }
 
   /** override the keyboard movement mapping */
-  after(): void {
-    const me = this.g.me;
-    me.cmd.moveX = this.mx;
-    me.cmd.moveZ = this.mz;
-    me.cmd.sprint = this.sprint;
+  steer(intent: Intent): void {
+    steerExactly(intent, this.mx, this.mz, this.sprint);
   }
 
   private sim: Athlete | null = null;
@@ -444,11 +454,8 @@ export class BlockBot {
     }
   }
 
-  after(): void {
-    const me = this.g.me;
-    me.cmd.moveX = this.mx;
-    me.cmd.moveZ = 0;
-    me.cmd.sprint = false;
+  steer(intent: Intent): void {
+    steerExactly(intent, this.mx, 0, false);
   }
 }
 
@@ -603,11 +610,8 @@ export class TouchBot {
     }
   }
 
-  after(): void {
-    const me = this.g.me;
-    me.cmd.moveX = this.mx;
-    me.cmd.moveZ = this.mz;
-    me.cmd.sprint = Math.hypot(this.mx, this.mz) > 0.9;
+  steer(intent: Intent): void {
+    steerExactly(intent, this.mx, this.mz, Math.hypot(this.mx, this.mz) > 0.9);
   }
 }
 
@@ -778,10 +782,7 @@ export class ServeBot {
   }
 
   /** override the keyboard movement mapping */
-  after(): void {
-    const me = this.g.me;
-    me.cmd.moveX = this.mx;
-    me.cmd.moveZ = this.mz;
-    me.cmd.sprint = this.sprint;
+  steer(intent: Intent): void {
+    steerExactly(intent, this.mx, this.mz, this.sprint);
   }
 }

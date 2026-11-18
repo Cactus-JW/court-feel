@@ -8,6 +8,7 @@ import type { AiHost, Brain } from './brains';
 import { ContactSystem, type ContactEvent, type SetOption } from './contact';
 import { Judge, type Outcome } from './judge';
 import { defaultPassTarget, defaultSetOptions } from './plays';
+import { Seat, type SeatHost } from './seat';
 import type { SetPick } from './setterCalls';
 
 /**
@@ -24,8 +25,6 @@ export interface SimulationHooks {
   setByFeel?(): boolean;
   /** where this athlete is aiming on the floor */
   aimTargetFor(a: Athlete, out: THREE.Vector3): THREE.Vector3;
-  /** which way the player is looking (rad) */
-  userAimYaw(): number;
   /** a touch was resolved */
   contact(ev: ContactEvent): void;
   /** a touch a brain made without the contact system (the AI setter's set) */
@@ -54,22 +53,20 @@ export interface SimDrill {
 }
 
 /**
- * The simulation: the athletes, the ball, the clock, the random stream, the brains, the contact
- * system and the judge, and the one step that moves them all. It has no renderer and no DOM, so it
+ * The simulation: the athletes, the players' seats, the ball, the clock, the random stream, the
+ * brains, the contact system and the judge, and the one step that moves them all. It has no renderer and no DOM, so it
  * can be built and stepped in a unit test (docs/adr/0010). `Game` holds one and draws it.
  */
 export class Simulation implements AiHost {
   athletes: Athlete[] = [];
-  /** the athlete the player controls */
-  me!: Athlete;
+  /** the players: one seat each. Seat 0 is this machine's player; a game nobody is playing has none */
+  readonly seats: Seat[] = [];
   readonly ball = new BallEntity();
   readonly env: BallEnv = { netTop: COURT.netHeightMen };
   readonly rng = new Rng(2024);
   readonly brains = new Map<Athlete, Brain>();
   readonly contact: ContactSystem;
   readonly judge = new Judge();
-  /** the player's held actions (a pass, a set, a block waiting on its moment), stepped between the athletes and the contacts */
-  actions: { step(dt: number): void } | null = null;
   drill: SimDrill | null = null;
   simTime = 0;
   /** rally modes: is the ball in play (AI teams read this) */
@@ -96,7 +93,29 @@ export class Simulation implements AiHost {
       setLevel: () => hooks.setLevel?.() ?? 'easy',
       canServe: (a) => (this.drill?.canServe ? this.drill.canServe(a) : !this.ball.active || this.ball.state.rest),
     });
-    this.contact.userAimYaw = () => hooks.userAimYaw();
+    // an attack is aimed where its player looks: that is in their seat's intent
+    this.contact.userAimYaw = (a) => this.seatOf(a)?.intent.yaw ?? 0;
+  }
+
+  /** give a player a seat: the athlete is theirs to play from now on */
+  addSeat(athlete: Athlete, host: SeatHost = {}): Seat {
+    const seat = new Seat(this.seats.length, athlete, this, host);
+    this.seats.push(seat);
+    return seat;
+  }
+
+  /** the seat that plays this athlete, if a player does */
+  seatOf(a: Athlete): Seat | undefined {
+    return this.seats.find((s) => s.athlete === a);
+  }
+
+  /** the athlete of this machine's player (seat 0) */
+  get me(): Athlete {
+    return this.seats[0].athlete;
+  }
+  set me(a: Athlete) {
+    if (this.seats.length) this.seats[0].athlete = a;
+    else this.addSeat(a);
   }
 
   setBrain(a: Athlete, b: Brain): void {
@@ -116,10 +135,11 @@ export class Simulation implements AiHost {
     this.simTime += dt;
     for (const [, b] of this.brains) b.step(dt, this);
     this.hooks.userSetJump?.();
-    // assist magnet for the user's mid-air drift
-    this.contact.magnet(this.me);
+    // assist magnet for a player's mid-air drift
+    for (const seat of this.seats) this.contact.magnet(seat.athlete);
     for (const a of this.athletes) a.step(dt, this.simTime);
-    this.actions?.step(dt);
+    // each player's held actions (a pass, a set, a block waiting on its moment)
+    for (const seat of this.seats) seat.actions.step(dt);
     this.contact.step(this.athletes);
     // cleanup finished actions
     for (const a of this.athletes) {

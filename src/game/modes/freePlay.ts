@@ -1,10 +1,10 @@
-import * as THREE from 'three';
 import { CONTACT } from '../../config';
 import { solveApex, solveSpeedToFloor } from '../../physics/solve';
 import type { ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { attackHeight, laneFor, SETTER_SPOT } from '../plays';
 import { kbd } from '../../core/kbd';
+import type { MachineMark } from './markers';
 import { Mode } from './mode';
 
 type Feed = 'set' | 'free' | 'serve' | 'attack';
@@ -17,42 +17,6 @@ const FEED_LABEL: Record<Feed, string> = {
 };
 
 /** a ball machine: base, drum and barrel that aims where it shoots */
-function makeMachine(): { group: THREE.Group; barrel: THREE.Group; lamp: THREE.Mesh } {
-  const group = new THREE.Group();
-  const dark = new THREE.MeshStandardMaterial({ color: 0x2b2f3a, roughness: 0.5, metalness: 0.5 });
-  const accent = new THREE.MeshStandardMaterial({ color: 0xff9f1c, roughness: 0.4, metalness: 0.2 });
-  const base = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.6), dark);
-  base.position.y = 0.06;
-  group.add(base);
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 10), dark);
-  mast.position.y = 0.55;
-  group.add(mast);
-  const barrel = new THREE.Group();
-  barrel.position.y = 1.05;
-  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.22, 18), accent);
-  drum.rotation.z = Math.PI / 2;
-  barrel.add(drum);
-  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.45, 16, 1, true), dark);
-  tube.rotation.x = Math.PI / 2;
-  tube.position.z = -0.25;
-  barrel.add(tube);
-  group.add(barrel);
-  const hopper = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.22, 0.12, 0.3, 14, 1, true),
-    new THREE.MeshStandardMaterial({ color: 0x9fb4d8, transparent: true, opacity: 0.45, side: THREE.DoubleSide }),
-  );
-  hopper.position.set(0, 1.35, 0.1);
-  group.add(hopper);
-  const lamp = new THREE.Mesh(
-    new THREE.SphereGeometry(0.05, 10, 8),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 2.2, 0.6) }),
-  );
-  lamp.position.set(0, 1.25, -0.12);
-  group.add(lamp);
-  group.traverse((o) => ((o as THREE.Mesh).castShadow = true));
-  return { group, barrel, lamp };
-}
-
 /**
  * Free play: a machine feeds the ball type you choose (1-4); everything else
  * is up to you: spike, pass, block, set, or toss one up yourself (Q). Serving has its own
@@ -63,7 +27,9 @@ export class FreePlay extends Mode {
   private feed: Feed = 'set';
   private auto = true;
   private wait = 1.5;
-  private machine!: ReturnType<typeof makeMachine>;
+  private machine!: MachineMark;
+  /** where the machine stands */
+  private machineAt = { x: 0, z: 0 };
   private lastWasMachine = false;
   private requested = false;
 
@@ -71,8 +37,7 @@ export class FreePlay extends Mode {
     const g = this.g;
     const lane = laneFor(this.position, 1);
     g.placeUser(lane.sx, lane.sz, 0);
-    this.machine = makeMachine();
-    this.add(this.machine.group);
+    this.machine = g.markers.machine();
     this.placeMachine();
     g.hud.setTitle('Free Play');
     this.updateScore();
@@ -80,22 +45,26 @@ export class FreePlay extends Mode {
   }
 
   private placeMachine(): void {
-    const m = this.machine.group;
+    const at = this.machineAt;
     switch (this.feed) {
       case 'set':
-        m.position.set(SETTER_SPOT.x, 0, SETTER_SPOT.z + 0.2);
+        at.x = SETTER_SPOT.x;
+        at.z = SETTER_SPOT.z + 0.2;
         break;
       case 'free':
-        m.position.set(0, 0, -6.5);
+        at.x = 0;
+        at.z = -6.5;
         break;
       case 'serve':
-        m.position.set(1.5, 0, -10.2);
+        at.x = 1.5;
+        at.z = -10.2;
         break;
       case 'attack':
-        m.position.set(-0.5, 0.0, -2.2);
+        at.x = -0.5;
+        at.z = -2.2;
         break;
     }
-    m.scale.setScalar(this.feed === 'attack' ? 1.6 : 1);
+    this.machine.place(at.x, at.z, this.feed === 'attack' ? 1.6 : 1);
   }
 
   private updateScore(): void {
@@ -112,9 +81,8 @@ export class FreePlay extends Mode {
   }
 
   frame(_dt: number): void {
-    const inp = this.g.input;
     for (let i = 0; i < FEEDS.length; i++) {
-      if (inp.consumePress('Digit' + (i + 1))) {
+      if (this.g.keyPressed('Digit' + (i + 1))) {
         this.feed = FEEDS[i];
         this.placeMachine();
         this.updateScore();
@@ -122,8 +90,8 @@ export class FreePlay extends Mode {
         this.requested = !this.auto;
       }
     }
-    if (inp.consumePress('KeyF')) this.requested = true;
-    if (inp.consumePress('KeyT')) {
+    if (this.g.keyPressed('KeyF')) this.requested = true;
+    if (this.g.keyPressed('KeyT')) {
       this.auto = !this.auto;
       this.updateScore();
     }
@@ -139,11 +107,7 @@ export class FreePlay extends Mode {
     const b = g.ball;
     const idle = !b.active || b.state.rest;
     // the lamp shows when the machine is about to fire
-    (this.machine.lamp.material as THREE.MeshBasicMaterial).color.setRGB(
-      idle && this.wait < 0.6 ? 2.5 : 0.3,
-      idle && this.wait < 0.6 ? 2.2 : 1.6,
-      0.4,
-    );
+    this.machine.lamp(idle && this.wait < 0.6 ? 2.5 : 0.3, idle && this.wait < 0.6 ? 2.2 : 1.6, 0.4);
     if (!idle) return;
     const act = g.me.action?.kind;
     if (act === 'toss' || (act === 'windup' && g.contact.serving === g.me)) return; // the user is serving
@@ -158,8 +122,8 @@ export class FreePlay extends Mode {
   private fire(): void {
     const g = this.g;
     const me = g.me;
-    const m = this.machine.group;
-    const from = { x: m.position.x, y: this.feed === 'attack' ? 2.85 : 1.2, z: m.position.z - (this.feed === 'set' ? 0 : -0.3) };
+    const m = this.machineAt;
+    const from = { x: m.x, y: this.feed === 'attack' ? 2.85 : 1.2, z: m.z - (this.feed === 'set' ? 0 : -0.3) };
     const v = { x: 0, y: 0, z: 0 };
     let w = { x: 0, y: 0, z: 0 };
     let knuckle = 0;
@@ -196,7 +160,7 @@ export class FreePlay extends Mode {
     }
     // aim the barrel
     const yaw = Math.atan2(-v.x, -v.z);
-    this.machine.barrel.rotation.set(Math.atan2(v.y, Math.hypot(v.x, v.z)), yaw - m.rotation.y, 0, 'YXZ');
+    this.machine.aim(Math.atan2(v.y, Math.hypot(v.x, v.z)), yaw);
     g.ball.launch(from, v, w, knuckle, g.simTime, g.rng.next() * 1000);
     g.ball.lastTouch = { athlete: null, kind: this.feed === 'set' ? 'set' : 'feed', t: g.simTime, side: this.feed === 'set' ? 1 : -1 };
     g.judge.arm(g.ball);

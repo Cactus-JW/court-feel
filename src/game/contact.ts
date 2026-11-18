@@ -1169,7 +1169,7 @@ export class ContactSystem {
     if (picked) return picked;
     const outside = a.isUser ? opts.find((o) => o.key === DEFAULT_PICK) : undefined;
     if (outside) return outside;
-    const aimYaw = a.isUser ? this.userAimYaw() : yawFromDir(a.aiAim.x - from.x, a.aiAim.z - from.z);
+    const aimYaw = a.isUser ? this.userAimYaw(a) : yawFromDir(a.aiAim.x - from.x, a.aiAim.z - from.z);
     let best = opts[0];
     let bestD = 1e9;
     for (const o of opts) {
@@ -1372,7 +1372,7 @@ export class ContactSystem {
   lastSet: SetOption | null = null;
   /** the last set the user pushed: hitters swing better off a good one, and a green beats the block */
   lastSetResult: SetResult | null = null;
-  userAimYaw: () => number = () => 0;
+  userAimYaw: (a: Athlete) => number = () => 0;
 
   /** RMB block: hands volume above / over the net */
   tryBlock(a: Athlete, act: Action): boolean {

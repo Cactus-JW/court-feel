@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { ApproachGuideState } from '../game/modes/markers';
 import { FX } from '../config';
 import { damp } from '../core/mathx';
 import { makeChevronTexture, makeRingTexture } from '../world/textures';
@@ -22,21 +23,6 @@ function floorMaterial(color: THREE.Color | number, map: THREE.Texture | null): 
     polygonOffsetFactor: -4,
     polygonOffsetUnits: -4,
   });
-}
-
-export interface ApproachGuideState {
-  /** where the feet go for the plant (null: hide everything) */
-  spot: { x: number; z: number } | null;
-  /** where the run starts: the arrows lead from here towards the spot (null: the spot alone) */
-  from: { x: number; z: number } | null;
-  /** where the plant starts on that run (null: not known yet): the line to jump from */
-  plant: { x: number; z: number } | null;
-  /** the hitter's feet now */
-  feet: { x: number; z: number };
-  /** 0..1: the GO cue just fired */
-  pulse: number;
-  /** the ball is waiting for the run: the arrows call harder */
-  urge: boolean;
 }
 
 /**

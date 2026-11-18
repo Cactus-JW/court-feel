@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { AI, CONTACT, TIMING } from '../../config';
 import { yawFromDir } from '../../core/mathx';
 import { solveApex } from '../../physics/solve';
@@ -27,7 +26,8 @@ import { outcomeLabel, type Outcome } from '../judge';
 import { SETTER_SPOT, SETTER_TARGET } from '../plays';
 import { DEFAULT_PICK, SETTER_KEYS, SetterCalls, type SetPick, type SetterKey } from '../setterCalls';
 import { kbd } from '../../core/kbd';
-import { makeFloorRing, Mode } from './mode';
+import type { RingMark } from './markers';
+import { Mode } from './mode';
 import type { AiHost } from '../brains';
 
 type Phase = 'intro' | 'feed' | 'live' | 'result';
@@ -60,9 +60,9 @@ export class SetterDrill extends Mode {
   private lifted = false;
   private setFor: Athlete | null = null;
   private attacked = false;
-  private markers = new Map<SetterKey, THREE.Mesh>();
+  private markers = new Map<SetterKey, RingMark>();
   /** where your dump lands, on their floor (front row only) */
-  private dumpMarker!: THREE.Mesh;
+  private dumpMarker!: RingMark;
   private tossed = false;
   /** your picks and calls (keys 1-4) */
   readonly calls = new SetterCalls();
@@ -91,9 +91,7 @@ export class SetterDrill extends Mode {
       g.setBrain(a, brain);
       // a hitter whose call is a quick goes on the pass, timed to your touch
       this.hitters.set(k, { a, brain, read: (gm) => this.passToMe(gm, k) });
-      const m = makeFloorRing(CALL_COLOR[k], 1.0);
-      this.add(m);
-      this.markers.set(k, m);
+      this.markers.set(k, g.markers.ring(CALL_COLOR[k], 1.0));
     }
     // a passer in the back court feeding the setter target
     this.passer = new Athlete('L', 1);
@@ -112,9 +110,8 @@ export class SetterDrill extends Mode {
       this.defence.add(slot, d, false);
     }
     this.defence.place('defense');
-    this.dumpMarker = makeFloorRing(CALL_COLOR.DUMP, 0.9);
+    this.dumpMarker = g.markers.ring(CALL_COLOR.DUMP, 0.9);
     this.dumpMarker.visible = false;
-    this.add(this.dumpMarker);
     // off a bad pass a hitter can still be asked for their fast set, if they hear it in time
     this.calls.canAsk = (k) => canAskFast(g, g.me, this.calls, k);
     this.calls.onAsk = (k) => askFast(g, g.me, this.hitters, this.calls, k);
@@ -206,17 +203,15 @@ export class SetterDrill extends Mode {
     for (const [k, m] of this.markers) {
       m.visible = g.settings.hitterSpots;
       const spot = callSpot(this.calls, k, this.outOfSystem);
-      m.position.set(spot.x, 0.011, spot.z + 0.15);
-      const mat = m.material as THREE.MeshBasicMaterial;
-      mat.opacity += ((k === lit ? 0.95 : 0.25) - mat.opacity) * Math.min(1, dt * 10);
+      m.place(spot.x, spot.z + 0.15);
+      m.fade(k === lit ? 0.95 : 0.25, dt);
     }
     // the dump's spot on their floor
     const D = CONTACT.dump;
     const spot = this.calls.dumpDeep ? D.deep : D.short;
     this.dumpMarker.visible = this.calls.frontRow;
-    this.dumpMarker.position.set(spot.x, 0.011, spot.z);
-    const dm = this.dumpMarker.material as THREE.MeshBasicMaterial;
-    dm.opacity += ((lit === 'DUMP' ? 0.95 : 0.25) - dm.opacity) * Math.min(1, dt * 10);
+    this.dumpMarker.place(spot.x, spot.z);
+    this.dumpMarker.fade(lit === 'DUMP' ? 0.95 : 0.25, dt);
     g.hud.setCallSheet(callSheet(this.calls, stripKeys(this.calls), lit, this.off()));
   }
 
@@ -235,9 +230,9 @@ export class SetterDrill extends Mode {
   step(dt: number): void {
     const g = this.g;
     this.t += dt;
-    this.calls.readKeys(g.input);
+    this.calls.readKeys(this.keys);
     if (this.calls.takeLate()) g.hud.message('Too late to change it · they are committed', 1.2);
-    if (g.input.consumePress('KeyG') && !this.calls.locked) this.toggleRow();
+    if (g.keyPressed('KeyG') && !this.calls.locked) this.toggleRow();
     // before the pass the hitters walk to the start of their call's run
     if (!this.calls.locked) applyCalls(this.hitters, this.calls, false);
     syncRuns(this.hitters, this.calls);

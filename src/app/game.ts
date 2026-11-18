@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import {
-  ASSIST,
   CAMERA,
   CHARACTER,
   COURT,
@@ -26,12 +25,15 @@ import { REFLECT_LAYER } from '../world/floorReflection';
 import { Post } from '../fx/post';
 import { Athlete, handSign } from '../game/athlete';
 import { bodyStats } from '../game/body';
-import { UserController } from '../game/userController';
+import { copyIntent, idleIntent, readIntent, readKeys, takeKey, type Intent } from '../game/intent';
+import type { Seat } from '../game/seat';
+import type { UserController } from '../game/userController';
 import { DebugOverlay, type DebugInfo } from '../ui/debug';
 import { BallEntity, type TouchKind } from '../game/ballEntity';
 import { BallView } from '../world/ballView';
 import { Simulation } from '../game/simulation';
-import { DebugGizmos } from '../game/debugGizmos';
+import { DebugGizmos } from '../fx/debugGizmos';
+import { SceneMarkers } from '../fx/drillMarkers';
 import type { BallEnv } from '../physics/ball';
 import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
@@ -53,8 +55,10 @@ import { kbd } from '../core/kbd';
 import { type Mode, type ModeId } from '../game/modes/mode';
 import { createMode } from '../game/modes/registry';
 import { makeRingTexture } from '../world/textures';
-import { UserActions } from '../game/userActions';
+import type { UserActions } from '../game/userActions';
 import { lessonStore } from './lessonStore';
+import { Pace } from './pace';
+import { QualityGovernor } from './quality';
 import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
 import { Effects } from '../fx/effects';
 import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tutorial';
@@ -69,11 +73,17 @@ const MAX_FAILED_FRAMES = 10;
 export class Game implements AiHost {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
+  /** what the drill has put on the court for the player to read (a ring, the zone to hit, the block's shadow): the drill says what, this draws it */
+  readonly markers = new SceneMarkers(this.scene);
   readonly rig: CameraRig;
   arena: Arena;
   readonly post: Post;
   readonly input: Input;
-  readonly user: UserController;
+  /** this machine's player: their athlete, their controller, the actions they hold. A second player would be a second seat */
+  readonly seat: Seat;
+  get user(): UserController {
+    return this.seat.controller;
+  }
   /** a listener that throws is reported, the others still run and the step carries on */
   readonly events = new Emitter<GameEvents>((err, type) => this.reportError(err, `'${String(type)}' event handler`, false));
   readonly debug: DebugOverlay;
@@ -84,19 +94,30 @@ export class Game implements AiHost {
   readonly ballView: BallView;
   readonly gizmos: DebugGizmos;
   readonly views = new Map<Athlete, AthleteView>();
-  readonly actions: UserActions;
+  get actions(): UserActions {
+    return this.seat.actions;
+  }
   readonly fx: Effects;
   private currentMode: Mode | null = null;
   modeId: ModeId = 'spike';
   position: PositionId = 'OH';
   /** autopilot driving the user's inputs (tests / attract mode) */
-  bot: { step(dt: number): void; after(): void } | null = null;
+  bot: { step(dt: number): void; steer(intent: Intent): void } | null = null;
 
   private lastRenderSimT = 0;
   private accum = 0;
-  timeScale = 1;
+  /** how fast the play runs: the slow-mo assists, the lesson's clock and the hit-stop (src/app/pace.ts) */
+  readonly pace = new Pace();
+  get timeScale(): number {
+    return this.pace.timeScale;
+  }
+  set timeScale(v: number) {
+    this.pace.timeScale = v;
+  }
   /** the game speed from the slow-mo assists right now (the set bot times its frames by it) */
-  slowmo = 1;
+  get slowmo(): number {
+    return this.pace.slowmo;
+  }
   /** the set coming down onto the user's hands (refreshed each frame), for the set slow-mo and the timing ring */
   private setPrev: SetPreview | null = null;
   /** the set coming to you, before you are under it: the bar shows early when the ball is yours to set */
@@ -124,9 +145,13 @@ export class Game implements AiHost {
   }
   private setSpot!: SetSpot;
   private spotP = { x: 0, y: 0, z: 0 };
-  /** the lesson's clock: 1 real time, slower through a taught rep, 0 while the ball waits for the player */
-  tutor = 1;
-  hitStop = 0;
+  /** seconds the play holds still after a clean hit: the effects ask for it, the pace spends it */
+  get hitStop(): number {
+    return this.pace.hitStop;
+  }
+  set hitStop(v: number) {
+    this.pace.hitStop = v;
+  }
   paused = false;
   private last = 0;
   private fpsAcc = 0;
@@ -153,7 +178,12 @@ export class Game implements AiHost {
   /** test hook: the user's athlete is driven by the team AI */
   autoUser = false;
   /** the serve the player has picked (keys 1-3 in the Serve drill): their next toss is that serve's toss */
-  serveKind: ServeKind = 'float';
+  get serveKind(): ServeKind {
+    return this.seat.serveKind;
+  }
+  set serveKind(kind: ServeKind) {
+    this.seat.serveKind = kind;
+  }
   /**
    * Errors caught by the game: a frame or an event handler that threw. `fatal` means the
    * game has stopped (frames kept throwing). Without a handler they go to the console.
@@ -185,7 +215,6 @@ export class Game implements AiHost {
       setAssist: (a) => (a.isUser ? this.settings.setAimAssist : 0.3),
       setByFeel: () => !this.settings.setRing,
       aimTargetFor: (a, out) => this.aimTargetFor(a, out),
-      userAimYaw: () => this.rig.yaw,
       contact: (ev) => this.onContact(ev),
       aiContact: (athlete, kind, speed) => this.events.emit('aiContact', { athlete, kind, speed }),
       ballEvent: (e) => this.events.emit('ballEvent', e),
@@ -218,7 +247,6 @@ export class Game implements AiHost {
     this.applyVenue();
     this.post.preRender = () => this.arena.reflection.render(this.rig.camera);
     this.input = new Input(this.renderer.domElement);
-    this.user = new UserController(this.input, this.rig);
     this.debug = new DebugOverlay(container);
     this.hud = new Hud(container);
     this.hud.camera = this.rig.camera;
@@ -252,13 +280,13 @@ export class Game implements AiHost {
     this.aimReticle.renderOrder = 4;
     this.scene.add(this.aimReticle);
 
-    this.me = new Athlete('OH', 1, { body: settings.bodies.OH, hand: settings.hand });
-    this.me.isUser = true;
+    this.seat = this.sim.addSeat(new Athlete('OH', 1, { body: settings.bodies.OH, hand: settings.hand }), {
+      inputTime: () => this.inputTime(),
+      tutorial: { ownsButtons: () => this.tutorial.ownsButtons(), quiet: () => this.tutorial.quiet() },
+      notePress: (err, contactT) => this.notePress(err, contactT),
+    });
     this.me.place(-3.2, 4.5, 0);
     this.addAthlete(this.me);
-    this.user.athlete = this.me;
-    this.actions = new UserActions(this);
-    this.sim.actions = this.actions;
     this.fx = new Effects(this, container);
     // the venue was applied above, before there was a ball or any sound: a saved or linked venue starts with its own
     this.applyVenueToBallAndSound();
@@ -367,6 +395,8 @@ export class Game implements AiHost {
     this.ret = null;
     this.me.place(x, z, yaw);
     this.rig.yaw = yaw;
+    // a teleport turns the player's look with their body
+    this.user.intent.yaw = yaw;
     this.rig.snap();
     this.user.clear();
     this.eyeInit = false;
@@ -390,9 +420,7 @@ export class Game implements AiHost {
     const me = this.me;
     r.t += dt;
     const d = Math.hypot(me.pos.x - r.x, me.pos.z - r.z);
-    const keys =
-      ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((k) => this.input.isDown(k)) ||
-      this.input.stick.active;
+    const keys = this.user.intent.steering;
     if (keys) r.userDriven = true;
     if (d < 0.1 || (r.userDriven && d < 0.9)) {
       this.ret = null;
@@ -422,11 +450,10 @@ export class Game implements AiHost {
     this.position = pos;
     const old = this.me;
     const a = new Athlete(pos, 1, { body: this.settings.bodies[pos], hand: this.settings.hand });
-    a.isUser = true;
     this.removeAthlete(old);
+    // the seat's athlete: it is the player's from here on
     this.me = a;
     this.addAthlete(a, 1);
-    this.user.athlete = a;
   }
 
   /** the user's model has to be rebuilt for a new height (done once per frame at most, while a slider drags) */
@@ -501,7 +528,7 @@ export class Game implements AiHost {
 
   /** Skip: don't stay frozen for a frame after the lesson ends */
   snapTutor(): void {
-    this.tutor = 1;
+    this.pace.tutor = 1;
   }
 
   stopMode(): void {
@@ -608,7 +635,8 @@ export class Game implements AiHost {
       if (this.tutorial.ownsButtons())
         return out.set(a.pos.x, 0, -a.side * (this.tutorial.serving ? TUTORIAL.serveAimDepth : TUTORIAL.aimDepth));
       const from = a.action && a.action.kind === 'swing' ? a.action.contactPoint : a.pos;
-      return aimTargetFromLook(from.x, from.z, this.rig.yaw, this.rig.pitch, this.rig.mode === 'fp', a.side, out);
+      const look = this.sim.seatOf(a)?.intent ?? this.user.intent;
+      return aimTargetFromLook(from.x, from.z, look.yaw, look.pitch, look.firstPerson, a.side, out);
     }
     return out.copy(a.aiAim);
   }
@@ -700,33 +728,19 @@ export class Game implements AiHost {
 
   // ------------------------------------------------------------ quality governor
   /** 0 = full (MSAA, 1.5x DPR cap), 1 = no MSAA + 1x DPR, 2 = 0.8x scale + 1024 shadows + no floor mirror */
-  quality = 0;
-  private qAcc = 0;
-  private qFrames = 0;
-  private qCooldown = 3;
-  private qSlow = 0;
+  get quality(): number {
+    return this.governor.level;
+  }
+  private readonly governor = new QualityGovernor();
 
   private governQuality(dt: number): void {
     if (this.manual || document.hidden) return;
-    this.qCooldown -= dt;
-    this.qAcc += dt;
-    this.qFrames++;
-    if (this.qAcc < 2) return;
-    const avg = this.qAcc / this.qFrames;
-    this.qAcc = 0;
-    this.qFrames = 0;
-    if (this.qCooldown > 0 || this.quality >= 2) return;
-    // two slow windows in a row (below ~50 fps for 4 s): step down one level
-    this.qSlow = avg > 1 / 50 ? this.qSlow + 1 : 0;
-    if (this.qSlow >= 2) {
-      this.qSlow = 0;
-      this.setQuality(this.quality + 1);
-    }
+    const next = this.governor.frame(dt);
+    if (next !== null) this.setQuality(next);
   }
 
   setQuality(q: number): void {
-    this.quality = Math.max(0, Math.min(2, q));
-    this.qCooldown = 4;
+    this.governor.set(q);
     const dpr = window.devicePixelRatio || 1;
     this.post.setSamples(this.quality === 0 ? 4 : 0);
     this.arena.reflection.setEnabled(this.quality < 2);
@@ -822,7 +836,7 @@ export class Game implements AiHost {
    */
   private assistSetStep(): void {
     const me = this.me;
-    if (this.settings.setAimAssist <= 0 || me.state !== 'ground' || !this.mode?.userSetsNext?.()) return;
+    if (!this.user.intent.helped || this.settings.setAimAssist <= 0 || me.state !== 'ground' || !this.mode?.userSetsNext?.()) return;
     if (me.action?.kind === 'set' && me.action.absorbing) return;
     // going up for it: the steps go to where the hop takes off from (the spot, less what your run carries)
     const jump = this.contact.setCatch(me)?.jump;
@@ -877,10 +891,10 @@ export class Game implements AiHost {
       this.input.takeMouse();
       if (this.bot && this.mode) {
         this.bot.step(dt);
+        this.user.intent = this.hands();
         this.user.frame(dt);
-        this.bot.after();
         this.stepReturn(dt);
-      }
+      } else readKeys(this.input, this.user.intent);
       return;
     }
     this.bot?.step(dt);
@@ -888,14 +902,41 @@ export class Game implements AiHost {
     // the play wheel takes the mouse while it is open
     if (!this.playWheelFrame(dx, dy)) this.rig.look(dx, dy, this.settings.sensitivity, this.settings.invertY);
     if (this.input.consumePress('KeyV')) this.toggleCamera();
-    if (this.input.consumePress('KeyN')) this.mode?.restartRep();
+    // from here on the frame is played from the intent: whoever's hands it came from
+    this.user.intent = this.hands();
+    if (this.keyPressed('KeyN')) this.mode?.restartRep();
     if (this.input.consumePress('KeyR')) this.fx.startReplay();
     this.user.frame(dt);
     this.assistSetStep();
-    this.bot?.after();
     // the lesson's together rep: the coach holds your line (what you hold decides whether time runs)
     this.tutorial.drive(this.me);
     this.stepReturn(dt);
+  }
+
+  /**
+   * Whose hands play the user's athlete, when they are not this machine's keys and camera: a
+   * recording being played back, or (one day) a player on another machine. Null: read `Input`.
+   */
+  handsFrom: (() => Intent) | null = null;
+  /** when set, every frame's intent is added to it: the whole of what the player did, in order */
+  handsLog: Intent[] | null = null;
+  private readonly handsNow = idleIntent();
+
+  /** this frame's intent for the user's athlete */
+  private hands(): Intent {
+    if (this.handsFrom) return this.handsFrom();
+    const intent = readIntent(this.input, this.rig, this.handsNow);
+    // an autopilot presses the buttons and turns the camera like a person, and says where its feet go outright
+    this.bot?.steer(intent);
+    this.handsLog?.push(copyIntent(intent));
+    return intent;
+  }
+
+  /** a command key was pressed (`COMMAND_KEYS`). True once for each press: it is taken from the intent, and from `Input` where it came from */
+  keyPressed(code: string): boolean {
+    if (!takeKey(this.user.intent, code)) return false;
+    this.input.consumePress(code);
+    return true;
   }
 
   enableBot(q: string): void {
@@ -928,38 +969,22 @@ export class Game implements AiHost {
     const step = 1 / SIM.hz;
     // slow-mo assist while lining up a contact: a spike's, so not in a jump set (it has its own)
     // unless you swing at the ball
-    // choosing a play: the game waits for you (it runs, slowly)
-    let slowTarget = this.wheel.open ? ASSIST.playWheelSlow : 1;
     const swinging = this.me.airIntent !== 'set' || this.me.action?.kind === 'windup';
     const dip = (this.settings.slowmoAssist || this.tutorial.wantsContactDip()) && this.me.state === 'air' && swinging && this.idealValid;
-    if (dip) {
-      const until = this.idealCache.t - this.simTime;
-      if (until > 0 && until < ASSIST.slowmoWindow && this.idealCache.d < this.contact.reach(this.me) + 0.4)
-        slowTarget = ASSIST.slowmoScale;
-    }
     // your set (Settings: Set slow-mo): time slows for the catch, and more while the ball loads in
     // your hands, the same on every level; only when you are under the ball or have pressed
     const sp = this.inMenu ? null : this.contact.setPreview(this.me);
     this.setPrev = sp && (sp.pressed || sp.absorbing || sp.centreD < this.contact.setReach(this.me) + 0.4) ? sp : null;
     this.setComing = sp;
-    if (this.setPrev && this.settings.setSlowmo) {
-      const until = this.setPrev.tIdeal - this.simTime;
-      if (this.setPrev.absorbing) slowTarget = Math.min(slowTarget, ASSIST.setSlowmoLoad);
-      else if (until < ASSIST.setSlowmoWindow && until > -TIMING.setCatchLate) slowTarget = Math.min(slowTarget, ASSIST.setSlowmoCatch);
-    }
-    this.slowmo = lerp(this.slowmo, slowTarget, damp(12, realDt));
-    // the lesson's own clock never stacks on top of the assist dip. A moment the ball waits at
-    // is taken at once (and never simulated past: `stopAt`); everything else eases.
-    const tutorTarget = this.tutorial.timeScale();
-    this.tutor = this.tutorial.snapScale() ? tutorTarget : lerp(this.tutor, tutorTarget, damp(10, realDt));
+    // a moment the lesson's ball waits at is never simulated past: `stopAt`
     const stopAt = this.tutorial.stopAt();
-    const scale = Math.min(this.slowmo, this.tutor);
-    let simDt = realDt * this.timeScale * scale;
-    if (this.hitStop > 0) {
-      const used = Math.min(this.hitStop, realDt);
-      this.hitStop -= used;
-      simDt = (realDt - used) * this.timeScale * scale;
-    }
+    const simDt = this.pace.simSeconds(realDt, {
+      wheelOpen: this.wheel.open,
+      swing: dip ? { until: this.idealCache.t - this.simTime, inReach: this.idealCache.d < this.contact.reach(this.me) + 0.4 } : null,
+      set:
+        this.setPrev && this.settings.setSlowmo ? { until: this.setPrev.tIdeal - this.simTime, absorbing: this.setPrev.absorbing } : null,
+      lesson: { scale: this.tutorial.timeScale(), snap: this.tutorial.snapScale() },
+    });
     this.accum += simDt;
     const ts = performance.now();
     let n = 0;
