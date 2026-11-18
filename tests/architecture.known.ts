@@ -15,7 +15,6 @@ export const KNOWN_IMPORTS: readonly string[] = [
   'src/fx/effects.ts -> src/app/game.ts',
   'src/game/athlete.ts -> src/character/rig.ts',
   'src/game/body.ts -> src/character/rig.ts',
-  'src/game/bot.ts -> src/app/game.ts',
   'src/game/modes/mode.ts -> src/app/game.ts',
   'src/game/modes/mode.ts -> src/world/textures.ts',
   'src/game/modes/receiveDrill.ts -> src/app/game.ts',
