@@ -4,11 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import layers from './architecture.layers.json';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * The layers, lowest first. The folder names are today's: when a file moves, only `layerOf` changes.
+ * The layers, lowest first (the table is tests/architecture.layers.json, shared with the lint rule):
  *   sim     athletes, ball, contacts, judge, plays, the user's seat (src/game, without the drills)
  *   ai      the brains (src/ai)
  *   drills  the rules of each drill (src/game/modes)
@@ -18,31 +19,20 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 export type Layer = 'config' | 'core' | 'physics' | 'sim' | 'ai' | 'drills' | 'display' | 'app';
 
 /** what each layer may import, besides itself */
-export const MAY_IMPORT: Record<Layer, readonly Layer[]> = {
-  config: [],
-  core: ['config'],
-  physics: ['config'],
-  sim: ['physics', 'core', 'config'],
-  ai: ['sim', 'physics', 'core', 'config'],
-  drills: ['ai', 'sim', 'physics', 'core', 'config'],
-  display: ['drills', 'ai', 'sim', 'physics', 'core', 'config'],
-  app: ['display', 'drills', 'ai', 'sim', 'physics', 'core', 'config'],
-};
+export const MAY_IMPORT = layers.mayImport as Record<Layer, readonly Layer[]>;
 
 /** the simulation: the layers that must run with no DOM and no renderer */
 export const SIMULATION: readonly Layer[] = ['sim', 'ai', 'drills'];
 
-const DISPLAY_DIRS = new Set(['ui', 'fx', 'audio', 'camera', 'world', 'character']);
+/** the layers that must give the same play from the same start: no clock and no dice of their own */
+export const DETERMINISTIC: readonly Layer[] = ['physics', 'sim', 'ai', 'drills'];
+
+const FOLDERS = layers.folders as [string, Layer][];
 
 /** the layer of a file under src/ (a path from the repo root), or null for a folder no layer has claimed yet */
 export function layerOf(file: string): Layer | null {
-  const parts = file.split('/');
-  if (parts[0] !== 'src') return null;
-  if (parts.length === 2) return parts[1] === 'config.ts' ? 'config' : parts[1] === 'main.ts' ? 'app' : null;
-  const dir = parts[1];
-  if (dir === 'core' || dir === 'physics' || dir === 'ai' || dir === 'app') return dir;
-  if (dir === 'game') return parts[2] === 'modes' ? 'drills' : 'sim';
-  return DISPLAY_DIRS.has(dir) ? 'display' : null;
+  for (const [folder, layer] of FOLDERS) if (folder.endsWith('/') ? file.startsWith(folder) : file === folder) return layer;
+  return null;
 }
 
 function walk(dir: string, out: string[]): string[] {
@@ -161,5 +151,75 @@ export function sceneClassesIn(file: string): string[] {
       }
     } else if (from !== 'three') found.add(from);
   }
+  return [...found].sort();
+}
+
+/** the files a file imports for their values: a type-only import cannot make a circle at run time */
+export function valueImportsOf(file: string): string[] {
+  const out = new Set<string>();
+  const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, false);
+  for (const st of source.statements) {
+    let spec: ts.Expression | undefined;
+    if (ts.isImportDeclaration(st)) {
+      const c = st.importClause;
+      const named = c?.namedBindings;
+      const typeOnly =
+        !!c &&
+        (c.isTypeOnly ||
+          (!c.name && !!named && ts.isNamedImports(named) && named.elements.length > 0 && named.elements.every((e) => e.isTypeOnly)));
+      if (!typeOnly) spec = st.moduleSpecifier;
+    } else if (ts.isExportDeclaration(st) && st.moduleSpecifier && !st.isTypeOnly) spec = st.moduleSpecifier;
+    if (!spec || !ts.isStringLiteral(spec) || !spec.text.startsWith('.')) continue;
+    const base = path.posix.normalize(path.posix.join(path.posix.dirname(file), spec.text)).replace(/\.js$/, '');
+    const hit = [`${base}.ts`, `${base}/index.ts`].find((p) => fs.existsSync(path.join(ROOT, p)));
+    if (hit) out.add(hit);
+  }
+  return [...out].sort();
+}
+
+/** groups of files that import each other in a circle (by value), each group sorted */
+export function importCircles(files: readonly string[]): string[][] {
+  const graph = new Map(files.map((f) => [f, valueImportsOf(f)]));
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const circles: string[][] = [];
+  let next = 0;
+  const visit = (v: string): void => {
+    index.set(v, next);
+    low.set(v, next++);
+    stack.push(v);
+    onStack.add(v);
+    for (const w of graph.get(v) ?? []) {
+      if (!index.has(w)) {
+        visit(w);
+        low.set(v, Math.min(low.get(v)!, low.get(w)!));
+      } else if (onStack.has(w)) low.set(v, Math.min(low.get(v)!, index.get(w)!));
+    }
+    if (low.get(v) !== index.get(v)) return;
+    const group: string[] = [];
+    for (let w = stack.pop()!; ; w = stack.pop()!) {
+      onStack.delete(w);
+      group.push(w);
+      if (w === v) break;
+    }
+    if (group.length > 1) circles.push(group.sort());
+  };
+  for (const f of files) if (!index.has(f)) visit(f);
+  return circles;
+}
+
+/** the clocks and dice a file reaches for on its own: `Math.random`, `Date.now`, `new Date`, `performance.now` */
+export function clocksAndDiceIn(file: string): string[] {
+  const found = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
+      const name = `${node.expression.text}.${node.name.text}`;
+      if (name === 'Math.random' || name === 'Date.now' || name === 'performance.now') found.add(name);
+    } else if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Date') found.add('new Date');
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true));
   return [...found].sort();
 }

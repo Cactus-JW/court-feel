@@ -1,11 +1,19 @@
 import * as THREE from 'three';
-import { BALL, FX } from '../config';
+import { BALL, FX, type Settings } from '../config';
 import { clamp, clamp01, lerp, smooth01 } from '../core/mathx';
-import type { Game } from '../game/game';
+import type { Emitter } from '../core/events';
+import type { Input } from '../core/input';
+import type { CameraRig } from '../camera/cameraRig';
 import type { AthleteView } from '../character/athleteView';
-import type { ContactEvent } from '../game/contact';
+import type { Athlete } from '../game/athlete';
+import type { BallEntity } from '../game/ballEntity';
+import type { ContactEvent, ContactSystem } from '../game/contact';
+import type { GameEvents } from '../game/gameEvents';
+import type { Mode, ModeId } from '../game/modes/mode';
 import { AttemptTracker, type Attempt } from '../game/attempt';
 import { AudioEngine } from '../audio/audio';
+import type { Hud } from '../ui/hud';
+import type { BallView } from '../world/ballView';
 import { makeBlobTexture, makeCrackTexture, makeRingTexture } from '../world/textures';
 import { SpritePool, StreakPool } from './particles';
 import { Replay, type ReplayEvent } from './replay';
@@ -22,6 +30,35 @@ interface Ring {
 interface Decal {
   mesh: THREE.Mesh;
   t: number;
+}
+
+/**
+ * What the effects read of the game, and the two things they may change: the hit-stop they ask for
+ * and the camera they borrow for a replay. The app's `Game` is one; the effects do not import it.
+ */
+export interface EffectsHost {
+  readonly scene: THREE.Scene;
+  readonly renderer: THREE.WebGLRenderer;
+  readonly rig: CameraRig;
+  readonly events: Pick<Emitter<GameEvents>, 'on'>;
+  readonly input: Pick<Input, 'clearEdges'>;
+  readonly hud: Pick<Hud, 'message'>;
+  readonly settings: Settings;
+  readonly simTime: number;
+  readonly ball: BallEntity;
+  readonly ballView: BallView;
+  readonly me: Athlete;
+  readonly views: ReadonlyMap<Athlete, AthleteView>;
+  readonly contact: ContactSystem;
+  readonly mode: Pick<Mode, 'ballDead' | 'userBall'> | null;
+  readonly modeId: ModeId;
+  readonly inMenu: boolean;
+  readonly paused: boolean;
+  /** seconds the frame loop holds the play still after a clean hit: the effects ask, the loop spends it */
+  hitStop: number;
+  crowd(amount: number, cheer?: boolean): void;
+  /** how loaded the user's set is, 0..1, or null when no set is charging */
+  setLoading(): number | null;
 }
 
 /**
@@ -62,7 +99,7 @@ export class Effects {
   private sq = { amount: 0, t: 0, q: new THREE.Quaternion() };
 
   constructor(
-    private g: Game,
+    private g: EffectsHost,
     parent: HTMLElement,
   ) {
     const scene = g.scene;

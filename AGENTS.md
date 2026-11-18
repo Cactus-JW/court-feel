@@ -12,7 +12,7 @@ npm run check                     # typecheck, lint, format check, unit tests. R
 npm test                          # unit tests only (Vitest, tests/)
 npm run format                    # fix formatting with Prettier
 npm run e2e                       # every drill in headless Chromium, several minutes, writes scripts/out/
-npm run trace:compare             # a refactor only: plays every drill here and on main and compares every frame
+npm run trace:compare             # a refactor only: plays every drill here and on main and compares every frame, the play and what is drawn
 ```
 
 Run `npm run e2e` when a change touches a drill, the autopilots, input, touch controls or the menus. First time: `npx playwright install chromium`.
@@ -27,7 +27,8 @@ Passing tests do not prove a change to the game, its menus, HUD or controls. Dri
 
 - **Every tunable number lives in `src/config.ts`**, in its section, with a doc comment when the name does not say what it is. No magic numbers in game code, so the feel can be tuned in one place.
 - **`src/physics/` stays pure**: no three.js scene, no DOM, only `config`. That keeps it deterministic and testable.
-- **Every import points down** ([docs/adr/0010](docs/adr/0010-the-simulation-runs-on-its-own.md)): `config`, then `core` and `physics`, then the simulation (`game`, `ai`, the drills in `game/modes`), then everything a player sees or hears, then `main.ts`. `tests/architecture.test.ts` enforces it. What still breaks it is listed in `tests/architecture.known.ts`: fix new code, do not add it to the list.
+- **Every import points down** ([docs/adr/0010](docs/adr/0010-the-simulation-runs-on-its-own.md)): `config`, then `core` and `physics`, then the simulation (`game`, `ai`, the drills in `game/modes`), then everything a player sees or hears, then `main.ts`. `tests/architecture.test.ts` enforces it, and ESLint flags a bad import as you type. No two files import each other in a circle. What still breaks it is listed in `tests/architecture.known.ts`: fix new code, do not add it to the list.
+- **The simulation has no clock and no dice of its own**: no `Math.random`, `Date.now` or `performance.now` in `physics`, `game`, `ai` or the drills. Time is `simTime` and chance is the simulation's seeded `rng`, so the same start gives the same play.
 - **All input goes through `Input`** (`src/core/input.ts`). Keys, mouse, touch and the autopilots share that path, so timing windows are identical everywhere. Do not add a side door.
 - **Assist may help the player's body, never the ball**, and it must be fully off at 0.
 - **A change to physics, timing, contacts or AI decisions comes with a unit test that states the real-court fact**, for example "the middle leaves the floor on the setter's touch".
@@ -41,11 +42,21 @@ The reason a mechanic works the way it does is written down. Read the doc commen
 
 When you make a call that someone would otherwise argue about again, write the reason down: in a doc comment next to the code, saying what was turned down, or as a record in `docs/adr/` when no single place in the code can hold it. [docs/adr/README.md](docs/adr/README.md) has the test and the format.
 
+## How to work on a change
+
+Why the checks are arranged as they are, and where a new rule should live, is in [docs/verification.md](docs/verification.md): hold each rule in the cheapest layer that can hold it.
+
+- **Approach before code.** For a change to the simulation (physics, timing, contacts, AI, a drill's rules), say first what the real court does, which tests will state it and which files it touches. Code written to see whether an approach works is thrown away, not tidied up and kept.
+- **The test comes first.** Write the test that states the real-court fact and watch it fail. Then write the code that passes it. A test written after the code tends to describe the code.
+- **Three failed attempts, then stop.** If a fix has not worked after three tries, stop and say what was tried, what each showed and what you would look at next. A fourth guess costs more than the question.
+- **A file that keeps growing is a prompt to look for a boundary**, not a failure. A large file with one job and a clear edge is fine. One that several features have to edit at once is where the next split belongs.
+
 ## Docs that move with a change
 
 - README: controls, modes, settings and `config.ts` sections. The start screen's key list (`src/ui/menu.ts`) and the in-game hints say the same things, so keep them in step.
 - The pull request: for a change to the feel, say what was reported, the cause, the fix and how it was measured. That write-up lives in the pull request, not in a file.
 - `docs/screenshots/`: real frames only. Retake a shot when the moment it shows changes.
+- [docs/verification.md](docs/verification.md): when a check is added, moved or removed, or a rule gets a check it did not have.
 
 ## Git
 
@@ -76,6 +87,7 @@ When you make a call that someone would otherwise argue about again, write the r
 - **Always:** run `npm run check` before committing, and verify user-facing changes in the app.
 - **Ask first:** anything that changes how the game plays (timing windows, physics constants, controls, AI decisions, a new drill or mechanic), a new dependency, and any art or audio asset. Assets need an MIT-compatible licence and an entry in [CREDITS.md](CREDITS.md).
 - **Never:** skip, weaken or delete a test to get CI green, or commit directly to `main` or `release`.
+- **The checks are not yours to loosen.** CI also runs the architecture rules as they are on the branch a pull request goes into, and fails when `tests/architecture.known.ts` grows (`scripts/rules-from-base.mjs`). The files that judge every change are listed in [.github/CODEOWNERS](.github/CODEOWNERS): a change to one of them is its own pull request, and the owner's to approve.
 
 ## Agent conventions
 

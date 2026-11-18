@@ -5,7 +5,7 @@ import { Rng } from '../src/core/mathx';
 import { SetterBrain } from '../src/ai/setter';
 import { Athlete, FEET_OFF_NET } from '../src/game/athlete';
 import { ContactSystem, type ContactEvent, type ContactHost, type SetOption } from '../src/game/contact';
-import type { Game } from '../src/game/game';
+import type { Game } from '../src/app/game';
 import { SETTER_SPOT } from '../src/game/plays';
 import { autoSetJump, HANDS_FWD, hopDrift, planSetJump, setHop, takeoffSpot } from '../src/game/setJump';
 import { setTouch, setWindow, type SetShape } from '../src/game/setTiming';

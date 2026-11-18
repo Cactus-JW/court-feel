@@ -1,5 +1,5 @@
 import { isPositionId, isVenueId, type Hand, type PositionId, type VenueId } from '../config';
-import { isBotQuality, type BotQuality } from '../game/bot';
+import { isBotQuality, type BotQuality } from './bot';
 import { isModeId, type ModeId } from '../game/modes/mode';
 
 /** a quick-start link: ?mode=spike&pos=OH&cam=fp&bot=perfect&hand=left */

@@ -1,9 +1,14 @@
 import * as THREE from 'three';
-import type { PositionId } from '../../config';
+import type { PositionId, ServeKind, Settings } from '../../config';
+import type { Emitter } from '../../core/events';
+import type { Input } from '../../core/input';
 import type { Athlete } from '../athlete';
+import type { AiHost, Brain } from '../brains';
+import type { CallSheetView } from '../callRuns';
 import type { ContactEvent } from '../contact';
-import type { Game } from '../game';
-import type { Outcome } from '../judge';
+import type { GameEvents } from '../gameEvents';
+import type { Judge, Outcome } from '../judge';
+import type { Tutorial } from '../tutorial';
 import { makeRingTexture } from '../../world/textures';
 import { drillBall } from '../attempt';
 
@@ -25,6 +30,78 @@ export const MODE_INFO: Record<ModeId, { title: string; blurb: string }> = {
 /** a mode id from outside the type system (URL, storage): own keys of MODE_INFO only */
 export const isModeId = (v: unknown): v is ModeId => typeof v === 'string' && Object.hasOwn(MODE_INFO, v);
 
+/**
+ * The screen, as a drill writes on it. The HUD is one; a drill does not import it. (The drills
+ * still say what to show, word for word. Reporting what happened and leaving the words to the
+ * display is the next step of docs/adr/0010.)
+ */
+export interface DrillHud {
+  /** the grade is drawn to one side, clear of the ball (a setter watching the set fly) */
+  gradeAside: boolean;
+  setTitle(t: string): void;
+  setScore(t: string): void;
+  setStreak(n: number): void;
+  setCallSheet(v: CallSheetView | null): void;
+  showBanner(text: string, kind?: 'good' | 'bad' | 'neutral', dur?: number): void;
+  message(text: string, dur?: number): void;
+  go(): void;
+  call(
+    who: string,
+    word: string,
+    sub: string,
+    kind: 'in' | 'out',
+    anchor: ((out: THREE.Vector3) => THREE.Vector3) | null,
+    dur?: number,
+  ): void;
+  clearCall(): void;
+}
+
+/**
+ * What a drill may use of the game. It is everything a brain may use (`AiHost`), and what a drill
+ * needs on top: the judge, the cast of athletes, the user's seat, the lesson, and the few parts of
+ * the display it still writes to itself. The app's `Game` is one; a drill does not import it.
+ */
+export interface DrillHost extends AiHost {
+  /** a drill with a rally in it says when the ball is in play: the brains only read it */
+  ballLive: boolean;
+  readonly brains: ReadonlyMap<Athlete, Brain>;
+  clearBrains(): void;
+  readonly judge: Judge;
+  addAthlete(a: Athlete, seed?: number, kitKind?: 'team' | 'coach'): unknown;
+  removeAthlete(a: Athlete): void;
+
+  // ---- the user's seat
+  readonly me: Athlete;
+  readonly input: Input;
+  readonly settings: Settings;
+  /** the serve the user has picked: the Serve Drill sets it, the contact system reads it */
+  serveKind: ServeKind;
+  /** an autopilot plays the user's athlete (the start screen's demo) */
+  readonly autoUser: boolean;
+  /** set the user's body and camera facing (teleport) */
+  placeUser(x: number, z: number, yaw: number): void;
+  /** the user's athlete jogs back to a spot between reps */
+  returnUser(x: number, z: number, yaw: number, maxT?: number): void;
+  /** a drill should hold its next feed while this is true */
+  readonly userReturning: boolean;
+  /** the play wheel is open: a drill holds its next ball */
+  readonly wheelOpen: boolean;
+  readonly tutorial: Pick<
+    Tutorial,
+    'active' | 'serving' | 'lesson' | 'holdingFeed' | 'holdingResult' | 'showPath' | 'urgeRun' | 'noteFeed' | 'noteContact' | 'noteRepEnd'
+  >;
+
+  // ---- what a drill still tells the display itself
+  readonly events: Pick<Emitter<GameEvents>, 'emit'>;
+  readonly hud: DrillHud;
+  crowd(amount: number, cheer?: boolean): void;
+  readonly scene: { add(o: THREE.Object3D): unknown; remove(o: THREE.Object3D): unknown };
+  readonly rig: { readonly mode: string; pitch: number };
+  /** how each athlete is drawn right now (a replay poses them) */
+  readonly views: { get(a: Athlete): { readonly root: THREE.Object3D } | undefined };
+  readonly fx: { readonly replay: { readonly contact: THREE.Vector3 } };
+}
+
 /** A drill. Modes own their extra athletes and floor markers and clean them up. */
 export abstract class Mode {
   abstract readonly id: ModeId;
@@ -38,7 +115,7 @@ export abstract class Mode {
   reps = 0;
 
   constructor(
-    protected g: Game,
+    protected g: DrillHost,
     protected position: PositionId,
   ) {}
 
@@ -168,8 +245,4 @@ export function makeFloorRing(color: number, size: number): THREE.Mesh {
   m.position.y = 0.011;
   m.renderOrder = 2;
   return m;
-}
-
-export function kbd(...keys: string[]): string {
-  return keys.map((k) => `<kbd>${k}</kbd>`).join('');
 }

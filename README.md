@@ -1032,11 +1032,17 @@ in `SETTING_RANGES` in `src/config.ts`.
 
 ## Testing
 
+The principle behind these checks, and where a new rule should live, is in
+[docs/verification.md](docs/verification.md).
+
 CI (`.github/workflows/ci.yml`) runs two jobs on every pull request and on
 `main`: **check** (typecheck, ESLint, Prettier, unit tests, production build)
 and **e2e** (below). Both should be required checks for merging into `main`.
 A third job, **trace**, runs for a `refactor` pull request and on the refactor
 branch: the change has to play exactly like `main` (`npm run trace:compare`, below).
+On a pull request, **check** also runs the architecture rules as they are on the
+branch it goes into and fails when the known lists grow
+(`scripts/rules-from-base.mjs`), so a change cannot pass by loosening its own checks.
 
 * `npm test` — the Vitest suite in `tests/`: set apex, spike landing point, topspin dip,
   net/tape/antenna collisions, women's net, floor bounce, determinism,
@@ -1129,15 +1135,35 @@ branch: the change has to play exactly like `main` (`npm run trace:compare`, bel
   moment and the values. Nothing is stored, so a feature that changes the play
   on purpose has nothing to re-record. `npm run trace:compare -- <ref>` compares
   with another commit, `npm run trace` plays this checkout twice to show a run
-  is repeatable, and `TRACE_SECONDS` sets the seconds per drill (60). It proves
-  what the autopilots play: the touch controls, the lesson and the menus are
-  the end-to-end run's job.
+  is repeatable, and `TRACE_SECONDS` sets the seconds per drill (60). It then
+  plays the drills again frame by frame with the animation on and compares what
+  is drawn and shown: every call the HUD gets, the camera, and where the ball,
+  the athletes (every joint) and the drill's floor markers are. That is the data
+  the picture is made from, not screenshots, so it is the same on every machine
+  (`TRACE_DISPLAY_SECONDS`, 30 per drill). It proves what the autopilots play:
+  the lessons, the menus, the touch controls, effects and sound are not in it.
+* `tests/properties.test.ts` (part of `npm test`) states facts that must hold for
+  every input and tries each on hundreds of seeded ones (`tests/forAll.ts`), for
+  the bugs nobody wrote a case for: for any launch the ball lands where the
+  predictor says, never sinks into the floor, flies the mirrored path when
+  launched mirrored and gains no energy in free flight; a set solved for any
+  target comes down there; anything found in the browser's storage comes out as
+  valid settings; and for any seed a rally in the simulation keeps its
+  invariants at every step (`tests/invariants.ts`: every number finite, nobody
+  under the floor or out of the hall, the clock moving one step at a time) and
+  plays the same twice. The inputs are seeded, so the same cases run every time
+  and a failure prints the one that broke.
 * `tests/architecture.test.ts` (part of `npm test`) holds the shape of the code
   (the same decision record): every import points down a fixed order of layers,
   physics imports only `config`, and the simulation has no DOM and uses three.js
-  for maths only. What still breaks this is listed by name in
+  for maths only. No two files import each other in a circle, and physics, the
+  simulation, the brains and the drills read no clock and roll no dice of their
+  own (`Math.random`, `Date.now`, `performance.now`), so the same start gives the
+  same play. What still breaks this is listed by name in
   `tests/architecture.known.ts`. The test fails on anything new, and on an entry
-  that has been fixed and not taken out, so the lists only get shorter.
+  that has been fixed and not taken out, so the lists only get shorter. ESLint
+  flags an import that points up a layer as it is typed, from the same table
+  (`tests/architecture.layers.json`).
 * URL shortcuts for quick testing: `?mode=spike&pos=OH&cam=fp&bot=perfect`
   (modes: free, spike, block, receive, setter, rally; bots: perfect, good,
   sloppy, tip; `&hand=left` plays as a lefty, `&venue=seaside` moves the court for that visit). Unknown values are ignored: an

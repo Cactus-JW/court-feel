@@ -26,7 +26,8 @@ import type { ContactEvent, SetOption } from '../contact';
 import { outcomeLabel, type Outcome } from '../judge';
 import { SETTER_SPOT, SETTER_TARGET } from '../plays';
 import { DEFAULT_PICK, SETTER_KEYS, SetterCalls, type SetPick, type SetterKey } from '../setterCalls';
-import { kbd, makeFloorRing, Mode } from './mode';
+import { kbd } from '../../core/kbd';
+import { makeFloorRing, Mode } from './mode';
 import type { AiHost } from '../brains';
 
 type Phase = 'intro' | 'feed' | 'live' | 'result';

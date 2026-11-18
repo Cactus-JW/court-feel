@@ -15,6 +15,7 @@ import {
   type VenueId,
 } from '../config';
 import { Emitter } from '../core/events';
+import type { GameEvents } from '../game/gameEvents';
 import { Input } from '../core/input';
 import { clamp01, damp, lerp, Rng } from '../core/mathx';
 import { CameraRig, type FollowTarget } from '../camera/cameraRig';
@@ -23,57 +24,43 @@ import { Arena } from '../world/arena';
 import { setVenue, VENUE, VENUE_ID } from '../world/venue';
 import { REFLECT_LAYER } from '../world/floorReflection';
 import { Post } from '../fx/post';
-import { Athlete, handSign } from './athlete';
-import { bodyStats } from './body';
-import { UserController } from './userController';
+import { Athlete, handSign } from '../game/athlete';
+import { bodyStats } from '../game/body';
+import { UserController } from '../game/userController';
 import { DebugOverlay, type DebugInfo } from '../ui/debug';
-import { BallEntity, type TouchKind } from './ballEntity';
+import { BallEntity, type TouchKind } from '../game/ballEntity';
 import { BallView } from '../world/ballView';
-import { Simulation } from './simulation';
-import { DebugGizmos } from './debugGizmos';
+import { Simulation } from '../game/simulation';
+import { DebugGizmos } from '../game/debugGizmos';
 import type { BallEnv } from '../physics/ball';
 import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
 import type { Kit } from '../character/rig';
-import { wheelPlays } from './playbook';
-import { setStepAssist } from './setAssist';
-import { autoSetJump, takeoffSpot } from './setJump';
-import { aimTargetFromLook, ContactSystem, tossGroove, type ContactEvent, type IdealInfo, type SetPreview } from './contact';
+import { wheelPlays } from '../game/playbook';
+import { setStepAssist } from '../game/setAssist';
+import { autoSetJump, takeoffSpot } from '../game/setJump';
+import { aimTargetFromLook, ContactSystem, tossGroove, type ContactEvent, type IdealInfo, type SetPreview } from '../game/contact';
 import { SetGuide } from '../fx/setGuide';
 import { SetRing } from '../fx/setRing';
 import { SetSpot } from '../fx/setSpot';
 import { SetBar } from '../ui/setBar';
 import { PlayWheel } from '../ui/playWheel';
 import { SetRadar } from '../ui/setRadar';
-import { Judge, type Outcome } from './judge';
+import { Judge } from '../game/judge';
 import { Hud } from '../ui/hud';
-import type { AiHost, Brain } from './brains';
-import { kbd, type Mode, type ModeId } from './modes/mode';
-import { createMode } from './modes/registry';
+import type { AiHost, Brain } from '../game/brains';
+import { kbd } from '../core/kbd';
+import { type Mode, type ModeId } from '../game/modes/mode';
+import { createMode } from '../game/modes/registry';
 import { makeRingTexture } from '../world/textures';
-import { UserActions } from './userActions';
+import { UserActions } from '../game/userActions';
+import { lessonStore } from './lessonStore';
 import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
 import { Effects } from '../fx/effects';
-import { reached, Tutorial, type Lesson, type TutorialBegin } from './tutorial';
+import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tutorial';
 
 /** consecutive frames that throw before the game stops and shows the crash screen */
 const MAX_FAILED_FRAMES = 10;
-
-export type GameEvents = {
-  toggleCam: { fp: boolean };
-  contact: ContactEvent;
-  aiContact: { athlete: Athlete; kind: TouchKind; speed: number };
-  outcome: Outcome;
-  ballEvent: { kind: string; x: number; y: number; z: number; impact: number };
-  /** a float serve has just broken (`BALL.float`): how hard, 0..1 */
-  floatBreak: { strength: number };
-  crowd: { amount: number; cheer: boolean };
-  step: { athlete: Athlete; speed: number };
-  land: { athlete: Athlete; impact: number };
-  takeoff: { athlete: Athlete };
-  /** a team-mate's call to the user (the setter's read of the pass: in system, high, help) */
-  setterCall: { athlete: Athlete; call: 'in' | 'out' | 'help' };
-};
 
 /**
  * Owns the renderer, the fixed-timestep simulation, the current drill and
@@ -153,6 +140,8 @@ export class Game implements AiHost {
   /** called once per render frame after the HUD (the touch overlay draws itself here) */
   onFrame: (() => void) | null = null;
   /** the lesson's three balls are done (`clean`: the last one was a Perfect or a Good): offer what to do next */
+  /** where the lessons remember how far a visitor has got */
+  readonly lessonStore = lessonStore();
   onTutorialDone: ((clean: boolean, lesson: Lesson) => void) | null = null;
   /** Skip tutorial: 'menu' from the welcome, 'drill' once a rep is underway */
   onTutorialSkipped: ((where: 'menu' | 'drill') => void) | null = null;

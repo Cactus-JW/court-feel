@@ -4,7 +4,8 @@ import { solveApex, solveSpeedToFloor } from '../../physics/solve';
 import type { ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { attackHeight, laneFor, SETTER_SPOT } from '../plays';
-import { kbd, Mode } from './mode';
+import { kbd } from '../../core/kbd';
+import { Mode } from './mode';
 
 type Feed = 'set' | 'free' | 'serve' | 'attack';
 const FEEDS: Feed[] = ['set', 'free', 'serve', 'attack'];

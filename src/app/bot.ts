@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { BALL, PLAYER, SET_LEVELS, SIM, TIMING } from '../config';
-import { Athlete } from './athlete';
-import { AIM_DEPTH, aimPitchFor, aimPitchRange, ContactSystem, tossGroove } from './contact';
+import { Athlete } from '../game/athlete';
+import { AIM_DEPTH, aimPitchFor, aimPitchRange, ContactSystem, tossGroove } from '../game/contact';
 import { clamp, yawFromDir } from '../core/mathx';
 import type { V3 } from '../physics/ball';
 import type { Game } from './game';
-import { planApproach, planQuick, type ApproachPlan } from './approach';
-import { quickSpot, setterTouchY } from './plays';
-import type { AiHost } from './brains';
-import { SETTER_KEYS, type SetterKey } from './setterCalls';
+import { planApproach, planQuick, type ApproachPlan } from '../game/approach';
+import { quickSpot, setterTouchY } from '../game/plays';
+import type { AiHost } from '../game/brains';
+import { SETTER_KEYS, type SetterKey } from '../game/setterCalls';
 
 /**
  * What the autopilots read from the current drill, when it has it: the Mini Rally's team
