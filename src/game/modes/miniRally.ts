@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { AI } from '../../config';
 import { netYaw } from '../../ai/brain';
 import { serveAim } from '../../ai/server';
@@ -24,7 +23,8 @@ import type { Outcome } from '../judge';
 import { BACKUP_TARGET, needsGoodPass, SET_PLAYS, SETTER_SPOT, type SetPlay } from '../plays';
 import { DEFAULT_PICK, SETTER_KEYS, SetterCalls, type SetPick, type SetterKey } from '../setterCalls';
 import { kbd } from '../../core/kbd';
-import { makeFloorRing, Mode } from './mode';
+import type { RingMark } from './markers';
+import { Mode } from './mode';
 
 type Phase = 'prepare' | 'serve' | 'live' | 'dead';
 
@@ -62,7 +62,7 @@ export class MiniRally extends Mode {
   /** the pass to the user setter is off the net: everything goes up high, no middle */
   private outOfSystem = false;
   /** the floor ring at the spot the user is setting to */
-  private pickRing!: THREE.Mesh;
+  private pickRing!: RingMark;
 
   setup(): void {
     const g = this.g;
@@ -111,9 +111,8 @@ export class MiniRally extends Mode {
       this.setterCalls.onAsk = (k) => askFast(g, g.me, this.hitters, this.setterCalls, k);
       this.setterCalls.canHold = (k) => holdForHigh(this.hitters, k);
     }
-    this.pickRing = makeFloorRing(0xffffff, 1.0);
+    this.pickRing = g.markers.ring(0xffffff, 1.0);
     this.pickRing.visible = false;
-    this.add(this.pickRing);
     g.hud.setTitle('Mini Rally · you are the ' + g.me.stats.name);
     this.plays = g.autoUser ? null : (SET_PLAYS[this.position] ?? null);
     this.callIdx = 0;
@@ -273,10 +272,9 @@ export class MiniRally extends Mode {
       this.pickRing.visible = show;
       if (show) {
         const spot = callSpot(c, lit, oos);
-        this.pickRing.position.set(spot.x, 0.011, spot.z + 0.15);
-        const mat = this.pickRing.material as THREE.MeshBasicMaterial;
-        mat.color.setHex(CALL_COLOR[lit]);
-        mat.opacity += (0.95 - mat.opacity) * Math.min(1, dt * 10);
+        this.pickRing.place(spot.x, spot.z + 0.15);
+        this.pickRing.colour(CALL_COLOR[lit]);
+        this.pickRing.fade(0.95, dt);
       }
     }
     if (!this.plays) return;

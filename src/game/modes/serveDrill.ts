@@ -1,13 +1,13 @@
 import { COURT, SERVE, SERVE_DRILL, SERVE_KINDS, type ServeKind } from '../../config';
 import { planApproach, simulateApproach } from '../approach';
 import { SLOT_ROLE, TeamAI, type Slot } from '../../ai/team';
-import { ApproachGuide } from '../../fx/approachGuide';
 import { Athlete } from '../athlete';
 import { aimPitchFor, type ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { BACKUP_TARGET } from '../plays';
 import type { ApproachLine } from '../tutorial';
 import { kbd } from '../../core/kbd';
+import type { GuideMark } from './markers';
 import { Mode } from './mode';
 import { ratePass } from './receiveDrill';
 
@@ -65,7 +65,7 @@ export class ServeDrill extends Mode {
     jump: { n: 0, sum: 0 },
   };
   private kmh = 0;
-  private guide!: ApproachGuide;
+  private guide!: GuideMark;
   /** where the feet should be when a jump float or a jump serve is hit, once its toss is up */
   private spot: { x: number; z: number } | null = null;
   private goAt = -1;
@@ -104,8 +104,7 @@ export class ServeDrill extends Mode {
       this.spawned.push(a);
       this.away.add(slot, a, false);
     }
-    this.guide = new ApproachGuide();
-    this.add(this.guide.group);
+    this.guide = g.markers.approachGuide();
     // a serve lesson teaches one serve: it is picked for the player and the keys stay quiet
     const lesson = g.tutorial.serving ? SERVE_KINDS.indexOf(g.tutorial.lesson as ServeKind) : -1;
     if (lesson >= 0) this.kindIdx = lesson;

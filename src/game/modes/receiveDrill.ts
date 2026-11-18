@@ -10,7 +10,8 @@ import type { ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { attackHeight, laneFor, SETTER_SPOT, SETTER_TARGET } from '../plays';
 import { kbd } from '../../core/kbd';
-import { makeFloorRing, Mode, type DrillHost } from './mode';
+import type { HaloMark } from './markers';
+import { Mode, type DrillHost } from './mode';
 
 /** where the user receives from, by position */
 const RECEIVE_SPOT: Record<PositionId, { x: number; z: number }> = {
@@ -57,8 +58,7 @@ export class ReceiveDrill extends Mode {
   private t = 0;
   private kind: 'serve' | 'attack' = 'serve';
   private passed: { rating: number; grade: string } | null = null;
-  private targetRing!: THREE.Mesh;
-  private targetHalo!: THREE.Mesh;
+  private targetHalo!: HaloMark;
   private tossed = false;
   private attackTarget = new THREE.Vector3();
 
@@ -124,16 +124,8 @@ export class ReceiveDrill extends Mode {
     g.setBrain(this.hitter, hb);
 
     // setter target marker
-    this.targetRing = makeFloorRing(0x7dff9b, 1.8);
-    this.targetRing.position.set(SETTER_TARGET.x, 0.011, SETTER_TARGET.z);
-    this.add(this.targetRing);
-    this.targetHalo = new THREE.Mesh(
-      new THREE.TorusGeometry(0.45, 0.025, 8, 40),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(0.5, 1.4, 0.7), transparent: true, opacity: 0.55 }),
-    );
-    this.targetHalo.position.set(SETTER_TARGET.x, 2.35, SETTER_TARGET.z);
-    this.targetHalo.rotation.x = Math.PI / 2;
-    this.add(this.targetHalo);
+    g.markers.ring(0x7dff9b, 1.8).place(SETTER_TARGET.x, SETTER_TARGET.z);
+    this.targetHalo = g.markers.halo(SETTER_TARGET.x, 2.35, SETTER_TARGET.z);
     g.hud.setTitle('Serve Receive / Dig');
     this.updateScore();
     g.hud.message('Get behind the ball · press E early to form the platform', 3);
@@ -178,7 +170,7 @@ export class ReceiveDrill extends Mode {
   step(dt: number): void {
     const g = this.g;
     this.t += dt;
-    this.targetHalo.rotation.z += dt * 1.2;
+    this.targetHalo.turn(dt * 1.2);
     switch (this.phase) {
       case 'intro':
         if (this.t > 1.2) this.toPhase('feed');
