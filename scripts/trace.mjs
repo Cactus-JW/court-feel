@@ -14,12 +14,21 @@
 // Then the same drills are played again frame by frame with the animation on (nothing is painted)
 // and what is drawn and shown is compared: every call the HUD gets, the camera, and where the ball,
 // the athletes (every joint) and the drill's floor markers are. Not screenshots: the data the
-// picture is made from. What it does not cover: the lessons, the menus, touch input, effects and sound.
+// picture is made from. The four lessons are taken the same way, with scripted hands (an autopilot
+// does not take a lesson), down to what the lesson stores in the browser.
+//
+// Last, for this checkout: every drill is played again from the hands the game logged the first
+// time (`Game.handsLog`: one intent a frame), with no autopilot and no key pressed, and has to give
+// the same play. That is the promise a second player rests on (docs/adr/0011): the play is decided
+// by where it starts and what the players' hands ask, and by nothing else.
+//
+// What it does not cover: the menus, touch input, effects and sound.
 //
 // Nothing is stored in the repo. A feature that changes the play on purpose has nothing to
 // re-record: this is run for a `refactor`, which must change nothing (docs/adr/0010).
 //
-// TRACE_SECONDS sets the simulated seconds per drill (60), TRACE_DISPLAY_SECONDS those watched for the display (30). Output: scripts/out/trace/. Exit code 1 on a difference.
+// TRACE_SECONDS sets the simulated seconds per drill (60), TRACE_DISPLAY_SECONDS those watched for the
+// display (30), TRACE_LESSON_SECONDS those of each lesson (75). Output: scripts/out/trace/. Exit code 1 on a difference.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -57,11 +66,13 @@ const RUNS = [
 ];
 
 /**
- * The lessons are not played: a lesson waits for the player at each step and the autopilots do not
- * play one (tried: it stays on its first step). Until one does, a lesson is covered by its unit
- * tests (tests/tutorial.test.ts) and by hand.
+ * The lessons: the spike and the three serves. A lesson waits for the player at each step and the
+ * autopilots do not take one, so each is taken with scripted hands (`lessonHands` in `watchOne`):
+ * the same keys on the same frames, over and over. They are not good hands, and need not be: the
+ * spike and the float lesson run to the end with them, the two jump serves to their last rep.
  */
-const LESSONS = [];
+const LESSON_SECONDS = Number(process.env.TRACE_LESSON_SECONDS ?? 75);
+const LESSONS = ['spike', 'float', 'jumpFloat', 'jump'].map((lesson) => ({ lesson, seconds: LESSON_SECONDS }));
 /** simulated seconds of each drill that are watched for the display (the animation makes this pass the slow one) */
 const DISPLAY_SECONDS = Number(process.env.TRACE_DISPLAY_SECONDS ?? 30);
 
@@ -128,7 +139,7 @@ function holdTheClock() {
  * `window.__court` only, so the same reader works on both builds of a comparison. When a refactor
  * moves one of these fields, this function is where both shapes are read.
  */
-function playOne({ mode, pos, bot, slowmo = false, seconds, seed }) {
+function playOne({ mode, pos, bot, slowmo = false, seconds, seed, replay = null }) {
   const g = window.__court;
   // a replay stops the clock until someone watches it: there is no one here
   g.settings.replays = false;
@@ -137,7 +148,15 @@ function playOne({ mode, pos, bot, slowmo = false, seconds, seed }) {
   g.rng.reseed(seed);
   g.startMode(mode, pos);
   window.__menu.showStart(false);
-  g.enableBot(bot);
+  // the hands: an autopilot's, logged as they play (where the build can), or that log played back
+  const canLog = 'handsLog' in g;
+  if (replay) {
+    let next = 0;
+    g.handsFrom = () => replay[Math.min(next++, replay.length - 1)];
+  } else {
+    g.enableBot(bot);
+    if (canLog) g.handsLog = [];
+  }
 
   const events = [];
   const who = (a) => (a.isUser ? 'me' : `${a.role}${a.side === 1 ? 'H' : 'A'}`);
@@ -211,7 +230,10 @@ function playOne({ mode, pos, bot, slowmo = false, seconds, seed }) {
   }
   offs.forEach((off) => off());
   g.bot = null;
-  return { samples, events, simTime: g.simTime };
+  const hands = replay ? null : canLog ? g.handsLog : null;
+  g.handsFrom = null;
+  if (canLog) g.handsLog = null;
+  return { samples, events, simTime: g.simTime, hands };
 }
 
 /**
@@ -227,11 +249,6 @@ function watchOne({ mode, pos, bot, slowmo = false, lesson = null, seconds, seed
   g.settings.firstPerson = false;
   g.settings.slowmoAssist = slowmo;
   g.rng.reseed(seed);
-  if (lesson) g.beginTutorial({ lesson, replay: true });
-  else g.startMode(mode, pos);
-  window.__menu.showStart(false);
-  g.enableBot(bot);
-
   const f64 = new Float64Array(1);
   const bytes = new Uint8Array(f64.buffer);
   let hash = 0x811c9dc5;
@@ -274,6 +291,34 @@ function watchOne({ mode, pos, bot, slowmo = false, lesson = null, seconds, seed
     };
   }
 
+  // the HUD is listened to from before the drill or the lesson starts: its title and the coach's first words are part of what is shown
+  if (lesson) g.beginTutorial({ lesson, replay: true });
+  else g.startMode(mode, pos);
+  window.__menu.showStart(false);
+  if (!lesson) g.enableBot(bot);
+  // a lesson's hands: every five seconds a tap for the coach's words, then toss, run, jump, draw and swing
+  const LESSON_KEYS = [
+    [2, 'Enter', true],
+    [4, 'Enter', false],
+    [10, 'KeyQ', true],
+    [40, 'KeyQ', false],
+    [45, 'ShiftLeft', true],
+    [45, 'KeyW', true],
+    [120, 'Space', true],
+    [135, 'Space', false],
+    [140, 'Mouse0', true],
+    [185, 'Mouse0', false],
+    [200, 'KeyW', false],
+    [200, 'ShiftLeft', false],
+  ];
+  const lessonHands = (f) => {
+    for (const [at, code, down] of LESSON_KEYS) {
+      if (f % 300 !== at) continue;
+      if (down) g.input.down(code);
+      else g.input.up(code);
+    }
+  };
+
   const ballMesh = () => (g.ballView ?? g.ball).mesh;
   const pose = (o) => {
     num(o.position.x);
@@ -288,6 +333,7 @@ function watchOne({ mode, pos, bot, slowmo = false, lesson = null, seconds, seed
   const samples = [];
   const frames = Math.round(seconds * 60);
   for (let f = 1; f <= frames; f++) {
+    if (lesson) lessonHands(f - 1);
     g.play(1 / 60);
     pose(g.rig.camera);
     const ball = ballMesh();
@@ -331,53 +377,86 @@ function watchOne({ mode, pos, bot, slowmo = false, lesson = null, seconds, seed
   }
   for (const name of wrapped) delete hud[name];
   g.bot = null;
-  if (lesson) g.stopMode();
+  if (lesson) {
+    // what the lesson left in the browser, and how far it got: both are part of what it did
+    calls.push(['lesson', `reached step ${g.tutorial.step}`]);
+    for (const key of Object.keys(localStorage).sort())
+      if (/tutorial|lesson/i.test(key)) calls.push(['stored', `stored ${key} = ${localStorage.getItem(key)}`]);
+    for (const [, code] of LESSON_KEYS) g.input.up(code);
+    g.stopMode();
+  }
   // a call made on most frames (the crosshair, the load bar) is in the hash; the list keeps the ones a player would read
   const shown = calls.filter(([name]) => counts[name] < frames / 2).map(([, line]) => line);
   return { samples, calls: shown };
 }
 
-/** play every drill in a built app and return the traces */
-async function record(dist, label) {
+/** a fresh page of a built app, on the manual clock, in a browser context of its own (nothing stored) */
+async function openPage(browser, url, label) {
+  const context = await browser.newContext({ viewport: { width: 640, height: 360 } });
+  const page = await context.newPage();
+  const errors = [];
+  // an app that throws while it starts never comes up: say why at once, not after the whole wait
+  let starting = true;
+  let failStart = () => {};
+  const threw = new Promise((_, reject) => (failStart = reject));
+  threw.catch(() => {});
+  page.on('pageerror', (e) => {
+    errors.push(String(e));
+    if (starting) failStart(new Error(`${label}: the app threw while it was starting: ${e.message}`));
+  });
+  await page.addInitScript(holdTheClock);
+  await page.goto(url, { timeout: PAGE_MS });
+  const up = page.waitForFunction(() => window.__court && window.__menu, null, { timeout: PAGE_MS, polling: 250 });
+  up.catch(() => {});
+  await Promise.race([up, threw]);
+  starting = false;
+  return { page, errors, close: () => context.close() };
+}
+
+const nameOf = (run) => (run.lesson ? `lesson/${run.lesson}` : `${run.mode}/${run.pos}/${run.bot}${run.slowmo ? '/slow-mo assist' : ''}`);
+
+/** play every drill in a built app and return the traces. `replayHands`: also play each again from its logged hands */
+async function record(dist, label, replayHands = false) {
   const server = await serve(dist);
   const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const t0 = Date.now();
   try {
-    const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
-    const errors = [];
-    // an app that throws while it starts never comes up: say why at once, not after the whole wait
-    let starting = true;
-    let failStart = () => {};
-    const threw = new Promise((_, reject) => (failStart = reject));
-    threw.catch(() => {});
-    page.on('pageerror', (e) => {
-      errors.push(String(e));
-      if (starting) failStart(new Error(`${label}: the app threw while it was starting: ${e.message}`));
-    });
-    await page.addInitScript(holdTheClock);
-    await page.goto(server.url, { timeout: PAGE_MS });
-    const up = page.waitForFunction(() => window.__court && window.__menu, null, { timeout: PAGE_MS, polling: 250 });
-    up.catch(() => {});
-    await Promise.race([up, threw]);
-    starting = false;
+    const { page, errors, close } = await openPage(browser, server.url, label);
     const runs = [];
+    const logs = new Map();
     for (const run of RUNS) {
-      const name = `${run.mode}/${run.pos}/${run.bot}${run.slowmo ? '/slow-mo assist' : ''}`;
-      const r = await page.evaluate(playOne, { ...run, seconds: SECONDS, seed: SEED });
+      const name = nameOf(run);
+      const { hands, ...r } = await page.evaluate(playOne, { ...run, seconds: SECONDS, seed: SEED });
       if (errors.length) throw new Error(`${label}: ${name} threw in the page: ${errors[0]}`);
+      if (hands) logs.set(name, hands);
       runs.push({ name, ...r });
     }
     // a second pass over the same drills, and the lessons, for what is drawn and shown
     for (const run of [...RUNS, ...LESSONS]) {
-      const name = run.lesson ? `lesson/${run.lesson}` : `${run.mode}/${run.pos}/${run.bot}${run.slowmo ? '/slow-mo assist' : ''}`;
-      const d = await page.evaluate(watchOne, { ...run, seconds: DISPLAY_SECONDS, seed: SEED });
+      const name = nameOf(run);
+      const d = await page.evaluate(watchOne, { seconds: DISPLAY_SECONDS, ...run, seed: SEED });
       if (errors.length) throw new Error(`${label}: ${name} threw in the page while it was watched: ${errors[0]}`);
       const sim = runs.find((r) => r.name === name);
       if (sim) sim.display = d;
       else runs.push({ name, samples: [], events: [], simTime: 0, display: d });
     }
+    await close();
+    // last: every drill again from the hands that were logged, with no autopilot and no key pressed.
+    // In a page of its own, in the same order, so each drill starts at the moment it started live.
+    if (replayHands && logs.size === RUNS.length) {
+      const again = await openPage(browser, server.url, `${label}, hands played back`);
+      for (const run of RUNS) {
+        const name = nameOf(run);
+        const r = await again.page.evaluate(playOne, { ...run, seconds: SECONDS, seed: SEED, replay: logs.get(name) });
+        if (again.errors.length)
+          throw new Error(`${label}: ${name} threw in the page while its hands were played back: ${again.errors[0]}`);
+        runs.find((x) => x.name === name).replayed = { samples: r.samples, events: r.events };
+      }
+      await again.close();
+    }
+    const drills = runs.filter((r) => r.samples.length);
     console.log(
-      `${label}: ${runs.length} drills, ${SECONDS} s each, ${runs.reduce((n, r) => n + r.events.length, 0)} contacts and outcomes, in ${((Date.now() - t0) / 1000).toFixed(0)} s`,
+      `${label}: ${drills.length} drills, ${SECONDS} s each, ${runs.reduce((n, r) => n + r.events.length, 0)} contacts and outcomes, and ${runs.length - drills.length} lessons, in ${((Date.now() - t0) / 1000).toFixed(0)} s`,
     );
     return runs;
   } finally {
@@ -466,6 +545,30 @@ function displayDifference(a, b, nameA, nameB) {
   return lines;
 }
 
+/**
+ * Does every drill of one recording give the same play when its logged hands are played back? The
+ * first that does not is explained, as a difference between two builds is.
+ */
+function replayDifference(runs) {
+  const replayed = runs.filter((r) => r.replayed);
+  if (!replayed.length) return [];
+  const lines = difference(
+    replayed,
+    replayed.map((r) => ({ name: r.name, ...r.replayed })),
+    'the autopilot playing',
+    'its hands played back',
+  );
+  return lines.length ? ['the same hands did not give the same play:', ...lines] : [];
+}
+
+/** the end of the last line: how many drills were played back from their hands */
+const replayNote = (runs) => {
+  const n = runs.filter((r) => r.replayed).length;
+  return n
+    ? `; ${n} drills give the same play again from their logged hands alone`
+    : '; this build does not log hands, so none were played back';
+};
+
 const save = (name, runs) => fs.writeFileSync(path.join(out, `${name}.json`), JSON.stringify(runs));
 
 /** check out a commit beside this one and build it. It uses this checkout's node_modules when the lockfile is the same. */
@@ -499,19 +602,25 @@ if (command === 'compare') {
     `comparing this checkout (${git(['rev-parse', '--short=7', 'HEAD'])}${git(['status', '--porcelain']) ? ' with local changes' : ''}) with ${arg ?? 'where it left origin/main'} (${sha})`,
   );
   const base = await record(buildRef(ref), sha);
-  const head = await record(headDist, 'this checkout');
+  const head = await record(headDist, 'this checkout', true);
   save('base', base);
   save('head', head);
   lines = difference(base, head, sha, 'this checkout');
+  if (!lines.length) lines = replayDifference(head);
   if (!lines.length)
-    console.log(`same play: every drill gives the same states, contacts and outcomes as ${sha}, and is drawn and shown the same`);
+    console.log(
+      `same play: every drill gives the same states, contacts and outcomes as ${sha}, and is drawn and shown the same${replayNote(head)}`,
+    );
 } else if (command === 'self') {
-  const first = await record(headDist, 'first run');
+  const first = await record(headDist, 'first run', true);
   const second = await record(headDist, 'second run');
   save('head', first);
   lines = difference(first, second, 'first run', 'second run');
+  if (!lines.length) lines = replayDifference(first);
   if (!lines.length)
-    console.log('repeatable: two runs of this checkout give the same states, contacts and outcomes, and are drawn and shown the same');
+    console.log(
+      `repeatable: two runs of this checkout give the same states, contacts and outcomes, and are drawn and shown the same${replayNote(first)}`,
+    );
 } else {
   console.error(`unknown command '${command}': use 'self' or 'compare [ref]'`);
   process.exit(2);

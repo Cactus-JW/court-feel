@@ -1141,8 +1141,13 @@ branch it goes into and fails when the known lists grow
   is drawn and shown: every call the HUD gets, the camera, and where the ball,
   the athletes (every joint) and the drill's floor markers are. That is the data
   the picture is made from, not screenshots, so it is the same on every machine
-  (`TRACE_DISPLAY_SECONDS`, 30 per drill). It proves what the autopilots play:
-  the lessons, the menus, the touch controls, effects and sound are not in it.
+  (`TRACE_DISPLAY_SECONDS`, 30 per drill). The four lessons are taken the same
+  way with scripted hands (`TRACE_LESSON_SECONDS`, 75 each). Last, every drill is
+  played again from the hands the game logged the first time, with no autopilot
+  and no key pressed, and has to give the same play: nothing reaches the
+  simulation from a player except their logged intent. It proves what the
+  autopilots and the scripted hands play: the menus, the touch controls, effects
+  and sound are not in it.
 * `tests/properties.test.ts` (part of `npm test`) states facts that must hold for
   every input and tries each on hundreds of seeded ones (`tests/forAll.ts`), for
   the bugs nobody wrote a case for: for any launch the ball lands where the
