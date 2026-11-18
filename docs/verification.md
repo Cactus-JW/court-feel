@@ -100,6 +100,13 @@ Ask these in order and stop at the first yes.
   play. It fails when the simulation takes something from a player that is not
   in the intent: a key read on the side, a camera read for aim, an autopilot
   rolling the simulation's dice. A second player rests on this (docs/adr/0011).
+- **Every drill with nobody watching** (`tests/drills.test.ts`). A real simulation
+  and a real drill in Node, with no renderer, no DOM, no HUD and no camera
+  (`tests/headlessGame.ts`), invariants checked at every step. It fails the
+  moment a drill needs the browser to play, and it is where a test of a drill's
+  rules can now be written without faking the game.
+- **Two players in one simulation** (`tests/seats.test.ts`): two seats, each
+  handed its own intents, and the game replays from the log of both.
 - **Property tests** (`tests/properties.test.ts`). A fact that must hold for
   every input, tried on hundreds of seeded ones. They are for the bugs nobody
   wrote a case for. The inputs are seeded, so the tests are as repeatable as any
