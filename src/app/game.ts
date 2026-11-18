@@ -52,7 +52,7 @@ import { kbd, type Mode, type ModeId } from '../game/modes/mode';
 import { createMode } from '../game/modes/registry';
 import { makeRingTexture } from '../world/textures';
 import { UserActions } from '../game/userActions';
-import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from '../game/bot';
+import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
 import { Effects } from '../fx/effects';
 import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tutorial';
 
