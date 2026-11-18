@@ -9,6 +9,10 @@
 #           and report.json are uploaded as the "e2e-report" artifact.
 # Make both required checks on main (Settings > Branches > branch protection rule).
 #
+# On a pull request, check also runs the architecture rules as they are on the branch the pull
+# request goes into, and fails when the known lists grow (scripts/rules-from-base.mjs): a change
+# is judged by rules it did not write. .github/CODEOWNERS lists the files that judge every change.
+#
 # A third job runs for a refactor only (a pull request whose title starts with "refactor",
 # anything into or out of the refactor branch, and pushes to that branch):
 #   trace - the change plays exactly like the commit it left main at (scripts/trace.mjs).
@@ -44,6 +48,15 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
+      - name: The architecture rules as they are on the branch this goes into
+        # a change is judged by rules it did not write, and the known lists only get shorter (scripts/rules-from-base.mjs)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          node scripts/rules-from-base.mjs FETCH_HEAD
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          ALLOW_KNOWN_GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'known-list-may-grow') && '1' || '0' }}
       # typecheck already ran above; `npm run build` would repeat it
       - run: npx vite build
 
@@ -99,6 +112,19 @@ jobs:
         run: npx playwright install --with-deps --only-shell chromium
       - name: Play every drill here and on main, and compare every frame
         run: npm run trace:compare
+      - name: The same comparison with the trace tool as it is on the branch this goes into
+        # only when this pull request changes the tool: a change to the comparison cannot be what makes it pass
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          if git cat-file -e FETCH_HEAD:scripts/trace.mjs 2>/dev/null && ! git diff --quiet FETCH_HEAD -- scripts/trace.mjs; then
+            git show FETCH_HEAD:scripts/trace.mjs > scripts/trace.mjs
+            npm run trace:compare
+          else
+            echo "scripts/trace.mjs is the same as on $BASE_REF"
+          fi
+        env:
+          BASE_REF: ${{ github.base_ref }}
       - name: Upload the two traces
         if: failure()
         uses: actions/upload-artifact@v4

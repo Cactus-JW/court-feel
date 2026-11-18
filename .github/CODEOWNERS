@@ -1,0 +1,18 @@
+# The files that judge every change: the checks, the scripts they run and the settings they run
+# under. A pull request that touches one needs the owner's review.
+#
+# This file does nothing by itself. It takes effect with a branch rule on main:
+# Settings > Rules (or Branches) > require a pull request, and "Require review from Code Owners".
+# An admin can still merge past it, which then takes a deliberate click.
+
+/tests/architecture.*          @LemonPhase
+/scripts/rules-from-base.mjs   @LemonPhase
+/scripts/trace.mjs             @LemonPhase
+/scripts/e2e.mjs               @LemonPhase
+/.github/                      @LemonPhase
+/eslint.config.js              @LemonPhase
+/tsconfig.json                 @LemonPhase
+/tsconfig.node.json            @LemonPhase
+/vite.config.ts                @LemonPhase
+/package.json                  @LemonPhase
+/AGENTS.md                     @LemonPhase

@@ -1037,6 +1037,9 @@ CI (`.github/workflows/ci.yml`) runs two jobs on every pull request and on
 and **e2e** (below). Both should be required checks for merging into `main`.
 A third job, **trace**, runs for a `refactor` pull request and on the refactor
 branch: the change has to play exactly like `main` (`npm run trace:compare`, below).
+On a pull request, **check** also runs the architecture rules as they are on the
+branch it goes into and fails when the known lists grow
+(`scripts/rules-from-base.mjs`), so a change cannot pass by loosening its own checks.
 
 * `npm test` — the Vitest suite in `tests/`: set apex, spike landing point, topspin dip,
   net/tape/antenna collisions, women's net, floor bounce, determinism,
