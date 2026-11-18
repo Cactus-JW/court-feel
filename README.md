@@ -1132,9 +1132,13 @@ branch it goes into and fails when the known lists grow
   moment and the values. Nothing is stored, so a feature that changes the play
   on purpose has nothing to re-record. `npm run trace:compare -- <ref>` compares
   with another commit, `npm run trace` plays this checkout twice to show a run
-  is repeatable, and `TRACE_SECONDS` sets the seconds per drill (60). It proves
-  what the autopilots play: the touch controls, the lesson and the menus are
-  the end-to-end run's job.
+  is repeatable, and `TRACE_SECONDS` sets the seconds per drill (60). It then
+  plays the drills again frame by frame with the animation on and compares what
+  is drawn and shown: every call the HUD gets, the camera, and where the ball,
+  the athletes (every joint) and the drill's floor markers are. That is the data
+  the picture is made from, not screenshots, so it is the same on every machine
+  (`TRACE_DISPLAY_SECONDS`, 30 per drill). It proves what the autopilots play:
+  the lessons, the menus, the touch controls, effects and sound are not in it.
 * `tests/properties.test.ts` (part of `npm test`) states facts that must hold for
   every input and tries each on hundreds of seeded ones (`tests/forAll.ts`), for
   the bugs nobody wrote a case for: for any launch the ball lands where the
