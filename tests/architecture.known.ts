@@ -12,7 +12,6 @@
 
 /** imports that reach a layer the importing file may not see, as 'importer -> imported' (type-only imports count) */
 export const KNOWN_IMPORTS: readonly string[] = [
-  'src/fx/effects.ts -> src/app/game.ts',
   'src/game/athlete.ts -> src/character/rig.ts',
   'src/game/body.ts -> src/character/rig.ts',
   'src/game/modes/mode.ts -> src/app/game.ts',
@@ -24,7 +23,6 @@ export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/tutorial.ts -> src/app/game.ts',
   'src/game/tutorial.ts -> src/game/modes/mode.ts',
   'src/game/userController.ts -> src/camera/cameraRig.ts',
-  'src/ui/touchControls.ts -> src/app/game.ts',
 ];
 
 /** simulation files that touch the DOM (window, document, storage) */
