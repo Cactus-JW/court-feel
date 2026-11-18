@@ -44,6 +44,8 @@ When you make a call that someone would otherwise argue about again, write the r
 
 ## How to work on a change
 
+Why the checks are arranged as they are, and where a new rule should live, is in [docs/verification.md](docs/verification.md): hold each rule in the cheapest layer that can hold it.
+
 - **Approach before code.** For a change to the simulation (physics, timing, contacts, AI, a drill's rules), say first what the real court does, which tests will state it and which files it touches. Code written to see whether an approach works is thrown away, not tidied up and kept.
 - **The test comes first.** Write the test that states the real-court fact and watch it fail. Then write the code that passes it. A test written after the code tends to describe the code.
 - **Three failed attempts, then stop.** If a fix has not worked after three tries, stop and say what was tried, what each showed and what you would look at next. A fourth guess costs more than the question.
@@ -54,6 +56,7 @@ When you make a call that someone would otherwise argue about again, write the r
 - README: controls, modes, settings and `config.ts` sections. The start screen's key list (`src/ui/menu.ts`) and the in-game hints say the same things, so keep them in step.
 - The pull request: for a change to the feel, say what was reported, the cause, the fix and how it was measured. That write-up lives in the pull request, not in a file.
 - `docs/screenshots/`: real frames only. Retake a shot when the moment it shows changes.
+- [docs/verification.md](docs/verification.md): when a check is added, moved or removed, or a rule gets a check it did not have.
 
 ## Git
 
