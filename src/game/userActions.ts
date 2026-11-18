@@ -1,7 +1,30 @@
 import { SERVE } from '../config';
 import { clamp01 } from '../core/mathx';
 import { tossFor } from './contact';
-import type { Game } from '../app/game';
+import type { ServeKind } from '../config';
+import type { Athlete } from './athlete';
+import type { ContactSystem } from './contact';
+import type { Tutorial } from './tutorial';
+import type { UserController } from './userController';
+
+/**
+ * What the player's actions need of the game: the clock, the player's athlete, the contact
+ * system, the controller that buffers the buttons, two questions for the lesson, the serve that
+ * is picked, and somewhere to note a press for the debug overlay. `Game` is one; a test or a
+ * second seat can be another.
+ */
+export interface UserActionsHost {
+  readonly simTime: number;
+  /** when a press made now is counted from: the simulation clock, brought forward by the part of a step the frame has already run */
+  inputTime(): number;
+  readonly me: Athlete;
+  readonly contact: ContactSystem;
+  readonly user: UserController;
+  readonly tutorial: Pick<Tutorial, 'ownsButtons' | 'quiet'>;
+  readonly serveKind: ServeKind;
+  /** a swing was released: how far from the ideal moment, and when it meets the ball */
+  notePress(err: number, contactT: number): void;
+}
 
 /**
  * Binds the user's buttons to athlete actions. Everything starts on the
@@ -9,7 +32,7 @@ import type { Game } from '../app/game';
  * not possible yet).
  */
 export class UserActions {
-  constructor(private g: Game) {
+  constructor(private g: UserActionsHost) {
     const u = g.user;
     // the lesson's together rep reads jump and attack as held buttons (a button already down
     // when its moment comes counts), so their edges do nothing there
