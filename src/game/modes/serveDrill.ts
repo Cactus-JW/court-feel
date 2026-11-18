@@ -7,7 +7,8 @@ import { aimPitchFor, type ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { BACKUP_TARGET } from '../plays';
 import type { ApproachLine } from '../tutorial';
-import { kbd, Mode } from './mode';
+import { kbd } from '../../core/kbd';
+import { Mode } from './mode';
 import { ratePass } from './receiveDrill';
 
 /**

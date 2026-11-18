@@ -3,6 +3,7 @@ import { BUILD_ID } from './core/build';
 import { ErrorReporter, type ErrorReport } from './core/errors';
 import { parseLaunchParams, parseVenueParam } from './app/launch';
 import { defaultSettings, loadSettings, saveSettings, systemPrefersReducedMotion } from './app/settings';
+import { lessonStore } from './app/lessonStore';
 import { playbookStorage } from './app/playbook';
 import { usePlaybookStore } from './game/playbook';
 import { Game } from './app/game';
@@ -120,10 +121,10 @@ const menu = new Menu(app, settings, {
     game.tutorial.requestSkip();
   },
   tutorialOffer() {
-    return tutorialOffer(readTutorialFlag());
+    return tutorialOffer(readTutorialFlag(lessonStore()));
   },
   declineTutorial() {
-    writeTutorialFlag('skipped');
+    writeTutorialFlag('skipped', lessonStore());
   },
   tutorialActive() {
     return game.tutorial.active;
@@ -132,7 +133,7 @@ const menu = new Menu(app, settings, {
     startTutorial(true, kind);
   },
   serveLessonsDone() {
-    return readServeLessons();
+    return readServeLessons(lessonStore());
   },
   playing() {
     return game.inMenu ? null : lastPlay;

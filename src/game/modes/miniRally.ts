@@ -23,7 +23,8 @@ import type { AiHost } from '../brains';
 import type { Outcome } from '../judge';
 import { BACKUP_TARGET, needsGoodPass, SET_PLAYS, SETTER_SPOT, type SetPlay } from '../plays';
 import { DEFAULT_PICK, SETTER_KEYS, SetterCalls, type SetPick, type SetterKey } from '../setterCalls';
-import { kbd, makeFloorRing, Mode } from './mode';
+import { kbd } from '../../core/kbd';
+import { makeFloorRing, Mode } from './mode';
 
 type Phase = 'prepare' | 'serve' | 'live' | 'dead';
 

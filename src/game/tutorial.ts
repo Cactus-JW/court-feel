@@ -1,9 +1,12 @@
 import { PLAYER, SERVE, SERVE_KINDS, SIM, TIMING, TUTORIAL as T, type ServeKind } from '../config';
+import type { Input } from '../core/input';
 import { clamp } from '../core/mathx';
 import type { Athlete, Grade } from './athlete';
+import type { BallEntity } from './ballEntity';
 import { ContactSystem, tossGroove } from './contact';
-import type { Game } from '../app/game';
-import { kbd } from './modes/mode';
+import type { UserActions } from './userActions';
+import type { UserController } from './userController';
+import { kbd } from '../core/kbd';
 
 /**
  * First-run lesson (issue #25, PR #27): a coach layer on the Spike Drill, not a separate mode.
@@ -139,6 +142,7 @@ export function jumpLoadFrac(loadT: number): number {
 
 // ---------------------------------------------------------------- the stored flag
 
+/** where the lessons are remembered. The app says where (the browser's storage); the lesson only reads and writes */
 export interface TutorialStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -153,17 +157,7 @@ export interface TutorialBegin {
   step?: number;
 }
 
-function browserStore(): TutorialStorage | null {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    return localStorage;
-  } catch {
-    return null;
-  }
-}
-
-export function readTutorialFlag(storage?: TutorialStorage | null): string | null {
-  const s = storage === undefined ? browserStore() : storage;
+export function readTutorialFlag(s: TutorialStorage | null): string | null {
   if (!s) return null;
   try {
     return s.getItem(TUTORIAL_KEY);
@@ -172,8 +166,7 @@ export function readTutorialFlag(storage?: TutorialStorage | null): string | nul
   }
 }
 
-export function writeTutorialFlag(value: string, storage?: TutorialStorage | null): void {
-  const s = storage === undefined ? browserStore() : storage;
+export function writeTutorialFlag(value: string, s: TutorialStorage | null): void {
   if (!s) return;
   try {
     s.setItem(TUTORIAL_KEY, value);
@@ -185,8 +178,7 @@ export function writeTutorialFlag(value: string, storage?: TutorialStorage | nul
 export const SERVE_LESSONS_KEY = 'courtFeel.serveLessons.v1';
 
 /** the serve lessons finished in this browser */
-export function readServeLessons(storage?: TutorialStorage | null): ServeKind[] {
-  const s = storage === undefined ? browserStore() : storage;
+export function readServeLessons(s: TutorialStorage | null): ServeKind[] {
   if (!s) return [];
   try {
     const v: unknown = JSON.parse(s.getItem(SERVE_LESSONS_KEY) ?? '[]');
@@ -197,8 +189,7 @@ export function readServeLessons(storage?: TutorialStorage | null): ServeKind[] 
 }
 
 /** remember that a serve lesson has been finished */
-export function markServeLessonDone(kind: ServeKind, storage?: TutorialStorage | null): void {
-  const s = storage === undefined ? browserStore() : storage;
+export function markServeLessonDone(kind: ServeKind, s: TutorialStorage | null): void {
   if (!s) return;
   const done = readServeLessons(s);
   if (!done.includes(kind)) done.push(kind);
@@ -940,6 +931,54 @@ export interface ApproachLine {
   plant: { x: number; z: number } | null;
 }
 
+/** the coach's layer of the screen, as the lesson drives it. The HUD is one; the lesson does not import it */
+export interface TutorialHud {
+  onSkip: (() => void) | null;
+  suppressCalls: boolean;
+  setTutorialChrome(on: boolean): void;
+  setFrozen(on: boolean): void;
+  setCoach(c: { stage: number; cue: Cue | null; order?: readonly CueId[] } | null): void;
+  setNudge(on: boolean): void;
+  pinMessage(text: string | null): void;
+  showBanner(text: string, kind?: 'good' | 'bad' | 'neutral', dur?: number): void;
+  clearFlash(): void;
+  dip(): void;
+}
+
+/** what the lesson asks of the drill it is coaching */
+export interface TutorialDrill {
+  restartRep(snap?: boolean): void;
+  approachLine?(): ApproachLine | null;
+  refreshHud?(): void;
+}
+
+/**
+ * What the lesson reads of the game, and what it may do to it: hold the hitter's buttons for them,
+ * draw on the coach's layer, restart the rep. The app's `Game` is one; the lesson does not import it.
+ */
+export interface TutorialHost {
+  readonly simTime: number;
+  readonly input: Pick<Input, 'touch' | 'consumeAny' | 'clearEdges'>;
+  readonly me: Athlete;
+  readonly ball: Pick<BallEntity, 'active' | 'lastTouch'>;
+  readonly contact: Pick<ContactSystem, 'serving' | 'ideal' | 'beginWindup' | 'releaseWindup'>;
+  readonly user: Pick<UserController, 'isHeld'>;
+  readonly actions: Pick<UserActions, 'tossHeld' | 'releaseToss'>;
+  readonly hud: TutorialHud;
+  readonly mode: TutorialDrill | null;
+  /** where the lessons are remembered, or null when nothing can be kept */
+  readonly lessonStore: TutorialStorage | null;
+  /** the user is being walked back to their spot: the coach leaves them alone */
+  readonly userReturning: boolean;
+  readonly onTutorialDone: ((clean: boolean, lesson: Lesson) => void) | null;
+  readonly onTutorialSkipped: ((where: 'menu' | 'drill') => void) | null;
+  /** the lesson's hold on the clock ends at once, not eased out over a frame */
+  snapTutor(): void;
+  /** when the ball the user is jumping at is best met (sim time), or -1 with nothing to reach */
+  idealT(): number;
+  notePress(err: number, contactT: number): void;
+}
+
 /** The director wired to the game: it gathers the facts, and applies the answer to the clock, the hitter and the HUD. */
 export class Tutorial {
   readonly director = new TutorialDirector();
@@ -949,7 +988,7 @@ export class Tutorial {
   /** this browser already finished or skipped the lesson: taking it again leaves that as it is */
   private settled = false;
 
-  constructor(private g: Game) {
+  constructor(private g: TutorialHost) {
     this.director.onStep = (step) => {
       this.save(step);
       if (step < LAST_STEP) {
@@ -1043,9 +1082,11 @@ export class Tutorial {
   begin(opts: TutorialBegin = {}): void {
     const lesson = opts.lesson ?? 'spike';
     // (a serve lesson is taken from Learn and always starts at its welcome, unless told a step)
-    const step = clampStep(opts.step !== undefined ? opts.step : opts.replay || lesson !== 'spike' ? 0 : resumeStep(readTutorialFlag()));
+    const step = clampStep(
+      opts.step !== undefined ? opts.step : opts.replay || lesson !== 'spike' ? 0 : resumeStep(readTutorialFlag(this.g.lessonStore)),
+    );
     this.out = idleOut();
-    this.settled = lesson !== 'spike' || !tutorialPending(readTutorialFlag());
+    this.settled = lesson !== 'spike' || !tutorialPending(readTutorialFlag(this.g.lessonStore));
     this.director.begin(step, lesson);
     this.save(step);
   }
@@ -1057,11 +1098,11 @@ export class Tutorial {
   private save(step: TutorialStep): void {
     const lesson = this.director.lesson;
     if (lesson !== 'spike') {
-      if (step >= LAST_STEP) markServeLessonDone(lesson);
+      if (step >= LAST_STEP) markServeLessonDone(lesson, this.g.lessonStore);
       return;
     }
     if (this.settled) return;
-    writeTutorialFlag(step >= LAST_STEP ? 'done' : `in_progress:${step}`);
+    writeTutorialFlag(step >= LAST_STEP ? 'done' : `in_progress:${step}`, this.g.lessonStore);
   }
 
   present(): void {
@@ -1084,7 +1125,7 @@ export class Tutorial {
     this.out = idleOut();
     this.g.snapTutor();
     this.director.skip();
-    if (!this.settled) writeTutorialFlag('skipped');
+    if (!this.settled) writeTutorialFlag('skipped', this.g.lessonStore);
     this.clearChrome();
     if (where === 'drill') this.g.mode?.restartRep(true);
     this.g.hud.dip();
