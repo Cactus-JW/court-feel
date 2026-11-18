@@ -786,6 +786,8 @@ export const ASSIST = {
   /** slow-mo assist (settings toggle): timescale while lining up a contact, and how early it kicks in */
   slowmoScale: 0.55,
   slowmoWindow: 0.35,
+  /** how fast the play eases into and out of every assist slow-mo (1/s): the speed never jumps. Tuned by play */
+  slowmoEase: 12,
   /**
    * set slow-mo (settings toggle, on by default), the same on every level so the bar always looks
    * the same: from `setSlowmoWindow` s before the ball reaches your hands the game runs at
@@ -868,6 +870,8 @@ export const TOUCH = {
  * speed. Speeds are fractions of real time. None of this touches the grading windows.
  */
 export const TUTORIAL = {
+  /** how fast the lesson's clock eases to the speed a moment asks for (1/s). A moment the ball waits at is taken at once. Tuned by play */
+  clockEase: 10,
   /** the welcome line, before the first toss (s, real time; any key moves on) */
   welcome: 2.2,
   /** the coach's line after a rep (s, real time; any key moves on after `resultMin`) */
