@@ -16,7 +16,9 @@ export interface TeamPlayView {
   name: string;
   idea: string;
   calls: Record<SetterKey, string>;
-  /** signalled before the serve (waits for a perfect pass), running, or off for this ball */
+  /** called on their free ball, or signalled before their serve */
+  on: 'free' | 'receive';
+  /** signalled before the ball (a serve-receive play waits for a perfect pass), running, or off for this ball */
   state: 'signalled' | 'running' | 'off';
 }
 

@@ -860,7 +860,7 @@ export class TeamAI {
     const you = this.userRoute();
     const calls = { ...p.combo.calls };
     if (you) calls[you.key] = you.play.short;
-    return { name: p.combo.name, idea: p.combo.idea, calls, state: p.state };
+    return { name: p.combo.name, idea: p.combo.idea, calls, on: p.on, state: p.state };
   }
 
   /** where a first ball (pass, dig) by `a` goes: the setter target, or high to the 3 m line when the setter plays it */

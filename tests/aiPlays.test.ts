@@ -1,58 +1,27 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { AI, COURT, SIM, type PositionId } from '../src/config';
-import { Rng } from '../src/core/mathx';
+import { AI, SIM, type PositionId } from '../src/config';
 import { Athlete } from '../src/game/athlete';
-import type { Touch } from '../src/game/ballEntity';
-import type { AiHost } from '../src/game/brains';
 import { COMBOS } from '../src/game/combos';
 import { SET_PLAYS, SETTER_SPOT, SETTER_TARGET } from '../src/game/plays';
 import { clashes, hitX } from '../src/game/setterCalls';
-import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
+import { Simulation } from '../src/game/simulation';
 import { solveApex } from '../src/physics/solve';
 import { SLOT_ROLE, SLOTS, TeamAI, USER_SLOT } from '../src/ai/team';
+import { NO_HOOKS } from './simHooks';
 
 const DT = 1 / SIM.hz;
 const PLAYS = { ...AI.plays };
 afterEach(() => Object.assign(AI.plays, PLAYS));
 
 /**
- * A Mini Rally team on `side` (the user in `pos`, or all AI), its setter running plays, on a
- * stand-in for the Game: the team only needs the ball, the clock and the rng.
+ * A Mini Rally team on `side` (the user in `pos`, or all AI), its setter running plays, in a real
+ * simulation built with no browser: the team reads its ball, its clock and its random stream.
  */
 function team(side: 1 | -1, pos: PositionId | null) {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let predicted = -1;
-  const env: BallEnv = { netTop: COURT.netHeightMen };
-  const ball = {
-    state,
-    active: true,
-    lastTouch: null as Touch | null,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    speed: () => Math.hypot(state.v.x, state.v.y, state.v.z),
-    ensurePrediction(e: BallEnv, t: number) {
-      if (predicted !== version) {
-        predictor.compute(state, e, t);
-        predicted = version;
-      }
-      return predictor;
-    },
-    touch(from: V3, v: V3) {
-      Object.assign(state.p, from);
-      Object.assign(state.v, v);
-      state.rest = false;
-      version++;
-    },
-  };
-  const g = { simTime: 0, env, rng: new Rng(7), ballLive: false, ball, setBrain() {}, contact: { lastSet: null } };
-  const t = new TeamAI(side, g as unknown as AiHost);
+  const g = new Simulation(NO_HOOKS);
+  g.rng.reseed(7);
+  const ball = g.ball;
+  const t = new TeamAI(side, g);
   t.playsOn = true;
   for (const slot of SLOTS) {
     const mine = !!pos && slot === USER_SLOT[pos];
@@ -71,7 +40,7 @@ function team(side: 1 | -1, pos: PositionId | null) {
     const from = { x: 2.4 * side, y: 0.85, z: 6.0 * side };
     const out = { x: 0, y: 0, z: 0 };
     solveApex(from, { x: x * side, y: 2.5, z: z * side }, 4.1, { x: 0, y: 0, z: 0 }, out);
-    ball.touch(from, out);
+    ball.launch(from, out, undefined, 0, g.simTime);
     g.ballLive = true;
     ball.lastTouch = { athlete: t.players.get('L')!, kind: 'pass', t: g.simTime, side };
     g.simTime += DT;
@@ -82,16 +51,16 @@ function team(side: 1 | -1, pos: PositionId | null) {
     const from = { x: 0, y: 2.6, z: -3 * side };
     const out = { x: 0, y: 0, z: 0 };
     solveApex(from, { x: 0, y: 0.5, z: 5 * side }, 5.5, { x: 0, y: 0, z: 0 }, out);
-    ball.touch(from, out);
+    ball.launch(from, out, undefined, 0, g.simTime);
     g.ballLive = true;
-    ball.lastTouch = { athlete: null, kind: 'free', t: g.simTime, side: -side as 1 | -1 } as unknown as Touch;
+    ball.lastTouch = { athlete: null, kind: 'free', t: g.simTime, side: -side as 1 | -1 };
     g.simTime += DT;
     t.step();
   };
   const flight = () => {
     for (let i = 0; i < SIM.hz * 0.6; i++) {
       g.simTime += DT;
-      stepBall(state, DT, env, []);
+      ball.step(DT, g.env);
       t.step();
     }
   };

@@ -47,14 +47,16 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
       { k: 'Shift + W', a: 'Approach' },
       { k: 'Space', a: 'Plant and jump. Hold to load.' },
       { k: 'Left mouse', a: 'Hold to wind up, release to swing. A tap is a tip.' },
-      { k: '1  2  3', a: 'Call your set', hitters: true },
+      { k: '1 to 5', a: 'Call your route', hitters: true },
+      { k: 'C', a: 'Your routes: where each one runs and is hit', hitters: true },
       { k: 'B', a: 'Opposing block: off, single, double' },
     ],
     touch: [
       STICK_RUN,
       { k: 'JUMP', a: 'Hold to load, release to take off' },
       { k: 'HIT', a: 'Hold to wind up, release to swing. A tap is a tip.' },
-      { k: 'SET CALL', a: 'Top left: call your set', hitters: true },
+      { k: 'ROUTE', a: 'Top left: call your route', hitters: true },
+      { k: 'ROUTES', a: 'Top left: where each route runs and is hit', hitters: true },
       { k: 'VS BLOCK', a: 'Top left: opposing block off, single, double' },
     ],
   },
@@ -157,7 +159,7 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
       { k: 'Shift + W  Left mouse', a: 'Approach when the set is yours, hold to wind up, release to swing' },
       { k: 'Space', a: 'Jump: to hit, or to block at the net' },
       { k: 'Right mouse', a: 'Block at the net, set off it (press as it reaches your hands, release in the green)' },
-      { k: '1  2  3', a: 'Call your set', hitters: true },
+      { k: '1 to 5  C', a: 'Call your route; C shows your routes and the play your setter called', hitters: true },
       {
         k: '1 to 4  C  H',
         a: "You set: pick the hitter (again before the pass: their next set), the play wheel before the serve, help when you can't get to it",
@@ -169,6 +171,7 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
       { k: 'PASS', a: 'Hold when it is your ball' },
       { k: 'JUMP  HIT', a: 'As in the Spike Drill' },
       { k: 'BLOCK', a: 'Hold: hands up and jump, or set' },
+      { k: 'ROUTE', a: "Top left: call your route; ROUTES shows them and your setter's play", hitters: true },
       { k: 'SET TO', a: 'Top left: tap the hitter you set. Again before the pass: their next set', who: ['S', 'L'] },
       { k: 'PLAY', a: 'Top left, before the serve: the play wheel', who: ['S'] },
       { k: 'HELP', a: "Top left: a team-mate takes the second ball when you can't get to it", who: ['S', 'L'] },
@@ -239,7 +242,8 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
     {
       title: 'In a drill',
       rows: [
-        { k: '1  2  3', a: 'Call your set (Spike Drill, Mini Rally; hitters)' },
+        { k: '1 to 5', a: 'Call your route (Spike Drill, Mini Rally; hitters)' },
+        { k: 'C', a: 'Your routes: where each one runs and is hit (Spike Drill, Mini Rally; hitters)' },
         { k: '1 to 4', a: 'Pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
         {
           k: 'C',
@@ -286,7 +290,7 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
     {
       title: 'In a drill',
       rows: [
-        { k: 'SET CALL', a: 'Top left: call your set (Spike Drill, Mini Rally; hitters)' },
+        { k: 'ROUTE', a: 'Top left: call your route; ROUTES shows them (Spike Drill, Mini Rally; hitters)' },
         { k: 'SET TO', a: 'Top left: pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
         { k: 'PLAY', a: 'Top left: the play wheel when you set, then tap a play (Setter Drill, Mini Rally)' },
         { k: 'ROW  DUMP', a: 'Top left: front row, and your dump there (Setter Drill)' },

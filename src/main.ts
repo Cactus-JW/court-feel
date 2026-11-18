@@ -12,6 +12,7 @@ import type { ModeId } from './game/modes/mode';
 import type { PositionId } from './config';
 import { showCrashScreen } from './ui/crashScreen';
 import { TouchControls, wantsTouch } from './ui/touchControls';
+import { RouteHud } from './ui/routeHud';
 import { isLesson, readServeLessons, readTutorialFlag, tutorialOffer, writeTutorialFlag, type Lesson } from './game/tutorial';
 
 const app = document.getElementById('app')!;
@@ -191,7 +192,11 @@ window.addEventListener(
   },
   { passive: true, capture: true },
 );
-game.onFrame = () => touch.update();
+const routes = new RouteHud(game.hud.root);
+game.onFrame = () => {
+  touch.update();
+  routes.update(game.routeView(), game.routesOpen);
+};
 
 /** phones: fullscreen and landscape when the browser allows it (must come from a tap) */
 function goFullscreen(): void {
