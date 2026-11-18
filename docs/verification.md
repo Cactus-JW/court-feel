@@ -81,8 +81,15 @@ Ask these in order and stop at the first yes.
   every drill on the branch and on `main` with a seeded autopilot and compares
   the whole simulation after every frame, then what is drawn and shown: every
   call the HUD gets, the camera, the ball, every athlete's pose, the floor
-  markers. Nothing is stored, so a feature that changes the play on purpose has
-  nothing to re-record.
+  markers. The four lessons are taken the same way with scripted hands, down to
+  what a lesson stores in the browser. Nothing is stored in the repo, so a
+  feature that changes the play on purpose has nothing to re-record.
+- **The hands replay** (the last pass of the same run). The game logs every
+  frame's intent (`Game.handsLog`). Each drill is then played again from that
+  log alone, with no autopilot and no key pressed, and has to give the same
+  play. It fails when the simulation takes something from a player that is not
+  in the intent: a key read on the side, a camera read for aim, an autopilot
+  rolling the simulation's dice. A second player rests on this (docs/adr/0011).
 - **Property tests** (`tests/properties.test.ts`). A fact that must hold for
   every input, tried on hundreds of seeded ones. They are for the bugs nobody
   wrote a case for. The inputs are seeded, so the tests are as repeatable as any
@@ -131,8 +138,9 @@ A check is worth nothing if the change it judges can rewrite it.
 Say these out loud in a pull request when they apply.
 
 - **The trace comparison proves what the autopilots play.** A change they never
-  reach passes. It does not cover the lessons, the menus, touch input, effects
-  or sound.
+  reach passes. It does not cover the menus, touch input, effects or sound, and
+  a lesson is covered as far as its scripted hands get: the spike and the float
+  lesson to the end, the two jump serves to their last rep.
 - **The end-to-end run checks that things work, not that they are unchanged.**
 - **A property test proves its property**, on the inputs it generates. A fact
   nobody stated is not tested.
@@ -146,8 +154,7 @@ These live in prose only, so they are the ones most likely to be broken.
 | Rule | Where it should go |
 |---|---|
 | Every tunable number lives in `src/config.ts` | A lint ratchet, once the 900 or so inline numbers are sorted into tunables and plain arithmetic |
-| All input goes through `Input` | A list of the files that may listen for keys, pointer or touch |
+| All input goes through `Input` | A list of the files that may listen for keys, pointer or touch. (What the simulation takes from a player is held: the hands replay.) |
 | A changed mechanic comes with a test that states the real-court fact | Review, helped by the "test first" rule |
-| The lessons play as they did | The trace, once an autopilot can play a lesson |
 
 When one of these gets a check, move it up this page.
