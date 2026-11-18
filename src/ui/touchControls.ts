@@ -1,8 +1,15 @@
-import { PLAYER, TOUCH } from '../config';
+import { PLAYER, TOUCH, type PositionId, type Settings } from '../config';
+import type { Emitter } from '../core/events';
+import type { Input } from '../core/input';
 import { clamp01 } from '../core/mathx';
 import { TouchPad, type PadButton } from '../core/touchPad';
 import { ContactSystem } from '../game/contact';
-import type { Game } from '../app/game';
+import type { Athlete } from '../game/athlete';
+import type { GameEvents } from '../game/gameEvents';
+import type { Mode, ModeId } from '../game/modes/mode';
+import type { Tutorial } from '../game/tutorial';
+import type { Effects } from '../fx/effects';
+import type { Hud } from './hud';
 import { SET_PLAYS } from '../game/plays';
 import { SET_PICKS, type SetPick } from '../game/setterCalls';
 
@@ -73,6 +80,29 @@ export function wantsTouch(setting: 'auto' | 'on' | 'off'): boolean {
 }
 
 /**
+ * What the touch controls read of the game to draw themselves, and the few things a thumb can do
+ * that a key cannot (skip a lesson, end a replay, wake the sound). The app's `Game` is one; the
+ * controls do not import it. Everything a button means still goes through `input`.
+ */
+export interface TouchHost {
+  readonly input: Input;
+  readonly events: Pick<Emitter<GameEvents>, 'on'>;
+  readonly hud: Pick<Hud, 'keyLabels' | 'collarSweet'>;
+  readonly fx: Pick<Effects, 'audio' | 'replaying' | 'endReplay'>;
+  readonly tutorial: Pick<Tutorial, 'active' | 'teaching' | 'serving' | 'quiet' | 'stuck' | 'requestSkip'>;
+  readonly settings: Settings;
+  readonly simTime: number;
+  readonly me: Athlete;
+  readonly contact: Pick<ContactSystem, 'wantsSet'>;
+  readonly mode: Pick<Mode, 'setterPicks'> | null;
+  readonly modeId: ModeId;
+  readonly position: PositionId;
+  readonly inMenu: boolean;
+  readonly paused: boolean;
+  replayAvailable(): boolean;
+}
+
+/**
  * On-screen touch controls: a floating joystick on the left, aim by dragging
  * on the right, hold buttons (JUMP / HIT / BLOCK / PASS) with the same
  * press-hold-release feel as the keys, plus pause / camera / reset and the
@@ -100,7 +130,7 @@ export class TouchControls {
 
   constructor(
     parent: HTMLElement,
-    private g: Game,
+    private g: TouchHost,
     private cb: { pause(): void },
   ) {
     this.root = el('div', 'touch', parent);

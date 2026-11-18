@@ -15,6 +15,7 @@ import {
   type VenueId,
 } from '../config';
 import { Emitter } from '../core/events';
+import type { GameEvents } from '../game/gameEvents';
 import { Input } from '../core/input';
 import { clamp01, damp, lerp, Rng } from '../core/mathx';
 import { CameraRig, type FollowTarget } from '../camera/cameraRig';
@@ -45,7 +46,7 @@ import { SetSpot } from '../fx/setSpot';
 import { SetBar } from '../ui/setBar';
 import { PlayWheel } from '../ui/playWheel';
 import { SetRadar } from '../ui/setRadar';
-import { Judge, type Outcome } from '../game/judge';
+import { Judge } from '../game/judge';
 import { Hud } from '../ui/hud';
 import type { AiHost, Brain } from '../game/brains';
 import { kbd, type Mode, type ModeId } from '../game/modes/mode';
@@ -58,22 +59,6 @@ import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tuto
 
 /** consecutive frames that throw before the game stops and shows the crash screen */
 const MAX_FAILED_FRAMES = 10;
-
-export type GameEvents = {
-  toggleCam: { fp: boolean };
-  contact: ContactEvent;
-  aiContact: { athlete: Athlete; kind: TouchKind; speed: number };
-  outcome: Outcome;
-  ballEvent: { kind: string; x: number; y: number; z: number; impact: number };
-  /** a float serve has just broken (`BALL.float`): how hard, 0..1 */
-  floatBreak: { strength: number };
-  crowd: { amount: number; cheer: boolean };
-  step: { athlete: Athlete; speed: number };
-  land: { athlete: Athlete; impact: number };
-  takeoff: { athlete: Athlete };
-  /** a team-mate's call to the user (the setter's read of the pass: in system, high, help) */
-  setterCall: { athlete: Athlete; call: 'in' | 'out' | 'help' };
-};
 
 /**
  * Owns the renderer, the fixed-timestep simulation, the current drill and
