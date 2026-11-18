@@ -197,7 +197,7 @@ function makeHost(ball: FakeBall, events: ContactEvent[]) {
     simTime: 0,
     env: { netTop: COURT.netHeightMen },
     aimAssist: () => 0,
-    aimTargetFor: (_a: Athlete, out: THREE.Vector3) => out.set(1, 0.105, -6),
+    aimTargetFor: (_a: Athlete, out: THREE.Vector3) => out.copy(AIM),
     emitContact: (e: ContactEvent) => events.push(e),
     rand: () => 0.5,
     passTarget: () => ({ x: 1, y: 2.35, z: 0.9, apex: 4 }),
@@ -206,6 +206,9 @@ function makeHost(ball: FakeBall, events: ContactEvent[]) {
   } satisfies ContactHost;
   return host;
 }
+
+/** where the hitter in these tests aims (the floor of the other court) */
+const AIM = new THREE.Vector3(1, 0.105, -6);
 
 /**
  * Put a hitter in the air under a set, wind up for `hold` seconds and release
@@ -217,12 +220,14 @@ function spikeWithOffset(
   onStep?: (a: Athlete, t: number, events: ContactEvent[]) => boolean,
   body?: Partial<BodyOverride>,
   hand: Hand = 'right',
+  user = false,
 ) {
   const ball = new FakeBall();
   const events: ContactEvent[] = [];
   const host = makeHost(ball, events);
   const cs = new ContactSystem(host);
   const a = new Athlete('OH', 1, { body, hand });
+  a.isUser = user;
   a.place(-3.4, 1.4, 0);
   // jump straight up with a full load
   a.jumpPress();
@@ -307,6 +312,24 @@ describe('spike timing grades (real contact system)', () => {
     const e = spikeWithOffset(0, 0.03);
     expect(e.tip).toBe(true);
     expect(e.speed).toBeLessThan(12);
+  });
+  it("an AI hitter's late tip still goes over: it drops short behind the tape, never back into the tipper's own court", () => {
+    // aimed 1.5 m over the net; a late swing lands 1.8 m shorter than it was aimed
+    AIM.z = -1.5;
+    const e = spikeWithOffset(0.13, 0.03);
+    AIM.z = -6;
+    expect(e.tip).toBe(true);
+    expect(e.grade).toBe('Late');
+    expect(e.target.z).toBeLessThanOrEqual(-CONTACT.tipOver);
+  });
+  it('your late tip is graded like any swing: the hand over the top of the ball pushes it into the net', () => {
+    AIM.z = -1.5;
+    const e = spikeWithOffset(0.13, 0.03, undefined, undefined, 'right', true);
+    AIM.z = -6;
+    expect(e.tip).toBe(true);
+    expect(e.grade).toBe('Late');
+    // aimed back on our side of the net: it goes into the net
+    expect(e.target.z).toBeGreaterThan(0);
   });
 });
 

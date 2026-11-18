@@ -6,7 +6,7 @@ import type { AiHost, Brain } from '../game/brains';
 import { laneFor, quickSpot, SETTER_SPOT } from '../game/plays';
 import type { V3 } from '../physics/ball';
 import { predictJump } from '../game/approach';
-import { moveTo, netYaw, stop } from './brain';
+import { atNet, moveTo, netYaw, stop } from './brain';
 import { decoyFor, dumpHeld, greenFools } from './greenBite';
 import { BallRead } from './read';
 
@@ -168,7 +168,7 @@ export class MiddleBlocker implements Brain {
     const a = this.athlete;
     const now = g.simTime;
     const them = this.theirMiddle();
-    if (this.committedFor === this.guessFor || !them || !a.canJump() || Math.abs(them.pos.z) > 2.5) return;
+    if (this.committedFor === this.guessFor || !them || !a.canJump() || !atNet(a) || Math.abs(them.pos.z) > 2.5) return;
     // it sees the plant a reaction time after it starts, the take-off at once
     if (!(them.state === 'air' || (them.state === 'load' && them.stateT >= AI.middle.react))) return;
     // their hands meet the ball at the top of the jump (a planting hitter is taken to hold a full plant)
@@ -199,7 +199,7 @@ export class MiddleBlocker implements Brain {
     const spot = this.blockSpot(this.setRead.x(this.attackX, now, this.tc));
     this.targetX = spot;
     this.handsTo = spot;
-    if (this.blockedFor === lt || !a.canJump()) return;
+    if (this.blockedFor === lt || !a.canJump() || !atNet(a)) return;
     // on time it goes up where it is meant to be; late, from wherever it got to, if that is near enough
     if (now >= this.pressFor(this.tc + 0.12) && now <= this.tc && Math.abs(a.pos.x - spot) <= AI.middle.lateReach) {
       this.jump(now);
@@ -299,7 +299,7 @@ export class MiddleBlocker implements Brain {
     if (!f.own && f.with) f.wrong = f.with.pos.x + f.with.vel.x * AI.greenBite.lead;
     this.targetX = f.wrong;
     this.handsTo = f.wrong;
-    if (!a.canJump() || now > this.tc || Math.abs(a.pos.x - f.wrong) > AI.middle.lateReach) return;
+    if (!a.canJump() || !atNet(a) || now > this.tc || Math.abs(a.pos.x - f.wrong) > AI.middle.lateReach) return;
     const press = Math.min(this.pressWith(f.with, now), f.own ? this.pressFor(this.tc + 0.12) : Infinity);
     if (now < press) return;
     this.jump(now);
@@ -314,7 +314,7 @@ export class MiddleBlocker implements Brain {
   private goAfter(now: number, f: Fooled): void {
     const a = this.athlete;
     this.targetX = f.spot;
-    if (f.again || !a.canJump() || now > this.tc || Math.abs(a.pos.x - f.spot) > AI.middle.lateReach) return;
+    if (f.again || !a.canJump() || !atNet(a) || now > this.tc || Math.abs(a.pos.x - f.spot) > AI.middle.lateReach) return;
     if (now < this.pressFor(this.tc + 0.12) + AI.greenFooled.late) return;
     this.handsTo = f.spot;
     this.jump(now);
