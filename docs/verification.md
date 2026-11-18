@@ -72,6 +72,10 @@ Ask these in order and stop at the first yes.
 - **The autopilots roll their own dice** (`tests/architecture.autopilot.test.ts`).
   An autopilot stands in for a player, and a player's hands are not part of the
   simulation: it fails when one reads the simulation's random stream.
+- **Input has one door** (`tests/architecture.input.test.ts`). It lists the files
+  that may listen for keys, the mouse, the pointer or touch, with the reason for
+  each, and fails when another file starts to. Nothing in the simulation may: it
+  is handed an intent.
 - **Unit tests that state a real-court fact**, in the test's name.
 - **CI on every pull request.**
 
@@ -154,7 +158,6 @@ These live in prose only, so they are the ones most likely to be broken.
 | Rule | Where it should go |
 |---|---|
 | Every tunable number lives in `src/config.ts` | A lint ratchet, once the 900 or so inline numbers are sorted into tunables and plain arithmetic |
-| All input goes through `Input` | A list of the files that may listen for keys, pointer or touch. (What the simulation takes from a player is held: the hands replay.) |
 | A changed mechanic comes with a test that states the real-court fact | Review, helped by the "test first" rule |
 
 When one of these gets a check, move it up this page.
