@@ -169,7 +169,3 @@ export function makeFloorRing(color: number, size: number): THREE.Mesh {
   m.renderOrder = 2;
   return m;
 }
-
-export function kbd(...keys: string[]): string {
-  return keys.map((k) => `<kbd>${k}</kbd>`).join('');
-}

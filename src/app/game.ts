@@ -49,10 +49,12 @@ import { SetRadar } from '../ui/setRadar';
 import { Judge } from '../game/judge';
 import { Hud } from '../ui/hud';
 import type { AiHost, Brain } from '../game/brains';
-import { kbd, type Mode, type ModeId } from '../game/modes/mode';
+import { kbd } from '../core/kbd';
+import { type Mode, type ModeId } from '../game/modes/mode';
 import { createMode } from '../game/modes/registry';
 import { makeRingTexture } from '../world/textures';
 import { UserActions } from '../game/userActions';
+import { lessonStore } from './lessonStore';
 import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
 import { Effects } from '../fx/effects';
 import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tutorial';
@@ -138,6 +140,8 @@ export class Game implements AiHost {
   /** called once per render frame after the HUD (the touch overlay draws itself here) */
   onFrame: (() => void) | null = null;
   /** the lesson's three balls are done (`clean`: the last one was a Perfect or a Good): offer what to do next */
+  /** where the lessons remember how far a visitor has got */
+  readonly lessonStore = lessonStore();
   onTutorialDone: ((clean: boolean, lesson: Lesson) => void) | null = null;
   /** Skip tutorial: 'menu' from the welcome, 'drill' once a rep is underway */
   onTutorialSkipped: ((where: 'menu' | 'drill') => void) | null = null;

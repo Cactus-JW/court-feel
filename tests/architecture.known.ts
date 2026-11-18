@@ -20,13 +20,11 @@ export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/modes/registry.ts -> src/app/game.ts',
   'src/game/modes/serveDrill.ts -> src/fx/approachGuide.ts',
   'src/game/modes/spikeDrill.ts -> src/fx/approachGuide.ts',
-  'src/game/tutorial.ts -> src/app/game.ts',
-  'src/game/tutorial.ts -> src/game/modes/mode.ts',
   'src/game/userController.ts -> src/camera/cameraRig.ts',
 ];
 
 /** simulation files that touch the DOM (window, document, storage) */
-export const KNOWN_DOM: readonly string[] = ['src/game/tutorial.ts'];
+export const KNOWN_DOM: readonly string[] = [];
 
 /** simulation files that build scene objects: three.js classes that are not maths */
 export const KNOWN_SCENE: readonly string[] = [

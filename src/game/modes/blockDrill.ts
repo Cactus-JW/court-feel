@@ -8,7 +8,8 @@ import { Athlete } from '../athlete';
 import type { ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { attackHeight, laneFor, quickSetFor, quickSpot, SETTER_SPOT, SETTER_TARGET, setterTouchY } from '../plays';
-import { kbd, Mode } from './mode';
+import { kbd } from '../../core/kbd';
+import { Mode } from './mode';
 
 type Phase = 'intro' | 'feed' | 'live' | 'result';
 
