@@ -4,10 +4,12 @@
 //   1. runs the architecture test as it is on <ref> (its rules, its scan, its layer table) against
 //      this checkout's code. A pull request that loosens the test still has to pass the old one.
 //      (`npm test` runs this checkout's own version too, so a new rule applies as well.)
-//   2. compares the known lists (tests/architecture.known.ts) with <ref>'s. An entry that is new
-//      here fails, unless ALLOW_KNOWN_GROWTH=1 (CI sets it from the `known-list-may-grow` label,
-//      for a pull request that was open before a rule existed). A list <ref> does not have yet
-//      belongs to a rule that is new here, so it is not growth.
+//   2. compares the known lists (tests/architecture.known.ts) with <ref>'s. A list with an entry
+//      that is new here fails, unless the list ends up shorter than it was: a refactor that moves
+//      a breach nearer to where it ends (22 imports by one file become 8 files importing that
+//      file) puts new entries in and takes more out. ALLOW_KNOWN_GROWTH=1 lets any growth through
+//      (CI sets it from the `known-list-may-grow` label, for a pull request that was open before
+//      a rule existed). A list <ref> does not have yet belongs to a rule that is new here.
 //
 // The files are swapped in place and always put back, so it can be run locally. Exit code 1 on a
 // failed rule or a grown list.
@@ -78,9 +80,17 @@ if (before !== null) {
   for (const [name, entries] of now) {
     const old = was.get(name);
     if (!old) continue;
-    for (const e of entries) if (!old.has(e)) grown.push(`${name}: ${e}`);
+    const added = [...entries].filter((e) => !old.has(e));
+    if (added.length === 0) continue;
+    if (entries.size < old.size) {
+      console.log(
+        `${name} has ${added.length} new entries and is shorter all the same (${old.size} to ${entries.size}): a breach moved\n  ${added.join('\n  ')}`,
+      );
+      continue;
+    }
+    for (const e of added) grown.push(`${name}: ${e}`);
   }
-  if (grown.length === 0) console.log(`the known lists have no entry that ${ref} does not have`);
+  if (grown.length === 0) console.log(`no known list is longer than on ${ref}`);
   else if (process.env.ALLOW_KNOWN_GROWTH === '1')
     console.log(`the known lists grew by ${grown.length}, allowed for this pull request:\n  ${grown.join('\n  ')}`);
   else {

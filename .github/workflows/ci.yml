@@ -53,6 +53,10 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_REF"
+          # the script that does the judging is the base branch's too, where it has one
+          if git cat-file -e FETCH_HEAD:scripts/rules-from-base.mjs 2>/dev/null; then
+            git show FETCH_HEAD:scripts/rules-from-base.mjs > scripts/rules-from-base.mjs
+          fi
           node scripts/rules-from-base.mjs FETCH_HEAD
         env:
           BASE_REF: ${{ github.base_ref }}
