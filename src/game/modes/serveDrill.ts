@@ -237,7 +237,7 @@ export class ServeDrill extends Mode {
 
   frame(dt: number): void {
     const g = this.g;
-    for (let i = 0; i < SERVE_KINDS.length; i++) if (g.input.consumePress('Digit' + (i + 1))) this.selectCall(i);
+    for (let i = 0; i < SERVE_KINDS.length; i++) if (g.keyPressed('Digit' + (i + 1))) this.selectCall(i);
     const teach = g.tutorial.serving;
     const toss = this.phase === 'toss' && !!this.spot;
     this.guide.update(

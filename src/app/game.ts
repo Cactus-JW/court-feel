@@ -25,7 +25,7 @@ import { REFLECT_LAYER } from '../world/floorReflection';
 import { Post } from '../fx/post';
 import { Athlete, handSign } from '../game/athlete';
 import { bodyStats } from '../game/body';
-import { copyIntent, idleIntent, readIntent, type Intent } from '../game/intent';
+import { copyIntent, idleIntent, readIntent, readKeys, takeKey, type Intent } from '../game/intent';
 import { UserController } from '../game/userController';
 import { DebugOverlay, type DebugInfo } from '../ui/debug';
 import { BallEntity, type TouchKind } from '../game/ballEntity';
@@ -879,9 +879,10 @@ export class Game implements AiHost {
       this.input.takeMouse();
       if (this.bot && this.mode) {
         this.bot.step(dt);
-        this.user.frame(dt, this.hands());
+        this.user.intent = this.hands();
+        this.user.frame(dt);
         this.stepReturn(dt);
-      }
+      } else readKeys(this.input, this.user.intent);
       return;
     }
     this.bot?.step(dt);
@@ -889,9 +890,11 @@ export class Game implements AiHost {
     // the play wheel takes the mouse while it is open
     if (!this.playWheelFrame(dx, dy)) this.rig.look(dx, dy, this.settings.sensitivity, this.settings.invertY);
     if (this.input.consumePress('KeyV')) this.toggleCamera();
-    if (this.input.consumePress('KeyN')) this.mode?.restartRep();
+    // from here on the frame is played from the intent: whoever's hands it came from
+    this.user.intent = this.hands();
+    if (this.keyPressed('KeyN')) this.mode?.restartRep();
     if (this.input.consumePress('KeyR')) this.fx.startReplay();
-    this.user.frame(dt, this.hands());
+    this.user.frame(dt);
     this.assistSetStep();
     // the lesson's together rep: the coach holds your line (what you hold decides whether time runs)
     this.tutorial.drive(this.me);
@@ -915,6 +918,13 @@ export class Game implements AiHost {
     this.bot?.steer(intent);
     this.handsLog?.push(copyIntent(intent));
     return intent;
+  }
+
+  /** a command key was pressed (`COMMAND_KEYS`). True once for each press: it is taken from the intent, and from `Input` where it came from */
+  keyPressed(code: string): boolean {
+    if (!takeKey(this.user.intent, code)) return false;
+    this.input.consumePress(code);
+    return true;
   }
 
   enableBot(q: string): void {

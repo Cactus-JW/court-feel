@@ -32,6 +32,12 @@ export interface Intent {
   released: UserAction[];
   /** buttons that are down */
   held: UserAction[];
+  /**
+   * The other keys the game listens for (`COMMAND_KEYS`: a drill's calls, the next rep) that have
+   * gone down and not been acted on yet. A drill takes one when it acts on it (`takeKey`); one
+   * nobody takes is here again next frame, as a key press waits in `Input`.
+   */
+  keys: string[];
 }
 
 export const idleIntent = (): Intent => ({
@@ -46,10 +52,47 @@ export const idleIntent = (): Intent => ({
   pressed: [],
   released: [],
   held: [],
+  keys: [],
 });
 
 /** a copy that shares nothing with the original (a log keeps these) */
-export const copyIntent = (i: Intent): Intent => ({ ...i, pressed: [...i.pressed], released: [...i.released], held: [...i.held] });
+export const copyIntent = (i: Intent): Intent => ({
+  ...i,
+  pressed: [...i.pressed],
+  released: [...i.released],
+  held: [...i.held],
+  keys: [...i.keys],
+});
+
+/**
+ * The keys that are commands to the game, not to the athlete: 1 to 9 (a drill's calls: the set, the
+ * serve, the feed, the play), B (their block), G (the setter's second row), H (ask for help), N
+ * (the next rep), F and T (Free Play's feed). The play wheel and the lesson's "any key" are not
+ * here: they are this machine's only, and a shared session has neither (docs/adr/0011).
+ */
+export const COMMAND_KEYS: readonly string[] = [
+  ...Array.from({ length: 9 }, (_, i) => `Digit${i + 1}`),
+  'KeyB',
+  'KeyG',
+  'KeyH',
+  'KeyN',
+  'KeyF',
+  'KeyT',
+];
+
+/** the command keys waiting in `Input`, without taking them: they are taken when something acts on them */
+export function readKeys(input: Pick<Input, 'peekPress'>, out: Intent): void {
+  out.keys.length = 0;
+  for (const code of COMMAND_KEYS) if (input.peekPress(code)) out.keys.push(code);
+}
+
+/** act on a command key: true once for each press, as `Input.consumePress` is */
+export function takeKey(intent: Intent, code: string): boolean {
+  const i = intent.keys.indexOf(code);
+  if (i < 0) return false;
+  intent.keys.splice(i, 1);
+  return true;
+}
 
 /** the keys and buttons of each action. The order is the order presses and releases are acted on */
 const BINDS: readonly [UserAction, string][] = [
@@ -61,7 +104,7 @@ const BINDS: readonly [UserAction, string][] = [
 ];
 
 /** the part of `Input` an intent is read from */
-export type Hands = Pick<Input, 'isDown' | 'consumePress' | 'consumeRelease' | 'stick'>;
+export type Hands = Pick<Input, 'isDown' | 'consumePress' | 'consumeRelease' | 'peekPress' | 'stick'>;
 
 /** where a player is looking: the camera rig is one */
 export interface Look {
@@ -124,5 +167,6 @@ export function readIntent(input: Hands, look: Look, out: Intent = idleIntent())
     out.held.push(action);
     if (action === 'block') out.held.push('set');
   }
+  readKeys(input, out);
   return out;
 }

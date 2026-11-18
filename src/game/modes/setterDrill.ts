@@ -235,9 +235,9 @@ export class SetterDrill extends Mode {
   step(dt: number): void {
     const g = this.g;
     this.t += dt;
-    this.calls.readKeys(g.input);
+    this.calls.readKeys(this.keys);
     if (this.calls.takeLate()) g.hud.message('Too late to change it · they are committed', 1.2);
-    if (g.input.consumePress('KeyG') && !this.calls.locked) this.toggleRow();
+    if (g.keyPressed('KeyG') && !this.calls.locked) this.toggleRow();
     // before the pass the hitters walk to the start of their call's run
     if (!this.calls.locked) applyCalls(this.hitters, this.calls, false);
     syncRuns(this.hitters, this.calls);

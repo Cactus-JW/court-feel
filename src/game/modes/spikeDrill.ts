@@ -548,14 +548,14 @@ export class SpikeDrill extends Mode {
     );
     // one Outside set, block off: swallow the call and block keys until the lesson ends
     if (this.g.tutorial.active) {
-      if (this.plays) for (let i = 0; i < this.plays.length; i++) this.g.input.consumePress('Digit' + (i + 1));
-      this.g.input.consumePress('KeyB');
+      if (this.plays) for (let i = 0; i < this.plays.length; i++) this.g.keyPressed('Digit' + (i + 1));
+      this.g.keyPressed('KeyB');
       return;
     }
     if (this.plays) {
-      for (let i = 0; i < this.plays.length; i++) if (this.g.input.consumePress('Digit' + (i + 1))) this.selectCall(i);
+      for (let i = 0; i < this.plays.length; i++) if (this.g.keyPressed('Digit' + (i + 1))) this.selectCall(i);
     }
-    if (this.g.input.consumePress('KeyB')) this.cycleBlock();
+    if (this.g.keyPressed('KeyB')) this.cycleBlock();
   }
 
   private feedBall(): void {

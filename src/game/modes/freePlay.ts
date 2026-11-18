@@ -112,9 +112,8 @@ export class FreePlay extends Mode {
   }
 
   frame(_dt: number): void {
-    const inp = this.g.input;
     for (let i = 0; i < FEEDS.length; i++) {
-      if (inp.consumePress('Digit' + (i + 1))) {
+      if (this.g.keyPressed('Digit' + (i + 1))) {
         this.feed = FEEDS[i];
         this.placeMachine();
         this.updateScore();
@@ -122,8 +121,8 @@ export class FreePlay extends Mode {
         this.requested = !this.auto;
       }
     }
-    if (inp.consumePress('KeyF')) this.requested = true;
-    if (inp.consumePress('KeyT')) {
+    if (this.g.keyPressed('KeyF')) this.requested = true;
+    if (this.g.keyPressed('KeyT')) {
       this.auto = !this.auto;
       this.updateScore();
     }

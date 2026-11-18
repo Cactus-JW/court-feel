@@ -25,7 +25,11 @@ export class UserController {
   handlers: Partial<Record<UserAction, () => boolean>> = {};
   releaseHandlers: Partial<Record<UserAction, () => void>> = {};
   realTime = 0;
-  /** the intent of the frame being played: the buttons held, and where the player looks (an attack is aimed there) */
+  /**
+   * The intent of the frame being played: the buttons held, where the player looks (an attack is
+   * aimed there) and the command keys waiting. The game sets it at the start of a frame, before
+   * anything acts on a key, and `frame` then plays it.
+   */
   intent: Intent = idleIntent();
 
   isHeld(a: UserAction): boolean {
@@ -33,7 +37,7 @@ export class UserController {
   }
 
   /** per render frame: movement command + edge-triggered actions */
-  frame(dt: number, intent: Intent): void {
+  frame(dt: number, intent: Intent = this.intent): void {
     this.realTime += dt;
     this.intent = intent;
     const a = this.athlete;
