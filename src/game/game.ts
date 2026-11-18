@@ -35,7 +35,16 @@ import type { BallEnv } from '../physics/ball';
 import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
 import type { Kit } from '../character/rig';
-import { aimTargetFromLook, ContactSystem, tossGroove, type ContactEvent, type IdealInfo } from './contact';
+import { wheelPlays } from './playbook';
+import { setStepAssist } from './setAssist';
+import { autoSetJump, takeoffSpot } from './setJump';
+import { aimTargetFromLook, ContactSystem, tossGroove, type ContactEvent, type IdealInfo, type SetPreview } from './contact';
+import { SetGuide } from '../fx/setGuide';
+import { SetRing } from '../fx/setRing';
+import { SetSpot } from '../fx/setSpot';
+import { SetBar } from '../ui/setBar';
+import { PlayWheel } from '../ui/playWheel';
+import { SetRadar } from '../ui/setRadar';
 import { Judge, type Outcome } from './judge';
 import { Hud } from '../ui/hud';
 import type { AiHost, Brain } from './brains';
@@ -99,7 +108,35 @@ export class Game implements AiHost {
   private lastRenderSimT = 0;
   private accum = 0;
   timeScale = 1;
-  private slowmo = 1;
+  /** the game speed from the slow-mo assists right now (the set bot times its frames by it) */
+  slowmo = 1;
+  /** the set coming down onto the user's hands (refreshed each frame), for the set slow-mo and the timing ring */
+  private setPrev: SetPreview | null = null;
+  /** the set coming to you, before you are under it: the bar shows early when the ball is yours to set */
+  private setComing: SetPreview | null = null;
+
+  /**
+   * Your set loading in your hands, for the load tone: 0 at the catch, 1 at the top of the bar
+   * (above 1 held past it). Null when no set is loading, the game is paused or in a menu or a
+   * replay, or the set cues are off (Settings: Set ring and bar).
+   */
+  setLoading(): number | null {
+    const bar = this.setPrev?.bar;
+    if (!bar || this.paused || this.inMenu || this.fx.replaying || !this.settings.setRing) return null;
+    return (this.simTime - bar.start) / (bar.target - bar.start);
+  }
+  private setRing!: SetRing;
+  private setBar!: SetBar;
+  private setGuide!: SetGuide;
+  private setRadar!: SetRadar;
+  private wheel!: PlayWheel;
+
+  /** the play wheel is open: a drill holds its next ball, and the game runs slow */
+  get wheelOpen(): boolean {
+    return this.wheel.open;
+  }
+  private setSpot!: SetSpot;
+  private spotP = { x: 0, y: 0, z: 0 };
   /** the lesson's clock: 1 real time, slower through a taught rep, 0 while the ball waits for the player */
   tutor = 1;
   hitStop = 0;
@@ -156,6 +193,8 @@ export class Game implements AiHost {
     // first: the venue, the settings and the display below all read the simulation's ball and net
     this.sim = new Simulation({
       aimAssist: (a) => (a.isUser ? this.settings.aimAssist : 0.3),
+      setAssist: (a) => (a.isUser ? this.settings.setAimAssist : 0.3),
+      setByFeel: () => !this.settings.setRing,
       aimTargetFor: (a, out) => this.aimTargetFor(a, out),
       userAimYaw: () => this.rig.yaw,
       contact: (ev) => this.onContact(ev),
@@ -163,6 +202,8 @@ export class Game implements AiHost {
       ballEvent: (e) => this.events.emit('ballEvent', e),
       floatBreak: (strength) => this.events.emit('floatBreak', { strength }),
       outcome: (o) => this.events.emit('outcome', o),
+      setLevel: () => this.settings.setLevel,
+      userSetJump: () => this.userSetJump(),
     });
     this.venueSetting = settings.venue;
     setVenue(venueOverride ?? settings.venue);
@@ -194,6 +235,16 @@ export class Game implements AiHost {
     this.hud.camera = this.rig.camera;
     this.ballView = new BallView(this.scene, this.ball);
     this.ballView.mesh.layers.enable(REFLECT_LAYER);
+    this.setRing = new SetRing(this.scene);
+    this.setSpot = new SetSpot(this.scene);
+    this.setBar = new SetBar(this.hud.root);
+    this.setGuide = new SetGuide(this.scene, this.hud.root);
+    this.setRadar = new SetRadar(this.hud.root);
+    // a tapped slice (touch) presses that play's number, through Input like every control
+    this.wheel = new PlayWheel(this.hud.root, (i) => {
+      this.input.down('Digit' + (i + 1));
+      this.input.up('Digit' + (i + 1));
+    });
     this.ball.hide();
     this.gizmos = new DebugGizmos(this.scene);
 
@@ -579,9 +630,12 @@ export class Game implements AiHost {
         const kmh = ev.speed * 3.6;
         const pw =
           ev.power !== undefined && !ev.tip ? ` · ${ev.power >= 0.999 ? 'full power' : `power ${Math.round(ev.power * 100)}%`}` : '';
-        let sub = ev.grade === 'Miss' ? ev.note : `${kmh.toFixed(0)} km/h${pw}${ev.note ? ' · ' + ev.note : ''}${ev.tip ? ' · tip' : ''}`;
+        // a set shows its release timing and what shrank the window; a perfectly timed one is a green
+        const set = ev.kind === 'set';
+        let sub =
+          ev.grade === 'Miss' || set ? ev.note : `${kmh.toFixed(0)} km/h${pw}${ev.note ? ' · ' + ev.note : ''}${ev.tip ? ' · tip' : ''}`;
         if (this.tutorial.active) sub = this.tutorial.gradeSub(ev.grade, sub);
-        this.hud.showGrade(ev.grade, sub);
+        this.hud.showGrade(ev.grade, sub, set && ev.perfect);
       }
       if (ev.speed > 0) this.hud.setSpeed(ev.speed * 3.6);
     }
@@ -753,6 +807,12 @@ export class Game implements AiHost {
   }
 
   private renderReplay(dt: number, draw: boolean): void {
+    this.setRing.hide();
+    this.setBar.hide();
+    this.setGuide.hide();
+    this.setRadar.hide();
+    this.wheel.hide();
+    this.setSpot.hide();
     this.mode?.replayFrame();
     this.arena.netPress(this.ballView.mesh.visible ? this.ballView.mesh.position : null);
     this.rig.update(dt, null);
@@ -766,6 +826,54 @@ export class Game implements AiHost {
   }
 
   /** frame-level input: look, toggles, immediate action starts (same frame as the input) */
+  /**
+   * Set aim assist for your footwork: the ball is yours to set and you are on the floor near
+   * the spot, so your body takes the last steps onto it (setStepAssist; off at assist 0, and
+   * once the ball is in your hands).
+   */
+  private assistSetStep(): void {
+    const me = this.me;
+    if (this.settings.setAimAssist <= 0 || me.state !== 'ground' || !this.mode?.userSetsNext?.()) return;
+    if (me.action?.kind === 'set' && me.action.absorbing) return;
+    // going up for it: the steps go to where the hop takes off from (the spot, less what your run carries)
+    const jump = this.contact.setCatch(me)?.jump;
+    const spot = jump ? takeoffSpot(me, jump, this.stepP) : this.contact.setSpot(me, this.stepP);
+    if (spot) setStepAssist(me.cmd, me.pos, spot, this.settings.setAimAssist);
+  }
+  private stepP = { x: 0, y: 0, z: 0 };
+
+  /**
+   * The play wheel (C, while the mode lets you call a play): hold C and move the mouse to a
+   * play, let go to call it; or press C, then the play's number (a tap on touch) or click.
+   * C again closes it. Returns whether the wheel has the mouse this frame.
+   */
+  private playWheelFrame(dx: number, dy: number): boolean {
+    const w = this.wheel;
+    const calls = this.mode?.playCalls?.() ?? null;
+    const pressed = this.input.consumePress('KeyC');
+    const released = this.input.consumeRelease('KeyC');
+    if (!calls) {
+      w.hide();
+      return false;
+    }
+    if (!w.open) {
+      if (!pressed) return false;
+      w.show(calls.combo(wheelPlays()));
+    } else if (pressed) {
+      w.hide();
+      return false;
+    }
+    w.move(dx, dy);
+    let pick = -1;
+    const plays = wheelPlays();
+    for (let i = 0; i < plays.length; i++) if (this.input.consumePress('Digit' + (i + 1))) pick = i;
+    if (pick < 0 && w.sel >= 0 && (released || this.input.consumePress('Mouse0'))) pick = w.sel;
+    if (pick < 0) return true;
+    if (calls.setCombo(plays[pick])) this.hud.message(`Play · ${plays[pick].name}`, 1.4);
+    w.hide();
+    return false;
+  }
+
   private frameInput(dt: number): void {
     if (this.input.consumePress('F3')) {
       this.debug.toggle();
@@ -788,11 +896,13 @@ export class Game implements AiHost {
     }
     this.bot?.step(dt);
     const [dx, dy] = this.input.takeMouse();
-    this.rig.look(dx, dy, this.settings.sensitivity, this.settings.invertY);
+    // the play wheel takes the mouse while it is open
+    if (!this.playWheelFrame(dx, dy)) this.rig.look(dx, dy, this.settings.sensitivity, this.settings.invertY);
     if (this.input.consumePress('KeyV')) this.toggleCamera();
     if (this.input.consumePress('KeyN')) this.mode?.restartRep();
     if (this.input.consumePress('KeyR')) this.fx.startReplay();
     this.user.frame(dt);
+    this.assistSetStep();
     this.bot?.after();
     // the lesson's together rep: the coach holds your line (what you hold decides whether time runs)
     this.tutorial.drive(this.me);
@@ -827,13 +937,26 @@ export class Game implements AiHost {
   advance(realDt: number): void {
     if (this.paused) return;
     const step = 1 / SIM.hz;
-    // slow-mo assist while lining up a contact
-    let slowTarget = 1;
-    const dip = (this.settings.slowmoAssist || this.tutorial.wantsContactDip()) && this.me.state === 'air' && this.idealValid;
+    // slow-mo assist while lining up a contact: a spike's, so not in a jump set (it has its own)
+    // unless you swing at the ball
+    // choosing a play: the game waits for you (it runs, slowly)
+    let slowTarget = this.wheel.open ? ASSIST.playWheelSlow : 1;
+    const swinging = this.me.airIntent !== 'set' || this.me.action?.kind === 'windup';
+    const dip = (this.settings.slowmoAssist || this.tutorial.wantsContactDip()) && this.me.state === 'air' && swinging && this.idealValid;
     if (dip) {
       const until = this.idealCache.t - this.simTime;
       if (until > 0 && until < ASSIST.slowmoWindow && this.idealCache.d < this.contact.reach(this.me) + 0.4)
         slowTarget = ASSIST.slowmoScale;
+    }
+    // your set (Settings: Set slow-mo): time slows for the catch, and more while the ball loads in
+    // your hands, the same on every level; only when you are under the ball or have pressed
+    const sp = this.inMenu ? null : this.contact.setPreview(this.me);
+    this.setPrev = sp && (sp.pressed || sp.absorbing || sp.centreD < this.contact.setReach(this.me) + 0.4) ? sp : null;
+    this.setComing = sp;
+    if (this.setPrev && this.settings.setSlowmo) {
+      const until = this.setPrev.tIdeal - this.simTime;
+      if (this.setPrev.absorbing) slowTarget = Math.min(slowTarget, ASSIST.setSlowmoLoad);
+      else if (until < ASSIST.setSlowmoWindow && until > -TIMING.setCatchLate) slowTarget = Math.min(slowTarget, ASSIST.setSlowmoCatch);
     }
     this.slowmo = lerp(this.slowmo, slowTarget, damp(12, realDt));
     // the lesson's own clock never stacks on top of the assist dip. A moment the ball waits at
@@ -876,6 +999,29 @@ export class Game implements AiHost {
   /** when the ball the user is jumping at is best met (sim time), or -1 with nothing to reach */
   idealT(): number {
     return this.idealValid ? this.idealCache.t : -1;
+  }
+
+  /**
+   * The sim time of the frame on screen (between the last two steps): what a press or release
+   * you make now is timed against. In heavy slow-mo a step spans several frames, so the step
+   * time alone would round your release to the step.
+   */
+  inputTime(): number {
+    return this.simTime - 1 / SIM.hz + this.accum;
+  }
+
+  /**
+   * Your jump set (Settings: Auto jump set): a pass in system is yours to set, so your body goes
+   * up for it by itself, timed so the top of the jump is in the middle of the touch. The catch and
+   * the release stay yours. Off, or out of system, you set from the floor (or jump yourself: Space).
+   */
+  private userSetJump(): void {
+    const me = this.me;
+    const sets = !this.inMenu && !!this.mode?.userSetsNext?.();
+    me.jumpSets = sets && this.settings.autoJumpSet;
+    // what the arms get ready for in the air, chosen on the floor (a jump keeps what it went up for)
+    if (me.grounded) me.airIntent = sets ? 'set' : 'attack';
+    if (me.jumpSets) autoSetJump(me, this.contact.setCatch(me)?.jump ?? null, this.simTime);
   }
 
   fixedStep(dt: number): void {
@@ -964,6 +1110,25 @@ export class Game implements AiHost {
     f.side = me.side;
     this.rig.frozen = this.hitStop > 0;
     this.rig.update(realDt, this.inMenu ? null : f);
+    const cues = this.settings.setRing && this.ball.active && this.ball.visible && !this.inMenu;
+    this.setRing.update(this.setPrev, this.ball.rpos, tr, this.rig.camera, cues);
+    const last = this.contact.lastSetResult;
+    const yours = !this.inMenu && !!this.mode?.userSetsNext?.();
+    const barFor = this.setPrev ?? (yours ? this.setComing : null);
+    const fp = this.settings.firstPerson;
+    this.setBar.update(barFor, last?.athlete === me ? last : null, this.ball.rpos, this.rig.camera, tr, realDt, cues, fp);
+    // who the set goes to is not timing: it has its own switch (Settings: Set arc and hitter marker)
+    this.setGuide.update(barFor, this.rig.camera, realDt, this.settings.setArc && this.ball.active && this.ball.visible && !this.inMenu);
+    // where to stand for your set, instead of where the ball would land
+    const spot = yours && !this.setPrev?.absorbing ? this.contact.setSpot(me, this.spotP) : null;
+    // (a second ring: your body is going up for this one, or already has)
+    const jumping = !!spot && (me.state === 'air' || me.state === 'load' || !!this.contact.setCatch(me)?.jump);
+    this.setSpot.update(spot, me.rpos, realDt, jumping);
+    // looking up at the ball in first person the floor is out of view: the same spot on a dial
+    this.setRadar.update(fp && !this.inMenu ? spot : null, me.rpos, this.rig.yaw);
+    // the ball's landing ring, unless one of those rings says where to stand instead; the lesson
+    // shows where your feet go, so the ring beside it would be a second ring to read
+    this.ball.showMarker = this.settings.landingMarker && !spot && !this.setPrev?.absorbing && !this.tutorial.teaching;
     // fade our own body when the TP camera is very close, and anyone standing in the camera's way
     const camPos = this.rig.camera.position;
     for (const [a, v] of this.views) {
@@ -983,8 +1148,6 @@ export class Game implements AiHost {
       v.setOpacity(inBody ? clamp01((d - 0.35) / 0.5) * 0.8 + 0.2 : 1);
     }
     this.arena.update(realDt);
-    // the lesson shows where your feet go: the ball's landing ring beside it would be a second ring to read
-    this.ball.showMarker = this.settings.landingMarker && !this.tutorial.teaching;
     this.updateAimReticle(realDt);
     this.hud.update(realDt);
     this.onFrame?.();
@@ -1003,11 +1166,12 @@ export class Game implements AiHost {
     const charge = wind ? ContactSystem.chargeFor(this.simTime - wind.t0) : -1;
     // (the same ring shows how high a toss being held will go, with a mark at the serve's own height)
     this.hud.setCharge(this.inMenu ? null : wind ? charge : this.actions.tossHold(), wind ? null : tossGroove() / SERVE.hold.full);
+    // the spike's timing collar (Settings: Spike timing collar): a swing's, so not in a jump set unless you wind up
     const collarErr =
-      this.idealValid && me.state === 'air' && !this.inMenu
+      this.idealValid && me.state === 'air' && (me.airIntent !== 'set' || !!wind) && !this.inMenu
         ? this.simTime + ContactSystem.swingLead(wind ? charge : 0) - this.idealCache.t
         : null;
-    this.hud.setTiming(collarErr !== null && (this.tutorial.active || this.settings.showHints) ? collarErr : null);
+    this.hud.setTiming(collarErr !== null && (this.tutorial.active || this.settings.spikeCollar) ? collarErr : null);
     if (charge >= 1 && this.lastCharge < 1) this.fx?.audio.chargeFull();
     if (!wind && me.action?.kind === 'swing' && me.action !== this.swished) {
       this.swished = me.action;

@@ -279,6 +279,17 @@ export const PLAYER = {
   /** gravity multiplier near the apex: a little hang time */
   apexGravityScale: 0.82,
   apexBand: 1.1,
+  /** the plant brakes the run at this rate (m/s²) down to the carried speed */
+  plantBrake: 24,
+  /**
+   * The set jump (`src/game/setJump.ts`): a controlled hop, `height` of the standing jump, off the
+   * shortest plant, timed so the top of the jump falls in the middle of the touch (real setters
+   * meet the ball at the top, with a hop well under their block jump). The body goes up only if
+   * the hop carries the hands to within `near` m of the ball while drifting no faster than
+   * `maxDrift` m/s (a setter flying through the ball stays down and sets off the floor), and no
+   * later than `late` s after the moment to plant.
+   */
+  setJump: { height: 0.7, near: 0.35, maxDrift: 1.5, late: 0.05 },
   landRecover: 0.2,
   /**
    * A dive (AI defenders, at a ball the platform can't reach on foot): the body goes hands-first
@@ -345,14 +356,81 @@ export const TIMING = {
   digLead: 0.13,
   digPerfect: 0.07,
   digGood: 0.15,
+  /** an AI's overhand first ball: ideal lead between starting the touch and the ball reaching the hands */
   setLead: 0.18,
-  setPerfect: 0.08,
-  setGood: 0.16,
+  /**
+   * Sets: one press per ball. Press RMB as the ball reaches your hands (the catch), hold while it
+   * loads in your hands (the bar fills), release at the top of the bar (the push). The ball sits
+   * in the hands this long (game s) before the ideal push. A real set touch is shorter (under
+   * 0.1 s); this is longer so the bar has room, and the set slow-mo stretches it on screen (it
+   * fills in setLoad / ASSIST.setSlowmoLoad real seconds on every level). Levels: SET_LEVELS.
+   */
+  setLoad: 0.15,
+  /**
+   * Held this long (game s) past the top of the bar: the ball has come to rest in the hands, a
+   * lift (the point is theirs). Longer than Easy's late good band; setting by feel
+   * (ASSIST.setByFeel) it is that much longer too, like the band
+   */
+  setHoldMax: 0.13,
+  /** a catch this early or more (game s, beyond the level's clean catch) costs the touch the most */
+  setCatchEarly: 0.3,
+  /** a catch this late or more (game s, beyond the clean catch) costs the touch the most (the ball is at your chin) */
+  setCatchLate: 0.08,
+  /** feet stopped this long before the ball arrives costs the touch nothing */
+  setFeetReady: 0.3,
+  /** slower than this (m/s) counts as stopped */
+  setStillSpeed: 0.5,
+  /** while it loads, the hands give with the ball at this speed (m/s) */
+  setAbsorbSpeed: 0.6,
+  /**
+   * The Setter Drill's pace (game s). Your picks and calls for the next ball open as soon as a rep
+   * ends, so the whole wait is time to choose: the result stays up `result` s after a rally your
+   * hitter played out, only `resultMiss` s after a ball that was never set or never hit (nothing
+   * to watch), and the next pass leaves `feed` s into the rep (the passer's arms `wind` s before
+   * it). That is 2.7 s to choose after a rally and 2.0 s after a miss; it was 0.55 s, after a
+   * 2.2 s wait with the keys locked. The pass waits while the play wheel is open or you jog back
+   * to your spot, then comes `settle` s later. `intro` is the wait before the first rep, and a
+   * ball still in play after `live` s ends the rep.
+   */
+  setterDrill: { intro: 0.6, feed: 1.2, wind: 0.15, settle: 0.4, result: 1.5, resultMiss: 0.8, live: 9 },
   /** block: fraction of max jump height at contact */
   blockPerfectHeight: 0.88,
   blockGoodHeight: 0.66,
   blockArmTime: 0.12,
 };
+
+export type SetLevel = 'easy' | 'normal' | 'hard' | 'elite';
+export const SET_LEVEL_IDS: readonly SetLevel[] = ['easy', 'normal', 'hard', 'elite'];
+
+/**
+ * Set difficulty (Settings: Set difficulty). Every level has the same bar, the same slow-mo
+ * (ASSIST.setSlowmoCatch / setSlowmoLoad) and the same top of the bar, so the timing you practise
+ * on one carries to the next: a harder level only narrows the windows around it. Game seconds
+ * throughout; on screen they are divided by the slow-mo (Easy's ±60 ms green is ±240 ms on screen
+ * at quarter speed). Wider than a real setter's margin on purpose: the user's playtest (2026-11-15)
+ * found the release far too tight, so every level was widened about 2.5-3x, then by half again.
+ * These are a high ball's windows: a harder set gets a share of them (CONTACT.setTouch.window).
+ * - `green`: the green half-window around the top of the bar, with your best and your worst touch
+ * - `goodMul`: a good (white) set reaches this many green half-windows either side. It stays under
+ *   TIMING.setHoldMax, so a set held on until it is a lift was never a good one
+ * - `catch`: a catch this close to the ball reaching your hands is clean (at the catch slow-mo)
+ * - `handsEarly`: hands up before the ball comes cost nothing (Easy). It is what coaches teach,
+ *   and it leaves a beginner one thing to time, the release; from Normal up the catch is timed too
+ * The whole green never spans less than a 60 fps frame of game time (4.2 ms at quarter speed), so
+ * there is always a frame that lands in it.
+ */
+export const SET_LEVELS: Record<
+  SetLevel,
+  { label: string; green: [number, number]; goodMul: number; catch: number; handsEarly?: boolean }
+> = {
+  easy: { label: 'Easy', green: [0.06, 0.03], goodMul: 2, catch: 0.08, handsEarly: true },
+  normal: { label: 'Normal', green: [0.0375, 0.0195], goodMul: 2.5, catch: 0.05 },
+  hard: { label: 'Hard', green: [0.0225, 0.0135], goodMul: 2, catch: 0.03 },
+  elite: { label: 'Elite', green: [0.0135, 0.009], goodMul: 1.5, catch: 0.015 },
+};
+
+/** a kind of set, by how hard it is to put on the spot (CONTACT.setTouch.window) */
+export type SetTier = 'high' | 'hut' | 'quick' | 'backQuick' | 'backQuickOpp' | 'tempo' | 'push' | 'inside';
 
 export const CONTACT = {
   /** sphere around the ideal contact point that still lets you hit */
@@ -370,6 +448,57 @@ export const CONTACT = {
   aiSwingShift: 0.04,
   passRadius: 0.55,
   setRadius: 0.48,
+  /** how far ahead (s) a setter looks for the ball coming down onto the hands: a pass is in the air about 1-1.5 s */
+  setLook: 1.6,
+  /**
+   * Your touch scales the set's green window: each part multiplies it, down to these floors.
+   * Feet still moving, an early or late catch, the ball off-centre on the hands (beyond
+   * `setCentreOk` m, up to the edge of the reach), the kind of set (`window`), and a pass far
+   * off the net (`AI.outOfSystem`).
+   */
+  setTouch: {
+    feetMin: 0.65,
+    catchMin: 0.5,
+    centreMin: 0.6,
+    /**
+     * How hard each kind of set is to put on the spot: its share of a high ball's green. A high
+     * ball leaves the hitter time to go to it, and the 1 is a short ball straight up in front of
+     * the setter. The faster and flatter the set, the less room: the hitter is already running to
+     * a spot. `hut` the lower outside ball; `backQuick` the middle's quick behind the setter, and
+     * `backQuickOpp` the opposite's (coming in from the pin, behind the setter's back); `tempo`
+     * the second-tempo sets to a pin and the bic (go, fast back); `push` the middle's quick pushed
+     * along the net (push 1, shoot); `inside` the combination balls (3, 2, X, back 2, the pipe
+     * behind the setter). The user's call (2026-11-15).
+     */
+    window: { high: 1, hut: 0.9, quick: 1, backQuick: 0.85, backQuickOpp: 0.6, tempo: 0.7, push: 0.7, inside: 0.6 },
+    /**
+     * A jump set has no feet on the floor: its balance is the feet's share. Drifting through the
+     * touch faster than TIMING.setStillSpeed costs it, the most (`feetMin`) at `airDrift` m/s; so
+     * does a ball met off the top of the jump, the body rising or falling faster than `offTop[0]`
+     * m/s, the most at `offTop[1]`.
+     */
+    airDrift: 2,
+    offTop: [1.2, 3] as [number, number],
+    outOfSystem: 0.75,
+    /** a fast set (a quick, a go, a fast back) off a pass far off the net: on top of both of those. Very hard */
+    oosFast: 0.5,
+  },
+  /**
+   * The setter's dump (front row only): the second ball sent over the net, from no more than
+   * `maxOff` m off it. `short` lands just behind the block, `deep` in the far corner (home-side
+   * coordinates, mirrored for the other side); it peaks `apexShort` / `apexDeep` m above the
+   * tape, and a green or a good one clears the tape by at least `clear` m.
+   */
+  dump: { maxOff: 1.6, short: { x: -1.2, z: -1.7 }, deep: { x: -3.4, z: -7.6 }, apexShort: 0.5, apexDeep: 1.0, clear: 0.1 },
+  setCentreOk: 0.15,
+  /** set spread (m, 1 sd along the net; off the net and in height are smaller): green, then good from best to worst */
+  setSpreadGreen: 0.03,
+  setSpreadGood: [0.1, 0.4] as [number, number],
+  /** early / late: the set comes up short (early) or flat and long (late) by up to this much (m), plus this spread */
+  setMissShift: 1.3,
+  setMissSpread: 0.5,
+  /** early / late: the apex is this much (m) lower at worst (pushed before the ball loaded, or taken low) */
+  setMissApexDrop: 0.6,
   /**
    * half-width of the block's hands along the net (ball centre within this + ball radius).
    * Matches the pose: wrists ~0.15 m off the midline plus a palm, so the gap between the
@@ -503,6 +632,8 @@ export const CONTACT = {
    * tape, whichever is higher: slower, but over.
    */
   serveSafe: 0.6,
+  /** an AI attack pushed deeper to clear the tape stays this far (m) inside the end line (an AI serve: `serveSafe`) */
+  deepIn: 0.3,
   serveSafeApex: 1.0,
   /**
    * How much a float serve floats (`BallState.knuckle`, see `BALL.float`), by the grade of the
@@ -655,6 +786,30 @@ export const ASSIST = {
   /** slow-mo assist (settings toggle): timescale while lining up a contact, and how early it kicks in */
   slowmoScale: 0.55,
   slowmoWindow: 0.35,
+  /**
+   * set slow-mo (settings toggle, on by default), the same on every level so the bar always looks
+   * the same: from `setSlowmoWindow` s before the ball reaches your hands the game runs at
+   * `setSlowmoCatch`; while the ball loads in your hands, at `setSlowmoLoad` (the bar fills in
+   * TIMING.setLoad / setSlowmoLoad = 0.6 s on screen)
+   */
+  setSlowmoWindow: 0.35,
+  setSlowmoCatch: 0.5,
+  setSlowmoLoad: 0.25,
+  /**
+   * Set by feel (Settings: Set ring and bar off): with no timing cue on screen or in your ears,
+   * the green, the good band and the clean catch are this much wider, so playing without the
+   * cues pays (the user's call, 2026-11-18)
+   */
+  setByFeel: 1.2,
+  /** the play wheel is open (before the pass): the game runs at this speed while you choose */
+  playWheelSlow: 0.2,
+  /**
+   * The set's footwork (aim assist, `src/game/setAssist.ts`): while the ball is yours to set and
+   * your feet are within `radius` m (at assist 1) of the spot, your body takes the last steps
+   * onto it: at full shuffle pace from `slow` m out, easing to a stop within `stop` m. While you
+   * push the stick (past `deadzone`) the pull is only `pull` of that, so you can walk off it.
+   */
+  setStep: { radius: 1.2, slow: 0.5, stop: 0.03, pull: 0.5, deadzone: 0.1 },
 };
 
 export const CAMERA = {
@@ -1190,6 +1345,12 @@ export const CHARACTER = {
    */
   setFollow: { reach: 0.16, speed: 2.6, time: 0.22 },
   /**
+   * A set jump has no arm swing: on the plant the hands come up in front of the chest, close to
+   * the body, and over `rise` (s) after the feet leave the floor they go up to above the forehead.
+   * `rate` is how fast the arms follow (1/s). From watching setters, not from a measurement.
+   */
+  setJumpArms: { rise: 0.2, rate: 40 },
+  /**
    * After a pass the platform stays where it met the ball. A ball slower than `firmFrom` (m/s) is lifted
    * through: `lift` (m) over `liftTime` (s). One faster than `firmTo` is taken firm: the platform gives
    * `give` (m) and comes back within `giveTime` (s). The arms hold for `hold` (s), then let go over
@@ -1244,6 +1405,79 @@ export const CHARACTER = {
 };
 
 export const FX = {
+  /**
+   * The set's timing ring (Settings: Set timing ring): it closes onto the ball and is `atContact`
+   * ball radii across as the ball reaches your hands (just outside the ball, so nothing covers it).
+   * Its radius is that times e^(perSecond x time to go), shown from `showFor` s before; the green
+   * band is your window, the faint band your good one; no band is drawn over the ball itself:
+   * the ring and the bands stay `clear` ball radii out, a band at least `minBand` wide. The ring
+   * is a line `line` of its radius thick at `lineOpacity`: `waiting` until you press, `pressed`
+   * once you have; the green band is `green`.
+   */
+  setRing: {
+    perSecond: 4,
+    atContact: 1.6,
+    showFor: 0.9,
+    greenOpacity: 0.32,
+    goodOpacity: 0.12,
+    clear: 1.05,
+    minBand: 0.05,
+    line: 0.07,
+    lineOpacity: 0.95,
+    waiting: 0xffb54a,
+    pressed: 0xffffff,
+    green: 0x3ddc84,
+  },
+  /**
+   * The set bar beside the ball (2K's meter): px tall and wide, the gap (px) from the ball's edge,
+   * where the top of the bar (the ideal push) sits as a fraction of its height, and how long
+   * (real s) it stays up after the push. `waiting` is its opacity while the pass comes down
+   * (empty, showing the window your touch earns); `pipsWidth` (px) is the room the three pips
+   * (feet, centred, catch) take to its right. In first person the ball comes down onto your
+   * face, so the bar has a fixed place instead: `fpX` px right of the crosshair, its green line
+   * level with it.
+   */
+  // target 0.55: the room above the line (0.12 s of game time) shows Easy's whole late good band (SET_LEVELS)
+  setBar: { height: 96, width: 10, gap: 18, target: 0.55, linger: 0.7, waiting: 0.8, pipsWidth: 64, fpX: 56 },
+  /**
+   * The play wheel (`src/ui/playWheel.ts`): `size` px across with a `hole` px wide centre; the
+   * mouse picks a slice once it has moved `dead` px from where the wheel opened, and its pull
+   * is capped at `reach` px so a small move back changes the pick.
+   */
+  playWheel: { size: 384, hole: 184, dead: 24, reach: 80 },
+  /**
+   * Where to stand for the set in first person (`src/ui/setRadar.ts`): a dial `size` px across,
+   * `below` px under the crosshair, showing the floor `range` m around your feet.
+   */
+  setRadar: { size: 92, range: 0.7, below: 86 },
+  /**
+   * Who your set goes to (`src/fx/setGuide.ts`): a marker `above` (m) the hitter's head, and the
+   * set as `points` dots `size` px across, from `skip` of the way along its flight (clear of your
+   * hands) to the hitter. It comes up in `fadeIn` s and, once the ball has left your hands, fades
+   * over `fadeOut` s (real time) so a set that missed is seen leaving it.
+   */
+  setGuide: { points: 22, size: 8, skip: 0.14, opacity: 0.8, above: 0.42, fadeIn: 0.15, fadeOut: 0.9 },
+  /**
+   * Where to stand for the set: a floor spot this wide (m), green once your feet are within
+   * `CONTACT.setCentreOk`. When your body is going to jump for it (the jump set) a second ring
+   * stands round it, `jumpRing` times as wide, at `jumpOpacity`. The ring is `ring` times its
+   * radius across, its line `ringLine` of the texture; a dark outline (`outline` across, `dark` at
+   * `darkOpacity`) keeps it readable on bright wood; the disc inside shows at `disc` (off, on the
+   * spot) opacity. It is white, `on` once your feet are on it, and fades in and out at `fade`/s.
+   */
+  setSpot: {
+    radius: 0.32,
+    jumpRing: 1.5,
+    jumpOpacity: 0.6,
+    ring: 2.4,
+    ringLine: 0.2,
+    outline: 2.6,
+    dark: 0x05070c,
+    darkOpacity: 0.55,
+    disc: [0.2, 0.55] as [number, number],
+    on: 0x3ddc84,
+    fade: 10,
+  },
   /**
    * A float breaking (`BALL.float`): a ring pops round the ball where it turns, as wide (m) and
    * as bright as this for the hardest break of a Perfect float, less for a weaker one. From
@@ -1325,7 +1559,22 @@ export const AUDIO = {
   master: 0.8,
   sfx: 1.0,
   crowd: 0.55,
+  /**
+   * Your set loading in your hands: a soft tone rising from `f0` to `f1` (Hz) with the bar,
+   * reaching `f1` as the bar reaches the green line, so the push can be timed by ear. `gain` is
+   * its level at the top (it starts at `start` of that); held past the top it dies away within
+   * `over` of the load again.
+   */
+  setLoad: { f0: 392, f1: 784, gain: 0.035, start: 0.35, over: 0.4 },
 };
+
+/**
+ * The play designer (start screen, Plays). Two front-row hitters can't be given sets hit less
+ * than `minGap` m apart along the net (a back quick for the middle and the opposite, a 2 and an
+ * X): they would run into each other. The tandem and the X leave 0.75-0.9 m, at two tempos.
+ * `nameMax`: the longest name that fits the wheel.
+ */
+export const PLAYBOOK = { minGap: 0.6, nameMax: 16 } as const;
 
 export const AI = {
   reactionTime: 0.18,
@@ -1557,6 +1806,13 @@ export const AI = {
     react: 0.12,
     reactSd: 0.04,
     readErr: 0.9,
+    /**
+     * The setter's own attack holds it: off a jump set by a front-row setter who could have dumped
+     * it (the dump was on, src/game/callRuns.ts), it reads the set this much (s) later. A middle has to
+     * honour a setter in the air at the net until the ball leaves the hands; a setter on the
+     * floor, or in the back row, holds nobody. A starting value, not yet tuned on seam counts.
+     */
+    dumpHold: 0.05,
     /** on a good pass with their middle coming in: how often it commits on the quick (jumps with their middle), or cheats towards a pin */
     commit: 0.1,
     cheat: 0.1,
@@ -1892,8 +2148,126 @@ export const AI = {
   passPressure: 1.0,
   /** a pass the setter takes further than this (m) from their spot is out of system: high balls only, no quick */
   outOfSystem: 1.6,
+  /**
+   * Out of system the user setter can still ask a hitter for their fast set, if they hear it in
+   * time: a quick this long (s) before the ball leaves the setter's hands, a second-tempo run
+   * (a go, a fast back) this long. Later than that they stay for the high ball.
+   */
+  oosAsk: { quick: 0.6, tempo: 0.75 },
+  /**
+   * Transition: a hitter still at the net when their team digs (they were blocking) backs off to
+   * their approach start before a tempo run (the quick, a called go / 3 / fast back / back 2).
+   * Within `transitionReady` m of it they are ready to run; with less than `transitionLatest` s to
+   * their takeoff left they go from wherever they are (the quick and a fast set still need
+   * `transition.approachOff` m off the net: never a standing quick).
+   */
+  transitionReady: 0.5,
+  transitionLatest: 0.95,
   /** an out-of-system set (and a backup's set, when the setter played the first ball) goes this much (m) higher */
   outOfSystemApex: 0.4,
+  /**
+   * An AI hitter's run across the court curves (src/ai/approach.ts, bendFor): a run more than
+   * `straight` rad off square to the net bends by `share` of the excess, at most `maxBend` rad,
+   * leaving that much flatter along the net and arriving that much squarer to it. Runs shorter
+   * than `minRun` m stay straight. The turn is done over the first `ground` of the way (the run
+   * on the floor); the rest is the jump, flown straight off the last step. A real hitter loops
+   * in on an X or a 2; a straight diagonal line at the spot is what nobody does. The bent run
+   * still starts at least `towardNet` rad (about 5°) off along the net: never heading away from it.
+   */
+  approach: { straight: 0.35, share: 0.8, maxBend: 0.42, minRun: 1.5, ground: 0.6, towardNet: 0.08 },
+  /**
+   * A pin hitter going inside (the 3, the 2, the X, the back 2): a run more than `angle` rad off
+   * square to the net, at least `minRun` m long. They wait where their pin sets start and break
+   * inside as late as the sprint allows, and they do not brake for the jump: `carry` of the run's
+   * speed is kept through the plant (a standing plant keeps PLAYER.plantCarry), so the jump is a
+   * broad jump along the run and the ball is met on the move. They hit where they are going: the
+   * swing is along the run, and `swing` of the body's speed along the shot goes into the ball (a
+   * hand moves with the body it is on). Off your green set that is the bounce, along the run.
+   * A broad jump leaves the floor sooner, so the run's turn (`approach`) is done over the first
+   * `ground` of the way.
+   */
+  insideRun: { angle: 0.7, minRun: 2.5, carry: 0.62, swing: 1, ground: 0.45 },
+  /**
+   * Your green set is a point (the user's call, playtest 2026-11-08: a green set always scores,
+   * a bad one very rarely). An exact set at the called tempo gives the block nothing early, so
+   * their middle goes on what it sees and never gets to the ball (`greenBite`, `greenFooled`);
+   * the pin blockers block as on any set, so your hitter has one block to beat and bounces it
+   * past them (`greenBounce`); their diggers start late (`greenSetDigDelay`). Off a pass out of
+   * system a high ball to a pin fools nobody: their middle closes the block, and it is a full
+   * swing at two blockers, not always a kill. No block stuffs an attack off a green set: it comes
+   * off the hands soft or wide, and off a late or early block always wide (ContactSystem.tryBlock).
+   * The numbers are the browser probes' (the set bot, 96 green sets in system, 96 points).
+   *
+   * The drills' `BlockerBrain` middle, with nobody else going, guesses a side: on a pin set it
+   * stays home for the quick, on the quick or the pipe it steps this far (m) towards a pin
+   * (about half the way from the middle of the net to a pin hitter's spot).
+   */
+  greenBlockGuess: 2.2,
+  /**
+   * The Mini Rally middle goes up with a hitter you did not set (src/ai/greenBite.ts): one within
+   * `maxOff` m of the net (an approach start is about 4 m off it) and up, or running in faster
+   * than `runSpeed` m/s (a walk is slower); one who is up comes first (a runner counts as
+   * `runPenalty` m further away), and it leads a runner by `lead` s. A runner is one coming in
+   * at the net at more than `toNet` m/s, not jogging back to base.
+   */
+  greenBite: { maxOff: 4.5, runSpeed: 2, runPenalty: 3, lead: 0.2, toNet: 1 },
+  /**
+   * How your green set fools their Mini Rally middle (src/ai/middle.ts) without it ever moving
+   * away from where its block belongs, bar a route's width (playtest, 2026-11-17: a middle in the
+   * right place that ran off the other way looked like a coin flip). Already within `near` m of
+   * that spot, it stays and guesses wrong there: up with a hitter you did not set beside it; or up
+   * for the next route, `shift` m along the net (a route's width: the push is 0.7 m from the quick),
+   * on their hitter's jump: on a push or a shoot it goes for the quick in front of the setter, on
+   * that quick for the push; or, on a pin set, with its hands `shift` m inside the block, off the
+   * line; it sees the attack only when it is hit. Further away it goes up with a quick within
+   * `near` m of it (a combination), or holds, until it sees where the set is going, once `realise`
+   * of its flight is gone. Then it does all it can to block it anyway (playtest, same day): its
+   * hands in the air go for the attack, it runs at it, and while the ball is still to be hit and
+   * it is near enough (AI.middle.lateReach) it goes up again: after a quick it bit on, for the
+   * pipe or an inside ball; after a hold, for the pin. That jump is `late` s after the one that
+   * would have blocked it, a beat behind what it never expected: its hands are coming up as the
+   * ball goes by, and the hitter puts it past them.
+   */
+  greenFooled: { near: 1.5, shift: 0.7, realise: 0.45, late: 0.25 },
+  /**
+   * Off your green set the hitter bounces it (HitterBrain.bounce): a full swing, as steep as the
+   * net allows: the nearest spot, at one of `depths` m from the net, that a full-speed spike brings
+   * down within `fit` m of it and `lineIn` m inside the lines, and that clears the tape by `clear`
+   * m. The spots across the court are `edgeIn` m inside the sidelines. It crosses the net at
+   * least `hands` m clear of a blocker's hands (`reach` m clear of them where they reach over the
+   * net or hang behind it). A blocker still running along the net faster than `closing` m/s
+   * counts as up where it is going: where its hands will be as the ball crosses, `lead.react` s
+   * plus the spike's flight to the net at `lead.speed` m/s (a spike travels about 20 m/s, so a
+   * pipe from the 3 m line gives the block longer). Any other shot off a green set (the hitter's
+   * usual choice, when there is no bounce) passes `wide` m clear of the hands, against 0.3 m on
+   * an ordinary set, and lands `lineIn` m inside the lines.
+   */
+  greenBounce: {
+    depths: [2.4, 2.9, 3.4, 4.0, 4.8, 5.8],
+    clear: 0.05,
+    hands: 0.35,
+    reach: 0.2,
+    closing: 1,
+    fit: 0.5,
+    lineIn: 0.3,
+    edgeIn: 0.9,
+    lead: { react: 0.05, speed: 20 },
+    wide: 0.45,
+  },
+  /** off your green set their diggers start this late (s): the hitter hid the shot until the hand (the user's call, playtest 2026-11-08) */
+  greenSetDigDelay: 0.5,
+  /**
+   * From behind the 3 m line (a pipe: within `line` m of it or deeper) an AI hitter aims at least
+   * `deep` m from the net: the short angles cannot come down that soon (the spike would carry
+   * deep, over a different part of the net than the one planned)
+   */
+  backRowAim: { line: 0.5, deep: 5 },
+  /**
+   * A bad set (your early / late push) is harder to hit: your hitter's timing error grows by up
+   * to this factor and they tip or roll it this many times more often.
+   */
+  badSetErr: 3.5,
+  badSetTip: 4,
 };
 
 /** the hand you spike, tip and serve with; passing, setting and blocking use both hands */
@@ -1905,13 +2279,40 @@ export interface Settings {
   fov: number;
   invertY: boolean;
   womenNet: boolean;
+  /** spike slow-mo: time slows as the ball reaches you in the air (never in a jump set) */
   slowmoAssist: boolean;
+  /** time slows for your set's catch and release (on by default; the same on every level) */
+  setSlowmo: boolean;
+  /** your body jumps by itself to set a pass in system (the jump set; on by default). Off: the jump is yours (Space) */
+  autoJumpSet: boolean;
+  /**
+   * your set's timing cues: the ring that closes on the ball as it reaches your hands, the bar
+   * beside it and its pips, and the load tone. Off, you set by feel and the windows are wider (ASSIST.setByFeel)
+   */
+  setRing: boolean;
+  /** when you set: who it goes to, their call over the hitter and the set as a dotted arc */
+  setArc: boolean;
+  /** your set's aim assist (0..1): the last steps onto the spot, the drift in a jump set, a little more reach */
+  setAimAssist: number;
+  /** set difficulty: how wide the green, the good band and the clean catch are (SET_LEVELS) */
+  setLevel: SetLevel;
+  /** when you set: the hitter you picked stays picked for the next ball (off: back to the outside) */
+  keepSetPick: boolean;
+  /** when you set: rings on the floor where your hitters hit from (off by default: the marker over the hitter and the arc say it) */
+  hitterSpots: boolean;
+  /** aim assist (0..1) for every touch but your set: a little more reach, a drift towards the ball in the air */
   aimAssist: number;
+  /** the ring where the ball will land */
   landingMarker: boolean;
+  /** the Spike and Serve Drills: the spot your run-up takes off from, and GO when to start it */
+  runUpGuide: boolean;
+  /** in the air, the collar around the crosshair: where a swing now would land in the timing window */
+  spikeCollar: boolean;
   replays: boolean;
   shake: number;
   volume: number;
   firstPerson: boolean;
+  /** the key hint line at the bottom of the screen */
   showHints: boolean;
   /** touch controls: auto (on touch screens), always on, or off */
   touchControls: 'auto' | 'on' | 'off';
@@ -1931,8 +2332,18 @@ export const DEFAULT_SETTINGS: Settings = {
   invertY: false,
   womenNet: false,
   slowmoAssist: false,
+  setSlowmo: true,
+  autoJumpSet: true,
+  setRing: true,
+  setArc: true,
+  setAimAssist: ASSIST.aim,
+  setLevel: 'easy',
+  keepSetPick: false,
+  hitterSpots: false,
   aimAssist: ASSIST.aim,
   landingMarker: true,
+  runUpGuide: true,
+  spikeCollar: true,
   replays: true,
   shake: 1.0,
   volume: AUDIO.master,
@@ -1957,6 +2368,7 @@ export const SETTING_RANGES: Record<NumericSettingKey, { min: number; max: numbe
   touchSensitivity: { min: 0.3, max: 3, step: 0.05 },
   fov: { min: 55, max: 100, step: 1 },
   aimAssist: { min: 0, max: 1, step: 0.05 },
+  setAimAssist: { min: 0, max: 1, step: 0.05 },
   shake: { min: 0, max: 1.5, step: 0.05 },
   volume: { min: 0, max: 1, step: 0.05 },
 };

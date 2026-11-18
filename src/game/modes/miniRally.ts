@@ -1,14 +1,34 @@
+import * as THREE from 'three';
 import { AI } from '../../config';
 import { netYaw } from '../../ai/brain';
 import { serveAim } from '../../ai/server';
 import { PASSERS, SLOT_ROLE, SLOTS, TeamAI, USER_SLOT, type SetterRead } from '../../ai/team';
 import { Athlete } from '../athlete';
+import {
+  applyCalls,
+  askFast,
+  CALL_COLOR,
+  callOptions,
+  callSheet,
+  callSpot,
+  canAskFast,
+  holdForHigh,
+  passToUser,
+  startCallRuns,
+  syncRuns,
+  type CallHitters,
+} from '../callRuns';
 import type { ContactEvent } from '../contact';
+import type { AiHost } from '../brains';
 import type { Outcome } from '../judge';
-import { BACKUP_TARGET, needsGoodPass, SET_PLAYS, type SetPlay } from '../plays';
-import { kbd, Mode } from './mode';
+import { BACKUP_TARGET, needsGoodPass, SET_PLAYS, SETTER_SPOT, type SetPlay } from '../plays';
+import { DEFAULT_PICK, SETTER_KEYS, SetterCalls, type SetPick, type SetterKey } from '../setterCalls';
+import { kbd, makeFloorRing, Mode } from './mode';
 
 type Phase = 'prepare' | 'serve' | 'live' | 'dead';
+
+/** a backup's set (the libero's) is a high ball to a pin */
+const PIN_PICKS: readonly SetterKey[] = ['OH', 'OPP'];
 
 /**
  * Mini rally: 6 v 6 with the user in their chosen position. AI team-mates and
@@ -33,6 +53,15 @@ export class MiniRally extends Mode {
   /** set calls for the user's position (keys 1-3), if it has any */
   private plays: SetPlay[] | null = null;
   private callIdx = 0;
+  /** the user setter's pick (keys 1-4: outside, middle, opposite, pipe) and calls (the picked key again) */
+  private setterCalls = new SetterCalls();
+  private callsFor: unknown = null;
+  /** the hitters the user sets, by key (outside OH1, middle, opposite, pipe OH2) */
+  private hitters: CallHitters = new Map();
+  /** the pass to the user setter is off the net: everything goes up high, no middle */
+  private outOfSystem = false;
+  /** the floor ring at the spot the user is setting to */
+  private pickRing!: THREE.Mesh;
 
   setup(): void {
     const g = this.g;
@@ -61,6 +90,29 @@ export class MiniRally extends Mode {
       this.spawned.push(a);
       this.away.add(slot, a, false);
     }
+    this.hitters.clear();
+    for (const [k, slot] of [
+      ['OH', 'OH1'],
+      ['MB', 'MB'],
+      ['OPP', 'OPP'],
+      ['PIPE', 'OH2'],
+    ] as const) {
+      const a = this.home.players.get(slot);
+      const brain = a && !a.isUser ? this.home.brains.get(a)?.hitter : null;
+      // a hitter whose call is a quick goes on the pass: in system the team's read of it, off a bad pass only when you ask them
+      const read = (gm: AiHost) => this.home.passToSetter(gm) ?? (this.setterCalls.asksFast(k) ? passToUser(gm, this.g.me) : null);
+      if (a && brain) this.hitters.set(k, { a, brain, read });
+    }
+    // your hitters run your calls (applyCalls, startCallRuns), never a fast set of their own off your pass
+    if (this.userSetter) {
+      applyCalls(this.hitters, this.setterCalls, false);
+      this.setterCalls.canAsk = (k) => canAskFast(g, g.me, this.setterCalls, k);
+      this.setterCalls.onAsk = (k) => askFast(g, g.me, this.hitters, this.setterCalls, k);
+      this.setterCalls.canHold = (k) => holdForHigh(this.hitters, k);
+    }
+    this.pickRing = makeFloorRing(0xffffff, 1.0);
+    this.pickRing.visible = false;
+    this.add(this.pickRing);
     g.hud.setTitle('Mini Rally · you are the ' + g.me.stats.name);
     this.plays = g.autoUser ? null : (SET_PLAYS[this.position] ?? null);
     this.callIdx = 0;
@@ -160,9 +212,29 @@ export class MiniRally extends Mode {
     this.phase = 'prepare';
     this.t = 0;
     this.userTouches = 0;
+    this.outOfSystem = false;
+    this.setterCalls.nextBall(g.settings.keepSetPick);
     this.jumpCalled = false;
     g.hud.clearCall();
     this.updateScore();
+  }
+
+  /** the user sets for us (the setter, or the libero backing up): keys 1-4 pick the hitter */
+  private get userSetsKeys(): boolean {
+    return !this.g.autoUser && (this.position === 'S' || this.position === 'L');
+  }
+
+  /** the user is our setter: their calls are the hitters' */
+  private get userSetter(): boolean {
+    return !this.g.autoUser && this.position === 'S';
+  }
+
+  /** our first ball is in the air and the second is the user's (our setter, or the libero backing up) */
+  userSetsNext(): boolean {
+    const g = this.g;
+    const lt = g.ball.lastTouch;
+    if (g.autoUser || !lt || lt.side !== 1 || lt.athlete === g.me || this.home.touches !== 1) return false;
+    return (lt.kind === 'pass' || lt.kind === 'dig' || lt.kind === 'free') && this.home.secondBy === g.me;
   }
 
   private updateScore(): void {
@@ -170,7 +242,42 @@ export class MiniRally extends Mode {
     this.g.hud.setScore(`YOU ${this.scoreHome} : ${this.scoreAway} THEM · ${this.servingSide === 1 ? 'your serve' : 'their serve'}${call}`);
   }
 
-  frame(_dt: number): void {
+  frame(dt: number): void {
+    const g = this.g;
+    if (this.userSetsKeys) {
+      const c = this.setterCalls;
+      // the libero backing up calls nothing (a backup's set goes up high to a pin): the keys only pick
+      c.canCall = this.userSetter;
+      c.readKeys(g.input);
+      // H: you can't get to it. A team-mate takes the second ball, and your hitters wait for a high ball
+      if (g.input.consumePress('KeyH') && this.userSetsNext() && this.home.askHelp()) {
+        for (const k of SETTER_KEYS) holdForHigh(this.hitters, k);
+        applyCalls(this.hitters, c, true);
+        g.hud.call('YOU', 'HELP!', "can't get there", 'out', (out) => out.set(g.me.rpos.x, g.me.rpos.y + g.me.height + 0.42, g.me.rpos.z));
+        g.events.emit('setterCall', { athlete: g.me, call: 'help' });
+      }
+      if (c.takeLate()) g.hud.message('Too late to change it · they are committed', 1.2);
+      const yours = this.userSetsNext();
+      const oos = this.outOfSystem || !this.userSetter;
+      const keys = this.userSetter ? SETTER_KEYS : PIN_PICKS;
+      // the hitter your set goes to: your pick, else the outside (the outside too when the pick is off)
+      const to = c.target();
+      // (off a bad pass the middle is on only once you asked them for the quick, in time)
+      const noMiddle = oos && !c.asksFast('MB');
+      const lit: SetterKey = to === 'DUMP' || !keys.includes(to) || (to === 'MB' && noMiddle) ? DEFAULT_PICK : to;
+      const late = this.userSetter && this.outOfSystem && noMiddle && !canAskFast(g, g.me, c, 'MB');
+      g.hud.setCallSheet(callSheet(c, keys, lit, late ? ['MB'] : []));
+      // the spot you are setting to, in the hitter's colour, while the ball is yours to set
+      const show = yours && g.settings.hitterSpots;
+      this.pickRing.visible = show;
+      if (show) {
+        const spot = callSpot(c, lit, oos);
+        this.pickRing.position.set(spot.x, 0.011, spot.z + 0.15);
+        const mat = this.pickRing.material as THREE.MeshBasicMaterial;
+        mat.color.setHex(CALL_COLOR[lit]);
+        mat.opacity += (0.95 - mat.opacity) * Math.min(1, dt * 10);
+      }
+    }
     if (!this.plays) return;
     for (let i = 0; i < this.plays.length; i++) if (this.g.input.consumePress('Digit' + (i + 1))) this.selectCall(i);
   }
@@ -200,22 +307,37 @@ export class MiniRally extends Mode {
   }
 
   setOptions(a: Athlete) {
-    // the user as setter: their AI hitters' lanes. As the libero backing up the setter (who
-    // played the first ball) the set is out of system: high balls to the pins, no quick
-    const team = a.side === 1 ? this.home : this.away;
-    const backup = a !== team.players.get('S');
-    const out = [];
-    for (const [slot, lane] of [
-      ['OH1', 'OH'],
-      ['MB', 'MB'],
-      ['OPP', 'OPP'],
-    ] as const) {
-      const h = team.players.get(slot);
-      if (!h || h === a || (backup && lane === 'MB')) continue;
-      const c = team.callSetFor(h, lane, backup);
-      out.push({ ...c, label: lane === 'OH' ? 'Outside' : lane === 'MB' ? 'Quick' : 'Back set' });
-    }
-    return out;
+    // the user as setter: their hitters at their calls. As the libero backing up the setter (who
+    // played the first ball) the set is out of system: high balls to the pins, no quick, no pipe
+    const backup = a !== this.home.players.get('S');
+    const far = Math.hypot(a.pos.x - SETTER_SPOT.x, a.pos.z - SETTER_SPOT.z) > AI.outOfSystem;
+    const opts = callOptions(this.g, this.hitters, this.setterCalls, backup || this.outOfSystem || far);
+    return backup ? opts.filter((o) => o.key !== 'PIPE') : opts;
+  }
+
+  setPick(a: Athlete): SetPick | null {
+    return a === this.g.me ? this.setterCalls.pick : null;
+  }
+
+  /** the setter picks any hitter; the libero, backing up, only the pins (a high ball) */
+  setterPicks(): readonly SetPick[] | null {
+    if (!this.userSetsKeys) return null;
+    return this.userSetter ? SETTER_KEYS : PIN_PICKS;
+  }
+
+  /**
+   * The user setter calls a play on the wheel while the ball is dead, before the serve: the
+   * wheel slows the game, so never in a live rally (keys 1-4 still change the calls until the pass)
+   */
+  playCalls(): SetterCalls | null {
+    return this.userSetter && this.phase === 'prepare' && !this.setterCalls.locked ? this.setterCalls : null;
+  }
+
+  /** the key hint for the user's set (the call strip above it shows the hitters and calls) */
+  private setterKeysHint(): string {
+    const again = this.outOfSystem ? 'again: their fast set' : 'again: high';
+    const pick = this.userSetter ? `${kbd('1')}-${kbd('4')} who · ${again}` : `${kbd('1')} OH ${kbd('3')} OPP`;
+    return `${kbd('RMB')} as it reaches your hands, release in the green · ${pick} · ${kbd('H')} help`;
   }
 
   canServe(a: Athlete): boolean {
@@ -232,10 +354,10 @@ export class MiniRally extends Mode {
         : `YOUR BALL · nobody can attack it · ${kbd('E')} bump it over`;
     if (this.home.setFor === me && g.ball.lastTouch?.kind === 'set')
       return `SET TO YOU · ${kbd('Shift')}+${kbd('W')} approach · ${kbd('Space')} · hold/release ${kbd('LMB')}`;
-    if (me.role === 'S' && this.home.touches === 1) return `Your set · look at a hitter · ${kbd('RMB')}`;
+    if (me.role === 'S' && this.home.touches === 1) return `Your set · ${this.setterKeysHint()}`;
     if (this.yourBackupSet) {
       const dug = this.g.ball.lastTouch?.athlete === this.home.players.get('S');
-      return `YOUR SET · the setter ${dug ? 'dug it' : "can't get there"} · high ball to a pin · look at a hitter · ${kbd('RMB')}`;
+      return `YOUR SET · the setter ${dug ? 'dug it' : "can't get there"} · high ball to a pin · ${this.setterKeysHint()}`;
     }
     // the setter's call on the pass overrides the plan: off a bad pass everything goes up high
     const read = this.hitter && this.home.touches === 1 ? this.read : null;
@@ -248,7 +370,11 @@ export class MiniRally extends Mode {
     const fast = play && play.inFront === undefined && needsGoodPass(play);
     if (fast && this.home.touches === 1 && g.ball.lastTouch?.side === 1)
       return `${play.name.toUpperCase()} · ${read ? 'in system · ' : ''}start your approach as the setter touches it`;
-    const calls = this.plays ? ` · ${kbd('1')}${kbd('2')}${kbd('3')} set call` : '';
+    const calls = this.plays
+      ? ` · ${kbd('1')}${kbd('2')}${kbd('3')} set call`
+      : this.userSetter
+        ? ` · ${kbd('1')}-${kbd('4')} pick a hitter, again: their next set${this.phase === 'prepare' ? ` · ${kbd('C')} plays` : ''}`
+        : '';
     if (Math.abs(me.pos.z) < 1.4) return `${kbd('RMB')} hands + ${kbd('Space')} block · ${kbd('V')} camera${calls}`;
     return `${kbd('WASD')} move · ${kbd('E')} pass · ${kbd('LMB')} attack · ${kbd('RMB')} block/set · ${kbd('V')} camera${calls}`;
   }
@@ -279,6 +405,21 @@ export class MiniRally extends Mode {
     // "your ball" cue (once per ball), also for the second ball when the user backs up the setter
     const backup = this.yourBackupSet;
     const yours = this.home.receiver === g.me || backup || this.yourFreeBall;
+    // your pick: locked in once our first ball is played, a fresh one after your set or once the ball is theirs
+    const lt = g.ball.lastTouch;
+    if (lt !== this.callsFor) {
+      this.callsFor = lt;
+      const mine = lt?.athlete === g.me;
+      if (lt && this.setterCalls.touched({ mine, kind: lt.kind, ours: lt.side === 1 }, this.home.touches, g.settings.keepSetPick)) {
+        // a pass for you to set: your hitters run your calls (the fast ones before your touch)
+        this.outOfSystem = false;
+        if (this.userSetter && !mine) this.outOfSystem = startCallRuns(g, g.me, this.hitters, this.setterCalls);
+      }
+    }
+    // until the pass, your hitters line up for your calls
+    if (this.userSetter && !this.setterCalls.locked) applyCalls(this.hitters, this.setterCalls, false);
+    // a hitter who could not make their called run (still at the net from a block) waits for a high ball
+    if (this.userSetter) syncRuns(this.hitters, this.setterCalls);
     if (yours && this.lastReceiverMsg !== g.ball.lastTouch) {
       this.lastReceiverMsg = g.ball.lastTouch;
       g.hud.message(backup ? 'Your set!' : 'Your ball!', 0.9);
@@ -305,7 +446,7 @@ export class MiniRally extends Mode {
     g.ball.markerColor.setRGB(...((yours ? [0.35, 1.0, 0.45] : [0.3, 0.85, 1.0]) as [number, number, number]));
     switch (this.phase) {
       case 'prepare':
-        if (this.t > 1.6) {
+        if (this.t > 1.6 && !g.wheelOpen) {
           this.phase = 'serve';
           this.t = 0;
           const recv = this.servingSide === 1 ? this.away : this.home;
@@ -359,6 +500,11 @@ export class MiniRally extends Mode {
       g.ballLive = true;
     }
     if (ev.athlete === g.me && ev.grade !== 'Miss') this.userTouches++;
+    // a set held too long: the referee calls a lift, the point is theirs
+    if (this.phase === 'live' && ev.fault === 'lift') {
+      this.reason = 'LIFT';
+      this.endPoint(-ev.athlete.side as 1 | -1);
+    }
   }
 
   onOutcome(o: Outcome): void {

@@ -30,6 +30,60 @@ canvas { display: block; outline: none; }
 .hud-grade-text { transform: skewX(-8deg); }
 .g-perfect .hud-grade-text { color: var(--gold); text-shadow: 0 0 22px rgba(255,190,40,0.85), 0 0 60px rgba(255,120,0,0.6), 0 3px 0 #7a4b00; }
 .g-good .hud-grade-text { color: var(--cyan); text-shadow: 0 0 16px rgba(60,190,255,0.6), 0 3px 0 #0a3a5a; }
+.g-green .hud-grade-text { color: #3ddc84; text-shadow: 0 0 20px rgba(61,220,132,0.8), 0 0 54px rgba(20,160,90,0.55), 0 3px 0 #0b4a2a; }
+/* the set bar (2K's meter) beside the ball: fills from the catch, release in the green band */
+.set-bar { position: absolute; left: 0; top: 0; display: none; border-radius: 3px; background: rgba(8,10,16,0.6);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.4), 0 2px 8px rgba(0,0,0,0.5); }
+.sb-zone { position: absolute; left: 0; right: 0; }
+.sb-good { background: rgba(255,255,255,0.3); }
+.sb-green { background: #3ddc84; }
+.sb-line { position: absolute; left: -4px; right: -4px; height: 2px; margin-bottom: -1px; background: #fff; }
+.sb-fill { position: absolute; left: 3px; right: 3px; bottom: 0; background: #fff; border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(8,10,16,0.85); }
+.sb-fill.sb-hit-green { background: #3ddc84; box-shadow: 0 0 0 1px rgba(8,10,16,0.85), 0 0 10px rgba(61,220,132,0.9); }
+.sb-fill.sb-hit-miss { background: var(--orange); }
+/* who your set goes to: their call over their head, in their colour, a small chevron pointing down at them */
+.set-to { position: absolute; left: 0; top: 0; display: none; padding: 3px 8px 4px; border-radius: 5px; background: rgba(8,10,16,0.6);
+  border: 1px solid var(--c); color: var(--c); font: 800 11px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  white-space: nowrap; text-shadow: none; pointer-events: none; }
+.set-to::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -5px; border: 5px solid transparent; border-top-color: var(--c); }
+/* the play wheel: the setter's combinations, called before the pass. The slice the mouse is on is gold; the play the calls make now is lit */
+.play-wheel { position: absolute; left: 50%; top: 50%; display: none; transform: translate(-50%, -50%); text-shadow: none; }
+.play-wheel svg { display: block; }
+.pw-slice { fill: rgba(8,10,16,0.74); stroke: rgba(255,255,255,0.16); stroke-width: 1; }
+.pw-slice.on { fill: rgba(60,70,92,0.82); stroke: rgba(255,255,255,0.4); }
+.pw-slice.sel { fill: rgba(96,72,14,0.86); stroke: var(--gold); stroke-width: 2; }
+.pw-label { fill: #e9edf5; font: 700 12px/1 system-ui, sans-serif; text-anchor: middle; pointer-events: none; }
+.pw-num { fill: rgba(255,255,255,0.5); font: 700 10px/1 ui-monospace, Menlo, monospace; text-anchor: middle; pointer-events: none; }
+.pw-mid { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(8,10,16,0.74);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; pointer-events: none; }
+.pw-name { font-weight: 800; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+.pw-court { width: 100px; height: 52px; flex: none; }
+.pw-net { stroke: #e9edf5; stroke-width: 1.6; }
+.pw-setter { fill: #e9edf5; }
+.pw-run { stroke-width: 1.8; stroke-linecap: round; }
+.pw-idea { font-size: 10px; line-height: 1.25; opacity: 0.8; max-width: 128px; }
+body.touchmode .play-wheel .pw-slice { pointer-events: auto; }
+/* first person: where to stand, on a dial under the crosshair. The mark is your feet, up is where you look, the ring is the spot */
+.set-radar { position: absolute; left: 50%; top: 50%; display: none; transform: translateX(-50%); border-radius: 50%; pointer-events: none;
+  background: rgba(8,10,16,0.38); box-shadow: 0 0 0 1px rgba(255,255,255,0.3); }
+.sr-feet { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #fff;
+  box-shadow: 0 0 0 1px rgba(8,10,16,0.85); }
+.sr-feet::after { content: ''; position: absolute; left: 2px; bottom: 7px; width: 2px; height: 7px; border-radius: 1px; background: rgba(255,255,255,0.75); }
+.sr-spot { position: absolute; left: 50%; top: 50%; box-sizing: border-box; border-radius: 50%; border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(8,10,16,0.7); }
+.sr-spot.far { border-style: dashed; opacity: 0.75; }
+.sr-spot.on { border-color: #3ddc84; background: rgba(61,220,132,0.4); }
+/* the touch's parts beside the bar: feet, centred, catch. Hollow until you have it, green once you do, orange if the set went without it */
+.sb-pips { position: absolute; left: 100%; top: 0; margin-left: 9px; display: flex; flex-direction: column; gap: 5px;
+  font: 600 10px/1 system-ui, sans-serif; letter-spacing: 0.04em; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
+.sb-pip { display: flex; align-items: center; gap: 5px; color: rgba(255,255,255,0.6); }
+.sb-pip::before { content: ''; width: 7px; height: 7px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid rgba(255,255,255,0.7);
+  background: rgba(8,10,16,0.5); }
+.sb-pip.on { color: #fff; }
+.sb-pip.on::before { background: #3ddc84; border-color: #3ddc84; }
+.sb-pip.miss { color: var(--orange); }
+.sb-pip.miss::before { border-color: var(--orange); }
 .g-early .hud-grade-text, .g-late .hud-grade-text { color: var(--orange); text-shadow: 0 3px 0 #5a2a08; }
 .g-miss .hud-grade-text { color: #c9c9d1; text-shadow: 0 3px 0 #333; }
 .hud-banner { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); font-weight: 900; font-size: 34px;
@@ -50,6 +104,26 @@ canvas { display: block; outline: none; }
 .hud-streak.fire .hud-streak-val { color: var(--gold); text-shadow: 0 0 18px rgba(255,140,0,0.9); }
 .hud-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); font-size: 13px; opacity: 0.85;
   white-space: nowrap; background: rgba(8,10,16,0.45); padding: 6px 12px; border-radius: 6px; text-shadow: none; }
+/* the call strip when you set, laid out like the net: outside, middle, opposite, the pipe behind the middle.
+   One chip per hitter (key, who, call, a dot per call); the one your set goes to is lit */
+.call-sheet { position: absolute; bottom: 54px; left: 50%; transform: translateX(-50%); display: none; gap: 5px 6px;
+  grid-template-columns: repeat(3, minmax(92px, auto)); text-shadow: none; font-size: 12px; }
+.call-sheet.pins { grid-template-columns: repeat(2, minmax(92px, auto)); }
+.cs-item { display: flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 6px; background: rgba(8,10,16,0.55);
+  border: 1px solid rgba(255,255,255,0.14); font-weight: 700; opacity: 0.7; transition: opacity 0.12s, border-color 0.12s, box-shadow 0.12s; }
+.cs-PIPE { grid-column: 2; }
+.cs-play { grid-column: 1 / -1; text-align: center; font-weight: 800; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.8;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+.cs-item b { font: 700 10px/1 ui-monospace, Menlo, monospace; opacity: 0.7; }
+.cs-item span { font-weight: 600; color: var(--c); }
+.cs-item i { display: flex; gap: 3px; margin-left: auto; padding-left: 4px; }
+.cs-item em { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.28); }
+.cs-item em.on { background: var(--c); }
+.call-sheet.locked .cs-item i { opacity: 0.35; }
+/* lit by default (no key yet): the outline only; picked with their key: the glow too */
+.cs-item.lit { opacity: 1; border-color: var(--c); }
+.cs-item.lit.picked { box-shadow: 0 0 0 1px var(--c), 0 0 14px color-mix(in srgb, var(--c) 45%, transparent); }
+.cs-item.off { opacity: 0.3; text-decoration: line-through; }
 .hud-hint:empty { display: none; }
 .hud-hint kbd { display: inline-block; min-width: 18px; padding: 1px 5px; margin: 0 2px; border-radius: 4px; background: rgba(255,255,255,0.14);
   border: 1px solid rgba(255,255,255,0.25); font: 600 11px/1.4 ui-monospace, Menlo, monospace; text-align: center; }
@@ -318,11 +392,60 @@ body.touchmode .set-row.only-tc { display: grid !important; }
 .set-main > * { flex: none; }
 .set-group[hidden] { display: none; }
 .set-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
-.set-group { display: flex; flex-direction: column; padding: 16px 20px 8px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+.set-group, .set-part { display: flex; flex-direction: column; padding: 16px 20px 8px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
 .set-group .eyebrow { margin-bottom: 4px; }
 .set-group .set-row + .set-row { border-top: 1px solid rgba(255,255,255,0.08); }
+/* a group in parts (Assists: hitting, then setting): one card per part, each under its own heading */
+.set-group.parted { gap: 16px; padding: 0; background: none; border: 0; }
+.set-part { container-type: inline-size; }
 
 /* athlete */
+/* ---- Plays: the play designer (src/ui/playDesigner.ts) ---- */
+.plays-body { flex-wrap: wrap; }
+.pd-slots { flex: 0 0 250px; display: flex; flex-direction: column; gap: 6px; }
+.pd-slot { min-height: 54px; padding: 8px 12px; gap: 10px; text-align: left; }
+.pd-slot .row-t { font-size: 15px; }
+.pd-slot .row-s { font-size: 12px; }
+.pd-num { flex: none; width: 14px; font: 700 12px/1 ui-monospace, Menlo, monospace; color: var(--text3); }
+.pd-mid { flex: 1 1 380px; min-width: 0; max-width: 640px; display: flex; flex-direction: column; gap: 12px; }
+.pd-court { display: block; width: 100%; height: auto; border-radius: 12px; background: rgba(14,17,26,0.9); border: 1px solid var(--line); }
+.pd-floor { fill: rgba(79,209,255,0.06); stroke: rgba(255,255,255,0.45); stroke-width: 1.5; }
+.pd-net { stroke: #f2f2f2; stroke-width: 4; stroke-linecap: round; }
+.pd-line { stroke: rgba(255,255,255,0.3); stroke-dasharray: 5 5; }
+.pd-setter { fill: #e9edf5; }
+.pd-run { fill: none; stroke-width: 3; stroke-linecap: round; opacity: 0.85; }
+.pd-start { fill: rgba(11,13,20,0.92); stroke-width: 3; }
+.pd-key { fill: #0b0d14; font: 800 13px/1 system-ui, sans-serif; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.pd-note { margin: 0; min-height: 18px; font-size: 13px; line-height: 1.4; color: var(--text2); }
+.pd-save { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pd-name { flex: 1 1 160px; min-width: 0; min-height: 44px; padding: 0 14px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.24); color: inherit; font: inherit; font-size: 16px;
+  user-select: text; -webkit-user-select: text; }
+.pd-name::placeholder { color: var(--text3); }
+.pd-save .play-btn { min-height: 44px; padding: 0 22px; font-size: 16px; }
+.pd-hitters { flex: 1 1 300px; min-width: 0; max-width: 440px; display: flex; flex-direction: column; gap: 10px; }
+.pd-hitter { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(14,17,26,0.9); border: 1px solid var(--line); }
+.pd-who { display: flex; align-items: center; gap: 8px; font-weight: 800; }
+.pd-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
+.pd-set { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--text2); text-align: right; }
+.pd-hitter .chip { min-width: 40px; min-height: 36px; padding: 0 12px; font-size: 13px; }
+.pd-hitter .chip:disabled { opacity: 0.4; border-style: dashed; cursor: not-allowed; }
+body.touchmode .pd-hitter .chip { min-height: 44px; }
+/* the Plays pill only where the top bar has room for it beside every word of the longest venue and position
+   (Games arena, Middle Blocker) in a wider font than ours (Arial, as on Linux, needs 1137 px with its word and
+   1095 px with its icon): with its word from 1160 px, its icon from 1120 px. Narrower, the other pills keep their
+   steps and Plays is reached from the Setter Drill's and the Mini Rally's panel ("Your plays") */
+@media (max-width: 1159px) { .pill-plays span { display: none; } }
+@media (max-width: 1119px) { .pill-plays { display: none; } }
+/* not wide enough for three columns: the wheel's places in rows on top, then the court, then the hitters side by side */
+@media (max-width: 1100px) {
+  .pd-slots { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; }
+  .pd-slots .eyebrow, .pd-hitters .eyebrow { flex: 1 1 100%; }
+  .pd-slot { flex: 1 1 150px; }
+  .pd-mid { max-width: none; }
+  .pd-court { max-height: 38vh; }
+  .pd-hitters { flex: 1 1 100%; max-width: none; flex-direction: row; flex-wrap: wrap; }
+  .pd-hitter { flex: 1 1 240px; }
+}
 .athlete-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .pos-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .pos-card { display: flex; flex-direction: column; gap: 6px; padding: 16px 14px 14px; border-radius: 12px; background: rgba(14,17,26,0.9); border: 2px solid var(--line);
@@ -571,6 +694,7 @@ body.touchmode .hud.tutoring button.t-skip-kb { display: none; }
 body.touchmode .hud-title { font-size: 11px; }
 body.touchmode .hud-score { font-size: 15px; }
 body.touchmode .hud-msg { top: 22%; font-size: 12px; max-width: 56vw; white-space: normal; line-height: 1.4; }
+body.touchmode .call-sheet { bottom: auto; top: calc(56px + env(safe-area-inset-top, 0px)); font-size: 11px; }
 body.touchmode .hud-hint { bottom: 10px; font-size: 11px; max-width: 40vw; white-space: normal; text-align: center; line-height: 1.55; }
 body.touchmode .hud-bl { left: 16px; bottom: auto; top: 90px; }
 body.touchmode .hud-bl .hud-speed-val { font-size: 30px; }

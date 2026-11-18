@@ -475,11 +475,67 @@ export class AudioEngine {
     this.tone(t, 150 * rate, 90 * rate, 0.09 / rate, 0.45 * (0.5 + power * 0.5), 'sine', 0.2);
   }
 
-  set(rate = 1): void {
+  /**
+   * A set leaving the hands. Your own says how it went (`grade`): a green one is the same soft
+   * double touch with a small clear note on top; an early or late one is a duller, slappier
+   * touch, the two hands heard apart. No grade (an AI's set, a good one): the plain touch.
+   */
+  set(rate = 1, grade: 'Perfect' | 'Good' | 'Early' | 'Late' | 'Miss' | null = null): void {
     if (!this.ok) return;
     const t = this.ctx!.currentTime;
+    if (grade === 'Early' || grade === 'Late' || grade === 'Miss') {
+      this.noiseBurst(t, 0.045, 820 * rate, 1.0, 0.36, 'bandpass', 0.2);
+      this.noiseBurst(t + 0.034, 0.05, 640 * rate, 1.0, 0.3, 'bandpass', 0.2);
+      return;
+    }
     this.noiseBurst(t, 0.03, 1300 * rate, 1.4, 0.32, 'bandpass', 0.2);
     this.noiseBurst(t + 0.012, 0.03, 1100 * rate, 1.4, 0.25, 'bandpass', 0.2);
+    if (grade === 'Perfect') this.tone(t + 0.01, AUDIO.setLoad.f1 * 2 * rate, AUDIO.setLoad.f1 * 2 * rate, 0.32, 0.04, 'sine', 0.5, 0.006);
+  }
+
+  private loadOsc: OscillatorNode | null = null;
+  private loadGain: GainNode | null = null;
+
+  /**
+   * Your set loading in your hands: a soft tone that rises with the bar and reaches its top note
+   * as the bar reaches the green line, so the push can be timed by ear. It is driven by the bar
+   * itself, frame by frame, so it is right with the set slow-mo and without. `progress` is 0 at
+   * the catch and 1 at the top of the bar; past it the tone holds its note and dies away. Null
+   * stops it (the ball has left the hands).
+   */
+  setLoad(progress: number | null): void {
+    if (progress === null) {
+      const o = this.loadOsc;
+      const g = this.loadGain;
+      if (!o || !g) return;
+      this.loadOsc = null;
+      this.loadGain = null;
+      const t = o.context.currentTime;
+      g.gain.cancelScheduledValues(t);
+      g.gain.setTargetAtTime(0.0001, t, 0.012);
+      o.stop(t + 0.08);
+      return;
+    }
+    if (!this.ok) return;
+    const L = AUDIO.setLoad;
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    if (!this.loadOsc || !this.loadGain) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = L.f0;
+      const g = ctx.createGain();
+      g.gain.value = 0.0001;
+      o.connect(g);
+      this.route(g, undefined, 0.15, 0);
+      o.start(t);
+      this.loadOsc = o;
+      this.loadGain = g;
+    }
+    const k = Math.min(1, Math.max(0, progress));
+    this.loadOsc.frequency.setTargetAtTime(L.f0 * Math.pow(L.f1 / L.f0, k), t, 0.012);
+    const fade = Math.max(0, 1 - Math.max(0, progress - 1) / L.over);
+    this.loadGain.gain.setTargetAtTime(Math.max(0.0001, L.gain * (L.start + (1 - L.start) * k) * fade), t, 0.015);
   }
 
   block(stuff: boolean, rate = 1): void {

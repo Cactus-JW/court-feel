@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COURT } from '../config';
+import { COURT, type SetLevel } from '../config';
 import { Rng } from '../core/mathx';
 import type { BallEnv, CollisionEvent } from '../physics/ball';
 import type { Athlete } from './athlete';
@@ -8,6 +8,7 @@ import type { AiHost, Brain } from './brains';
 import { ContactSystem, type ContactEvent, type SetOption } from './contact';
 import { Judge, type Outcome } from './judge';
 import { defaultPassTarget, defaultSetOptions } from './plays';
+import type { SetPick } from './setterCalls';
 
 /**
  * What the simulation asks of whoever runs it, and what it tells them. The answers come from
@@ -17,6 +18,10 @@ import { defaultPassTarget, defaultSetOptions } from './plays';
 export interface SimulationHooks {
   /** how much this athlete's aim is helped (0..1) */
   aimAssist(a: Athlete): number;
+  /** how much this athlete's set is helped (0..1); their aim assist when not given */
+  setAssist?(a: Athlete): number;
+  /** the player sets by feel, with no timing cues (a setting): their set's windows are wider */
+  setByFeel?(): boolean;
   /** where this athlete is aiming on the floor */
   aimTargetFor(a: Athlete, out: THREE.Vector3): THREE.Vector3;
   /** which way the player is looking (rad) */
@@ -31,6 +36,10 @@ export interface SimulationHooks {
   floatBreak(strength: number): void;
   /** the judge called the rally */
   outcome(o: Outcome): void;
+  /** how hard the player's set is to time (a setting; Easy without one) */
+  setLevel?(): SetLevel;
+  /** before the athletes move: the player's body goes up for a set by itself (Settings: Auto jump set) */
+  userSetJump?(): void;
 }
 
 /** the drill being played, as the simulation sees it */
@@ -39,6 +48,8 @@ export interface SimDrill {
   onOutcome(o: Outcome): void;
   passTarget?(a: Athlete): { x: number; y: number; z: number; apex: number };
   setOptions?(a: Athlete): SetOption[];
+  /** the hitter the player picked for this set, if any */
+  setPick?(a: Athlete): SetPick | null;
   canServe?(a: Athlete): boolean;
 }
 
@@ -74,11 +85,15 @@ export class Simulation implements AiHost {
       },
       env: this.env,
       aimAssist: (a) => hooks.aimAssist(a),
+      setAssist: (a) => (hooks.setAssist ?? hooks.aimAssist)(a),
+      setByFeel: () => hooks.setByFeel?.() ?? false,
       aimTargetFor: (a, out) => hooks.aimTargetFor(a, out),
       emitContact: (ev) => hooks.contact(ev),
       rand: () => this.rng.next(),
       passTarget: (a) => this.drill?.passTarget?.(a) ?? defaultPassTarget(a),
       setOptions: (a) => this.drill?.setOptions?.(a) ?? defaultSetOptions(a),
+      setPick: (a) => this.drill?.setPick?.(a) ?? null,
+      setLevel: () => hooks.setLevel?.() ?? 'easy',
       canServe: (a) => (this.drill?.canServe ? this.drill.canServe(a) : !this.ball.active || this.ball.state.rest),
     });
     this.contact.userAimYaw = () => hooks.userAimYaw();
@@ -100,6 +115,7 @@ export class Simulation implements AiHost {
   step(dt: number): void {
     this.simTime += dt;
     for (const [, b] of this.brains) b.step(dt, this);
+    this.hooks.userSetJump?.();
     // assist magnet for the user's mid-air drift
     this.contact.magnet(this.me);
     for (const a of this.athletes) a.step(dt, this.simTime);

@@ -1,5 +1,6 @@
 import {
   DEFAULT_SETTINGS,
+  SET_LEVEL_IDS,
   SETTING_RANGES,
   TOUCH_CONTROL_MODES,
   isVenueId,
@@ -17,7 +18,15 @@ const BOOLEAN_SETTINGS: Record<BooleanSettingKey, true> = {
   invertY: true,
   womenNet: true,
   slowmoAssist: true,
+  setSlowmo: true,
+  autoJumpSet: true,
+  setRing: true,
+  setArc: true,
+  keepSetPick: true,
+  hitterSpots: true,
   landingMarker: true,
+  runUpGuide: true,
+  spikeCollar: true,
   replays: true,
   firstPerson: true,
   showHints: true,
@@ -30,6 +39,7 @@ export const VALIDATED_KEYS: readonly (keyof Settings)[] = [
   'touchControls',
   'bodies',
   'hand',
+  'setLevel',
   'venue',
 ];
 
@@ -78,7 +88,16 @@ export function sanitizeSettings(raw: unknown, defaults: Settings = DEFAULT_SETT
   const tc = src.touchControls;
   if (TOUCH_CONTROL_MODES.includes(tc as Settings['touchControls'])) out.touchControls = tc as Settings['touchControls'];
   if (src.hand === 'left' || src.hand === 'right') out.hand = src.hand;
+  if (SET_LEVEL_IDS.includes(src.setLevel as Settings['setLevel'])) out.setLevel = src.setLevel as Settings['setLevel'];
   if (isVenueId(src.venue)) out.venue = src.venue;
+  // Each switch does one thing (2026-11-18). A setting that used to come with another one keeps,
+  // until the player changes it, what they had chosen for that one: aim assist moved your set's
+  // footwork, Set ring and bar showed who your set goes to, Landing marker showed the run-up spot,
+  // Hints the spike's timing collar
+  if (src.setAimAssist === undefined) out.setAimAssist = out.aimAssist;
+  if (src.setArc === undefined) out.setArc = out.setRing;
+  if (src.runUpGuide === undefined) out.runUpGuide = out.landingMarker;
+  if (src.spikeCollar === undefined) out.spikeCollar = out.showHints;
   return out;
 }
 

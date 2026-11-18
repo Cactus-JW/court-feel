@@ -1,9 +1,12 @@
 import {
+  ASSIST,
   BODY,
   isPositionId,
   POSITIONS,
   SERVE,
   SERVE_KINDS,
+  SET_LEVEL_IDS,
+  SET_LEVELS,
   SETTING_RANGES,
   VENUE_IDS,
   VENUES,
@@ -22,11 +25,13 @@ import type { Lesson } from '../game/tutorial';
 import { athleteStats } from './athleteStats';
 import { ALL_CONTROLS, COMING_FORMATS, DRILL_INFO, HITTERS, PLAY_MODES, SETTER_CALLS, TRAIN_MODES, type KeyHint } from './drillInfo';
 import { ICONS, type IconName } from './icons';
+import { buildPlayDesigner } from './playDesigner';
 
 /** the start screen's sections */
 type View = 'home' | 'train' | 'play' | 'learn';
 /** the full-screen sheets that open over the start screen or the pause menu */
-type SheetId = 'settings' | 'athlete';
+type SheetId = 'settings' | 'athlete' | 'plays';
+const SHEET_NAME: Record<SheetId, string> = { settings: 'Settings', athlete: 'Athlete', plays: 'Plays' };
 
 const NAV: readonly { id: View; label: string }[] = [
   { id: 'home', label: 'Home' },
@@ -106,7 +111,7 @@ function keyList(keys: readonly KeyHint[], cls = ''): HTMLElement {
 /** a mode's keys for the keyboard and for touch: CSS shows the one for the controls in use */
 function drillKeys(mode: ModeId, pos: PositionId): HTMLElement[] {
   // set calls are a hitter's: a setter or a libero has none
-  const mine = (keys: readonly KeyHint[]) => keys.filter((k) => !k.hitters || HITTERS.includes(pos));
+  const mine = (keys: readonly KeyHint[]) => keys.filter((k) => (!k.hitters || HITTERS.includes(pos)) && (!k.who || k.who.includes(pos)));
   return [keyList(mine(DRILL_INFO[mode].keys), 'only-kb'), keyList(mine(DRILL_INFO[mode].touch), 'only-tc')];
 }
 
@@ -329,7 +334,12 @@ export class Menu {
     set.type = 'button';
     set.setAttribute('aria-label', 'Settings');
     set.onclick = () => this.openSettings(set);
-    right.append(this.venuePicker(), athlete, set);
+    // your own plays for the play wheel (when you set)
+    const plays = h('button', 'pill pill-plays', `${ICONS.court}<span>Plays</span>`);
+    plays.type = 'button';
+    plays.setAttribute('aria-label', 'Plays: design your own for the play wheel');
+    plays.onclick = () => this.openSheet('plays', plays);
+    right.append(this.venuePicker(), plays, athlete, set);
     const name = h('div', 'brand-row');
     name.append(brand, this.betaBadge());
     bar.append(name, nav, right);
@@ -639,7 +649,10 @@ export class Menu {
     const keyBox = h('div', 'key-box');
     const all = btn('link', 'All controls');
     all.onclick = () => this.setView('learn');
-    keys.append(txt('div', 'eyebrow', 'Keys for this drill'), keyBox, all);
+    // the setter's own plays (also the Plays pill in the top bar, which a phone has no room for)
+    const plays = btn('link', 'Your plays');
+    plays.onclick = () => this.openSheet('plays', plays);
+    keys.append(txt('div', 'eyebrow', 'Keys for this drill'), keyBox, all, plays);
     const setup = h('div', 'panel-setup');
     setup.append(this.posPicker());
     mid.append(keys, setup);
@@ -657,10 +670,11 @@ export class Menu {
       about.textContent = d.about;
       scored.replaceChildren(txt('b', '', 'Scored on'), ` · ${d.scored}`);
       keyBox.replaceChildren(...drillKeys(this.trainSel, this.pos));
-      summary.replaceChildren(
-        `${netLabel(this.settings.womenNet)} · Aim assist ${percent(this.settings.aimAssist).toLowerCase()} · `,
-        txt('b', '', 'Change'),
-      );
+      plays.hidden = this.trainSel !== 'setter';
+      // (the Setter Drill's assist is the set's own)
+      const [name, v] =
+        this.trainSel === 'setter' ? ['Set aim assist', this.settings.setAimAssist] : ['Aim assist', this.settings.aimAssist];
+      summary.replaceChildren(`${netLabel(this.settings.womenNet)} · ${name} ${percent(v).toLowerCase()} · `, txt('b', '', 'Change'));
     });
     view.append(list, panel);
     return view;
@@ -704,6 +718,8 @@ export class Menu {
     }
     const all = btn('link', 'All controls');
     all.onclick = () => this.setView('learn');
+    const plays = btn('link', 'Your plays');
+    plays.onclick = () => this.openSheet('plays', plays);
     calls.append(
       txt('div', 'eyebrow', 'Listen for your setter'),
       callList,
@@ -713,6 +729,7 @@ export class Menu {
         'The keys are the ones from the drills. The hint at the bottom of the screen names the key when the ball is yours.',
       ),
       all,
+      plays,
     );
     const setup = h('div', 'panel-setup');
     const net = h('div', 'block');
@@ -1029,8 +1046,8 @@ export class Menu {
     // switching between the two sheets keeps the button that opened the first
     if (!this.settingsOpen) this.settingsOpener = opener ?? null;
     this.sheet.dataset.sheet = id;
-    this.sheet.setAttribute('aria-label', id === 'settings' ? 'Settings' : 'Athlete');
-    this.sheet.replaceChildren(id === 'settings' ? this.buildSettings() : this.buildAthlete());
+    this.sheet.setAttribute('aria-label', SHEET_NAME[id]);
+    this.sheet.replaceChildren(id === 'settings' ? this.buildSettings() : id === 'athlete' ? this.buildAthlete() : this.buildPlays());
     this.sheet.style.display = 'flex';
     this.settingsOpen = true;
     // the screens underneath are out of reach while it is open (Tab stays in the sheet)
@@ -1061,7 +1078,7 @@ export class Menu {
   /** a sheet's top row: its name, the way to the other sheet, and DONE */
   private sheetHead(title: string, other: SheetId): HTMLElement {
     const head = h('div', 'sheet-head');
-    const swap = btn('ghost-btn', other === 'athlete' ? 'Athlete' : 'Settings');
+    const swap = btn('ghost-btn', SHEET_NAME[other]);
     swap.onclick = () => this.openSheet(other);
     const done = btn('play-btn', 'DONE');
     done.onclick = () => this.closeSettings();
@@ -1143,7 +1160,7 @@ export class Menu {
       row.append(this.rowText(label, help), b);
       return row;
     };
-    /** a choice of two or three: one chip each */
+    /** a choice of a few: one chip each */
     const seg = (label: string, options: readonly string[], at: () => number, pick: (i: number) => void, help = '') => {
       const row = h('div', 'set-row choice');
       const chips = this.chipGroup(
@@ -1159,14 +1176,22 @@ export class Menu {
       row.append(this.rowText(label, help), chips);
       return row;
     };
-    const group = (icon: IconName, title: string, rows: HTMLElement[]) => {
+    /** a group's part with a heading of its own: a card beside the group's other parts */
+    const part = (title: string, rows: HTMLElement[]) => {
+      const card = h('section', 'set-part');
+      card.append(txt('h2', 'eyebrow', title), ...rows);
+      return card;
+    };
+    /** one tab: its rows under its title, or its parts (each with its own heading) */
+    const group = (icon: IconName, title: string, rows: HTMLElement[], parts: HTMLElement[] = []) => {
       const n = tabs.length;
       const id = `set-${icon}`;
-      const panel = h('section', 'set-group');
+      const panel = h('section', parts.length ? 'set-group parted' : 'set-group');
       panel.id = `${id}-panel`;
       panel.setAttribute('role', 'tabpanel');
       panel.setAttribute('aria-labelledby', `${id}-tab`);
-      panel.append(txt('h2', 'eyebrow', title), ...rows);
+      if (parts.length) panel.append(...parts);
+      else panel.append(txt('h2', 'eyebrow', title), ...rows);
       panels.append(panel);
       const tab = h('button', 'rail-btn', `${ICONS[icon]}<span>${title}</span>`);
       tab.type = 'button';
@@ -1197,6 +1222,7 @@ export class Menu {
         'Auto turns them on for touch screens.',
       ),
       this.sliderRow('Touch aim sensitivity', 'touchSensitivity', two),
+      sw('Key hints', 'showHints', 'The line at the bottom of the screen: what to press now.'),
     ]);
     group('camera', 'Camera', [
       seg(
@@ -1210,18 +1236,55 @@ export class Menu {
       this.sliderRow('Camera shake', 'shake', percent),
       sw('Perfect-spike replays', 'replays'),
     ]);
-    group('assists', 'Assists and hints', [
-      this.sliderRow(
-        'Aim assist',
-        'aimAssist',
-        percent,
-        '',
-        'Helps your body only: a little reach and a drift towards the ball. 0 is off.',
-      ),
-      sw('Slow-mo assist', 'slowmoAssist'),
-      sw('Landing marker', 'landingMarker'),
-      sw('Hints', 'showHints', 'The key hint at the bottom, and the timing collar around the charge ring.'),
-    ]);
+    // Each control does the one thing it names, for one skill. In each part: the main control, the
+    // timing help, then where to be (and, for the set, where it goes and who you pick)
+    const byFeel = Math.round((ASSIST.setByFeel - 1) * 100);
+    group(
+      'assists',
+      'Assists',
+      [],
+      [
+        part('Hitting, passing and blocking', [
+          this.sliderRow(
+            'Aim assist',
+            'aimAssist',
+            percent,
+            '',
+            'Your body only: a little more reach, and a drift towards the ball in the air. 0 is off.',
+          ),
+          sw('Spike timing collar', 'spikeCollar', 'In the air, the arc around the crosshair: gold when a swing now is Perfect.'),
+          sw('Spike slow-mo', 'slowmoAssist', 'Time slows as the ball reaches you in the air.'),
+          sw('Run-up spot and GO', 'runUpGuide', 'Spike and Serve Drills: where to take off, and GO when to start your run.'),
+          sw('Landing marker', 'landingMarker', 'A ring where the ball will land. It closes in as the ball drops.'),
+        ]),
+        part('Setting', [
+          seg(
+            'Set difficulty',
+            SET_LEVEL_IDS.map((id) => SET_LEVELS[id].label),
+            () => SET_LEVEL_IDS.indexOf(s.setLevel),
+            (i) => (s.setLevel = SET_LEVEL_IDS[i]),
+            'How wide the green is. The bar and the slow-mo are the same on every level.',
+          ),
+          sw(
+            'Set ring and bar',
+            'setRing',
+            `The ring on the ball says when to catch, the bar beside it when to release. Off, you set by feel: no timing cue, and every window ${byFeel}% wider.`,
+          ),
+          sw('Set slow-mo', 'setSlowmo', 'Time slows for the catch, and more while the ball loads in your hands.'),
+          sw('Auto jump set', 'autoJumpSet', 'Off a pass in system your body jumps for the set by itself. Off: Space jumps.'),
+          this.sliderRow(
+            'Set aim assist',
+            'setAimAssist',
+            percent,
+            '',
+            'Your body only: the last steps onto the spot, the drift in a jump set, a little more reach. 0 is off.',
+          ),
+          sw('Set arc and hitter marker', 'setArc', 'Who your set goes to: their call over the hitter, and the set as a dotted arc.'),
+          sw('Hitter spots on the floor', 'hitterSpots', 'A ring on the floor where each hitter hits from.'),
+          sw('Keep my pick', 'keepSetPick', 'The hitter you picked stays picked for the next ball. Off: each ball starts on the outside.'),
+        ]),
+      ],
+    );
     group('sound', 'Sound', [this.sliderRow('Volume', 'volume', percent)]);
     group('court', 'Court', [
       seg(
@@ -1267,6 +1330,13 @@ export class Menu {
     main.append(panels, foot);
     body.append(rail, main);
     box.append(this.sheetHead('Settings', 'athlete'), body);
+    return box;
+  }
+
+  /** Plays: design your own play and put it on the play wheel (src/ui/playDesigner.ts) */
+  private buildPlays(): HTMLElement {
+    const box = h('div', 'sheet-box');
+    box.append(this.sheetHead('Plays', 'settings'), buildPlayDesigner());
     return box;
   }
 

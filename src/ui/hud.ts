@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Grade } from '../game/athlete';
 import { TIMING } from '../config';
 import { COLLAR_DEG_PER_S, collarDegrees, collarZone, CUE_NAMES, CUE_ORDER, type Cue, type CueId } from '../game/tutorial';
+import type { CallSheetView } from '../game/callRuns';
 
 const GRADE_CLASS: Record<Grade, string> = {
   Perfect: 'g-perfect',
@@ -14,7 +15,11 @@ const GRADE_CLASS: Record<Grade, string> = {
 /** hint `<kbd>` names → touch button names. Combined approach keys first. */
 export function translateKeyMarkup(t: string, m: Record<string, string>): string {
   t = t.replace(/<kbd>Shift<\/kbd>\+<kbd>W<\/kbd>/g, `<kbd>${m['Shift+W'] ?? 'RUN'}</kbd>`);
+  // (a key range named as one button: the setter's 1-4 is the SET TO chips)
+  t = t.replace(/<kbd>1<\/kbd>-<kbd>4<\/kbd>/g, (all) => (m['1-4'] ? `<kbd>${m['1-4']}</kbd>` : all));
   t = t.replace(/<kbd>([^<]*)<\/kbd>/g, (all, k: string) => (k in m ? `<kbd>${m[k]}</kbd>` : all));
+  // a setter's chip names itself: "DUMP dump", "OH OH" read once
+  t = t.replace(/(<kbd>(OH|MB|OPP|PIPE|DUMP)<\/kbd>) \2\b/gi, '$1');
   // the REPLAY button names itself: "REPLAY last attempt", not "REPLAY replay last attempt"
   t = t.replace(/(<kbd>REPLAY<\/kbd>) replay /g, '$1 ');
   return t.replace(/with the mouse/g, 'by dragging');
@@ -55,6 +60,8 @@ export class Hud {
   private streakBox: HTMLDivElement;
   private streakVal: HTMLSpanElement;
   private hint: HTMLDivElement;
+  private sheet: HTMLDivElement;
+  private sheetHtml = '';
   private msg: HTMLDivElement;
   private cross: HTMLDivElement;
   private fadeEl: HTMLDivElement;
@@ -119,6 +126,7 @@ export class Hud {
     el('span', 'hud-streak-label', this.streakBox, 'STREAK');
     this.streakVal = el('span', 'hud-streak-val', this.streakBox, '0');
     this.hint = el('div', 'hud-hint', this.root);
+    this.sheet = el('div', 'call-sheet', this.root);
     this.msg = el('div', 'hud-msg', this.root);
     this.skipBtn = el('button', 't-tap t-skip-kb', this.root, 'SKIP TUTORIAL');
     this.skipBtn.type = 'button';
@@ -299,6 +307,38 @@ export class Hud {
 
   private lastHint = '';
 
+  /**
+   * The call strip when you set, laid out like the net (outside, middle, opposite; the pipe behind
+   * the middle): each hitter's key, call and colour, with a dot per call they have (the one on
+   * lit). The hitter your set goes to is lit: solid once you pressed their key, an outline while it
+   * is the outside by default. Once the pass is played the calls are locked (the dots dim); a
+   * hitter who can't be set this ball is struck out. Null hides it.
+   */
+  setCallSheet(v: CallSheetView | null): void {
+    let html = '';
+    if (v) {
+      html = v.items
+        .map((i) => {
+          const cls = `cs-item cs-${i.id}${i.lit ? ' lit' : ''}${i.picked ? ' picked' : ''}${i.off ? ' off' : ''}`;
+          const dots =
+            i.steps > 1
+              ? `<i>${Array.from({ length: i.steps }, (_, n) => `<em${n === i.step ? ' class="on"' : ''}></em>`).join('')}</i>`
+              : '';
+          return `<div class="${cls}" style="--c:${i.color}"><b>${i.key}</b>${i.who}${i.call ? `<span>${i.call}</span>` : ''}${dots}</div>`;
+        })
+        .join('');
+      // the combination the calls make, named above the strip
+      if (v.play) html = `<div class="cs-play">${escapeHtml(v.play)}</div>${html}`;
+      this.sheet.classList.toggle('locked', v.locked);
+      this.sheet.classList.toggle('pins', !v.items.some((i) => i.id === 'MB'));
+    }
+    if (html !== this.sheetHtml) {
+      this.sheetHtml = html;
+      this.sheet.innerHTML = html;
+      this.sheet.style.display = html ? 'grid' : 'none';
+    }
+  }
+
   /** plain-text drill messages: key names become button names */
   private static readonly TEXT_KEYS: [RegExp, string][] = [
     [/Shift \+ W/g, 'the stick out'],
@@ -336,9 +376,10 @@ export class Hud {
   /** show the grade to one side, off the line a served ball flies down (the Serve Drill) */
   gradeAside = false;
 
-  showGrade(g: Grade, sub: string): void {
-    this.gradeText.textContent = g === 'Miss' ? 'MISS' : g.toUpperCase();
-    this.grade.className = 'hud-grade show ' + GRADE_CLASS[g] + (this.gradeAside ? ' aside' : '');
+  /** `green`: a perfectly timed set reads GREEN, in green */
+  showGrade(g: Grade, sub: string, green = false): void {
+    this.gradeText.textContent = green ? 'GREEN' : g === 'Miss' ? 'MISS' : g.toUpperCase();
+    this.grade.className = 'hud-grade show ' + (green ? 'g-green' : GRADE_CLASS[g]) + (this.gradeAside ? ' aside' : '');
     this.gradeSub.textContent = sub;
     // restart animation
     void this.grade.offsetWidth;
@@ -528,4 +569,9 @@ export class Hud {
       else this.placeCall();
     }
   }
+}
+
+/** text for innerHTML: a play's name is typed by the player (the designer), so it must not be markup */
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }

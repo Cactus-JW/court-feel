@@ -7,6 +7,8 @@ export interface KeyHint {
   a: string;
   /** only a hitter has it (the set calls): not shown to a setter or a libero */
   hitters?: true;
+  /** only these positions have it (the setter's keys) */
+  who?: readonly PositionId[];
 }
 
 /** the positions that call their own set (the ones SET_PLAYS has plays for) */
@@ -88,16 +90,20 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
   setter: {
     tag: 'Second contact',
     short: 'Run the offence and watch them finish.',
-    about: 'Passes come in. Look at a hitter (outside, quick or back set) and set as the ball drops. Your hitters attack a live blocker.',
+    about: 'Passes come in. Pick a hitter (no key: the outside) and set as the ball drops. Your hitters attack a live blocker.',
     scored: 'the set, and how your hitter finishes it',
     keys: [
       { k: 'W A S D', a: 'Get under the ball' },
-      { k: 'Mouse', a: 'Look at the hitter you want' },
-      { k: 'Right mouse', a: 'Set, just before it lands on your hands' },
+      { k: '1 to 4', a: 'Pick a hitter. Again: their next set' },
+      { k: 'C', a: 'Hold: the play wheel. Let go on a play. Plays (top bar) makes your own' },
+      { k: 'G', a: 'Front row: the opposite hits the D, and 5 is your dump' },
+      { k: 'Right mouse', a: 'Set: press as it reaches your hands, release in the green' },
     ],
     touch: [
       { k: 'Left thumb', a: 'Get under the ball' },
-      { k: 'Right thumb', a: 'Drag to look at the hitter you want' },
+      { k: 'SET TO', a: 'Top left: tap a hitter. Again: their next set' },
+      { k: 'PLAY', a: 'Top left: the play wheel. Then tap a play' },
+      { k: 'ROW  DUMP', a: 'Top left: front row, and your dump there' },
       { k: 'BLOCK', a: 'Hold: it sets when the ball drops onto you' },
     ],
   },
@@ -148,17 +154,24 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
     scored: 'when you stop. The score runs; there is no set to win yet.',
     keys: [
       { k: 'E', a: 'Pass or dig when it is your ball' },
-      { k: 'Shift + W', a: 'Approach when the set is yours' },
+      { k: 'Shift + W  Left mouse', a: 'Approach when the set is yours, hold to wind up, release to swing' },
       { k: 'Space', a: 'Jump: to hit, or to block at the net' },
-      { k: 'Left mouse', a: 'Hold to wind up, release to swing' },
-      { k: 'Right mouse', a: 'Block at the net, set off it' },
+      { k: 'Right mouse', a: 'Block at the net, set off it (press as it reaches your hands, release in the green)' },
       { k: '1  2  3', a: 'Call your set', hitters: true },
+      {
+        k: '1 to 4  C  H',
+        a: "You set: pick the hitter (again before the pass: their next set), the play wheel before the serve, help when you can't get to it",
+        who: ['S'],
+      },
     ],
     touch: [
       STICK_RUN,
       { k: 'PASS', a: 'Hold when it is your ball' },
       { k: 'JUMP  HIT', a: 'As in the Spike Drill' },
       { k: 'BLOCK', a: 'Hold: hands up and jump, or set' },
+      { k: 'SET TO', a: 'Top left: tap the hitter you set. Again before the pass: their next set', who: ['S', 'L'] },
+      { k: 'PLAY', a: 'Top left, before the serve: the play wheel', who: ['S'] },
+      { k: 'HELP', a: "Top left: a team-mate takes the second ball when you can't get to it", who: ['S', 'L'] },
     ],
   },
 };
@@ -210,7 +223,7 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'Defend and set',
       rows: [
         { k: 'E', a: 'Pass / dig' },
-        { k: 'Right mouse', a: 'Block at the net, set off it' },
+        { k: 'Right mouse', a: 'Block at the net, set off it (press as it reaches your hands, release in the green)' },
       ],
     },
     {
@@ -227,6 +240,13 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'In a drill',
       rows: [
         { k: '1  2  3', a: 'Call your set (Spike Drill, Mini Rally; hitters)' },
+        { k: '1 to 4', a: 'Pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
+        {
+          k: 'C',
+          a: 'The play wheel when you set: hold, move to a play, let go (Setter Drill, Mini Rally). Plays in the top bar makes your own',
+        },
+        { k: 'G   5', a: 'Front row, and your dump there (Setter Drill)' },
+        { k: 'H', a: "Help: you can't get to the second ball (Mini Rally)" },
         { k: '1  2  3', a: 'Standing float, jump float, jump serve (Serve Drill)' },
         { k: 'B', a: 'Opposing block: off, single, double (Spike Drill)' },
         { k: '1 to 4', a: 'Feed type (Free Play)' },
@@ -267,6 +287,10 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'In a drill',
       rows: [
         { k: 'SET CALL', a: 'Top left: call your set (Spike Drill, Mini Rally; hitters)' },
+        { k: 'SET TO', a: 'Top left: pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
+        { k: 'PLAY', a: 'Top left: the play wheel when you set, then tap a play (Setter Drill, Mini Rally)' },
+        { k: 'ROW  DUMP', a: 'Top left: front row, and your dump there (Setter Drill)' },
+        { k: 'HELP', a: "Top left: you can't get to the second ball (Mini Rally)" },
         { k: 'SERVE', a: 'Top left: standing float, jump float, jump serve (Serve Drill)' },
         { k: 'VS BLOCK', a: 'Top left: opposing block (Spike Drill)' },
         { k: 'FEED  AUTO', a: 'Top left: feed types, feed a ball, auto feed (Free Play)' },

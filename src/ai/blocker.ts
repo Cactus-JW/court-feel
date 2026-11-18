@@ -5,6 +5,7 @@ import type { AiHost, Brain } from '../game/brains';
 import type { V3 } from '../physics/ball';
 import { atNet, moveTo, netYaw, stop } from './brain';
 import { attackKind } from './defence';
+import { greenFools } from './greenBite';
 
 /**
  * Where a Mini Rally pin blocker on our right (`r` = 1, world +x) or left (-1) goes up for an attack
@@ -45,6 +46,10 @@ export class BlockerBrain implements Brain {
   private commit = true;
   /** a middle fooled by the quick: hesitates, and that is too late */
   private fooled = false;
+  /** a middle on the user's green set: guesses wrong and commits a lane away (AI.greenBlockGuess) */
+  private wrongGuess = false;
+  /** reads the middle: on the user's green set this blocker guesses wrong (a team's middle; a drill's lone blocker) */
+  guessOnGreen: boolean;
   /** when false the brain only blocks (no base movement) */
   active = true;
   /** also read a `feed` from the other side as the ball to block (drills where the user attacks a coach's toss) */
@@ -82,6 +87,7 @@ export class BlockerBrain implements Brain {
     public closer = false,
   ) {
     this.homeX = homeX;
+    this.guessOnGreen = closer;
   }
 
   reset(): void {
@@ -117,6 +123,11 @@ export class BlockerBrain implements Brain {
       // a middle frozen by the quick, or just late on the read, stays with the inside
       this.commit = g.rng.next() < 0.3 + this.skill * 0.4;
       this.fooled = g.rng.next() < 0.35 - this.skill * 0.25;
+      // a green set from the user's setter: exact, at the called tempo, nothing given away early.
+      // A middle guesses wrong and commits a lane away. A pin blocker blocks it like any other set:
+      // the hitter beats one block, not an empty net. (Off a pass out of system a high ball to a
+      // pin fools nobody: greenFools.)
+      this.wrongGuess = this.guessOnGreen && greenFools(g, lt);
       if (this.wing) this.readHitter(g);
     }
     // a wing's hands in the air keep going for where it wanted them (late, a side block, as the
@@ -149,11 +160,16 @@ export class BlockerBrain implements Brain {
         // A middle also goes with pin sets, to close the block next to the wing.
         const inZone = away < this.lateralRange + 0.4;
         // a quick fools the middle now and then: hesitate and it is too late
-        const fooled = quick && this.closer && this.fooled;
-        if (!this.wing && Math.abs(this.b.z) < 4.5 && !fooled && (inZone || (this.closer && this.commit))) {
+        const fooled = quick && this.closer && this.fooled && !this.wrongGuess;
+        if (!this.wing && Math.abs(this.b.z) < 4.5 && !fooled && (inZone || (this.closer && this.commit) || this.wrongGuess)) {
           const reach = this.lateralRange;
           let want: number;
-          if (this.closer && away > 1.6) {
+          if (this.wrongGuess) {
+            // fooled by an exact set: committed to another hitter. A pin set: stayed home for the
+            // quick; a set in the middle (the quick, the pipe): went with a pin
+            if (away > AI.greenBlockGuess / 2) want = this.homeX;
+            else want = this.homeX + (this.b.x >= this.homeX ? -1 : 1) * AI.greenBlockGuess;
+          } else if (this.closer && away > 1.6) {
             // close next to the wing blocker, who takes the line; a middle arriving on the
             // run rarely seals the seam perfectly
             want = this.b.x - Math.sign(this.b.x) * 1.1 + this.readErr;

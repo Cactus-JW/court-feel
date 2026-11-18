@@ -5,6 +5,7 @@ import type { V3 } from '../physics/ball';
 import type { Athlete } from '../game/athlete';
 import type { Touch } from '../game/ballEntity';
 import type { AiHost, Brain } from '../game/brains';
+import { AI_TOUCH, planSetJump } from '../game/setJump';
 import {
   attackHeight,
   BACKUP_TARGET,
@@ -151,6 +152,8 @@ export class TeamPlayer implements Brain {
     const setterFace = s === 1 ? Math.PI / 2 : -Math.PI / 2;
     this.setter = new SetterBrain(athlete, { x: SETTER_SPOT.x * s, z: SETTER_SPOT.z * s }, setterFace);
     this.setter.shouldPlay = () => this.job === 'set';
+    // the team's setter jump-sets a pass in system; anyone else setting (the libero backing up) stays on the floor
+    this.setter.jumps = slot === 'S';
     this.setter.call = (g) => team.callSet(g, this.athlete);
     this.setter.onSet = (c) => team.onSet(c.hitter);
     const laneRole: PositionId | null = slot === 'OH1' ? 'OH' : slot === 'MB' ? 'MB' : slot === 'OPP' ? 'OPP' : slot === 'OH2' ? 'L' : null;
@@ -304,6 +307,12 @@ export class TeamPlayer implements Brain {
     const ball = g.ball;
     const now = g.simTime;
     if (!ball.active || ball.lastTouch?.athlete === a) {
+      stop(a, netYaw(a.side));
+      return;
+    }
+    // an attack off a green set: the hitter hid the shot until the hand, so the dig starts late
+    const hit = ball.lastTouch;
+    if (hit?.green && hit.side !== a.side && now - hit.t < AI.greenSetDigDelay) {
       stop(a, netYaw(a.side));
       return;
     }
@@ -486,6 +495,20 @@ export class TeamAI {
   /** where the ball was expected when the receiver was picked (re-pick if it strays, e.g. off the tape) */
   private receiverAt: Spot = { x: 0, z: 0 };
   private freeFor: unknown = null;
+  /** the first ball the user (our setter, or the libero backing up) called HELP on: a team-mate takes the second */
+  private userHelpFor: unknown = null;
+
+  /**
+   * The user can't get to the second ball and calls for help: the libero sets it if it can get
+   * there (a high ball to a pin, out of system), else whoever is closest bumps it up. Only
+   * while our first ball is in the air and the second is the user's. Returns whether it was heard.
+   */
+  askHelp(): boolean {
+    const lt = this.g.ball.lastTouch;
+    if (!lt || lt.side !== this.side || this.touches !== 1 || !this.secondBy?.isUser || this.userHelpFor === lt) return false;
+    this.userHelpFor = lt;
+    return true;
+  }
   private freeAthlete: Athlete | null = null;
   /** who sets our second ball (decided with `freeFor`), and whether the setter called HELP */
   private secondSetter: Athlete | null = null;
@@ -647,8 +670,9 @@ export class TeamAI {
   }
 
   /**
-   * A pass on its way to our setter: when and where the setter will touch it.
-   * Null for anything else, or for a pass too far off the net to run a quick.
+   * A pass on its way to our setter: when the set will leave their hands (a user setter's ball
+   * loads in the hands first) and where. Null for anything else, or for a pass too far off the
+   * net to run a quick.
    */
   passToSetter(g: AiHost): { t: number; x: number } | null {
     const lt = g.ball.lastTouch;
@@ -658,11 +682,19 @@ export class TeamAI {
     const setter = this.players.get('S');
     if (!setter || lt.athlete === setter) return null;
     const pred = g.ball.ensurePrediction(g.env, g.simTime);
-    const t = pred.descendThrough(setterTouchY(setter), g.simTime);
+    // a setter going up for it (a jump set) meets the ball higher and sooner
+    const yours = setter.isUser ? g.contact.setCatch(setter) : null;
+    const jump =
+      !setter.isUser && this.brains.get(setter)?.setter.jumps && setter.state === 'ground'
+        ? planSetJump(setter, pred, g.simTime, AI_TOUCH)
+        : null;
+    const t = yours && yours.feetY > 0 ? yours.t : jump ? jump.catchT : pred.descendThrough(setterTouchY(setter), g.simTime);
     if (t < 0) return null;
     pred.posAt(t, this.qp);
-    if (Math.hypot(this.qp.x - SETTER_SPOT.x * s, this.qp.z - SETTER_SPOT.z * s) > 1.5) return null;
-    return { t, x: this.qp.x };
+    // (the setter's own read of the pass uses the same line: a quick they may set is one the middle runs)
+    if (Math.hypot(this.qp.x - SETTER_SPOT.x * s, this.qp.z - SETTER_SPOT.z * s) > AI.outOfSystem) return null;
+    // the user setter's ball loads in the hands before the push (the set bar)
+    return { t: t + (setter.isUser ? TIMING.setLoad : 0), x: this.qp.x };
   }
   private qp: V3 = { x: 0, y: 0, z: 0 };
 
@@ -1196,8 +1228,10 @@ export class TeamAI {
           if (sDug) setJob(S, 'base', this.formSpot('defense', 'S'));
           // (who calls the pass: the setter, or the libero backing up a setter who dug it)
           const caller = sDug ? L : S;
+          // the user called HELP on this ball: it is decided as for an AI setter who can't get there
+          const helped = !!caller?.isUser && this.userHelpFor === lt;
           this.secondBy = caller ?? null;
-          if (caller && !caller.isUser) {
+          if (caller && (!caller.isUser || helped)) {
             // decided once per ball, so two players never leave it to each other
             if (this.freeFor !== lt) {
               this.freeFor = lt;
@@ -1208,15 +1242,15 @@ export class TeamAI {
               for (const b of this.brains.values()) b.setter.sloppy = 0;
               if (comingToUs && tDown > 0) {
                 const spare = (a: Athlete | undefined) => (a && a !== lt?.athlete ? this.spareFor(a, tDown, p) : -1);
-                if (spare(caller) < 0) {
+                if (helped || spare(caller) < 0) {
                   this.secondHelp = true;
                   // a ball nobody gets to (a shank into the stands) is their point: nothing to call
                   this.secondDead = !this.anyoneGets(p, tDown - now, lt?.athlete ?? null);
-                  this.secondSetter = !sDug && L && spare(L) >= 0 ? L : null;
+                  this.secondSetter = !sDug && L && L !== caller && spare(L) >= 0 ? L : null;
                   if (!this.secondSetter) {
                     // nobody whose job it is: the closest plays it, and sets it if they get under it in
                     // time (the user plays their own ball; a hitter already on its approach keeps running)
-                    const r = this.pickReceiver(p, false, lt?.athlete ?? null, null, tDown - now);
+                    const r = this.pickReceiver(p, false, lt?.athlete ?? null, helped ? caller : null, tDown - now);
                     const hb = r ? this.brains.get(r)?.hitter : null;
                     const running = !!hb && hb.phase !== 'ready' && hb.phase !== 'recover';
                     if (r && !r.isUser && !running && spare(r) >= 0) this.secondSetter = r;

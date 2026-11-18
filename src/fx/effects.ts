@@ -325,7 +325,9 @@ export class Effects {
         break;
       }
       case 'set':
-        this.audio.set();
+        // held too long: the referee's whistle, at once
+        if (e.fault === 'lift') this.audio.whistle();
+        this.audio.set(1, user ? e.grade : null);
         if (e.perfect && user) this.glowAt(p, 0.14, new THREE.Color(1.0, 0.95, 0.7));
         break;
     }
@@ -592,6 +594,8 @@ export class Effects {
     const live = g.ball.active && !g.ball.state.rest && g.ball.pos.y > 1.5;
     this.tension += ((live ? 1 : 0) - this.tension) * Math.min(1, dt * 1.5);
     this.audio.setCrowdTension(this.tension);
+    // your set loading in your hands: the tone rises with the bar
+    this.audio.setLoad(g.setLoading());
     this.sparks.update(dt);
     this.dust.update(dt);
     this.glow.update(dt);

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { BALL, COURT, PLAYER, type Hand, type PositionId, type PositionStats } from '../config';
+import { BALL, COURT, PLAYER, TIMING, type Hand, type PositionId, type PositionStats } from '../config';
 import { standingReach } from '../character/rig';
 import { bodyStats, type CustomBody } from './body';
+import type { SetTouch } from './setTiming';
 import { angleLerp, clamp, clamp01, damp, dirFromYaw, lerp, rightFromYaw, wrapAngle } from '../core/mathx';
 
 export type AState = 'ground' | 'load' | 'air' | 'land' | 'dive';
@@ -9,6 +10,9 @@ export type ActionKind = 'swing' | 'windup' | 'block' | 'pass' | 'set' | 'toss' 
 export type Grade = 'Perfect' | 'Good' | 'Early' | 'Late' | 'Miss';
 /** how a first ball is played: the platform in front, the platform out to one side, overhand, or diving */
 export type PassForm = 'platform' | 'side' | 'hands' | 'dive';
+
+/** how near (m) the feet come to the centre line: a player stays on their own side of it */
+export const FEET_OFF_NET = 0.22;
 
 export interface Action {
   kind: ActionKind;
@@ -42,6 +46,17 @@ export interface Action {
   idealT: number;
   idealD: number;
   idealFor: unknown;
+  /** set: caught; the ball loads in the hands (the bar fills) until the push */
+  absorbing: boolean;
+  /** set: the catch, when the bar starts (-1 before) */
+  arriveT: number;
+  /** set: the green and good half-windows (s) the touch earned, fixed at the catch */
+  green: number;
+  good: number;
+  /** set: the press against the ball reaching the hands (s, + = late) */
+  catchErr: number;
+  /** set: the touch, fixed at the catch */
+  touch: SetTouch | null;
   /** a pass: the form it is played with (the AI picks overhand; the contact finds a side or diving touch) */
   form: PassForm;
 }
@@ -112,6 +127,12 @@ export class Athlete {
   lastAction: Action | null = null;
   /** time this athlete last touched the ball */
   lastTouchT = -10;
+  /** how long (s) the feet have been still on the floor (below TIMING.setStillSpeed): a setter who beat the ball to the spot */
+  stillT = 0;
+  /** this athlete jump-sets a pass in system: the body goes up by itself (the user's auto jump set, an AI setter; setJump.ts) */
+  jumpSets = false;
+  /** the plant under way is a set jump's: a hop to this height (m) off the shortest plant (null: an ordinary jump) */
+  hopH: number | null = null;
   /** a block's hands reaching sideways from the body (m along the net, world x): a late blocker stretching for the seam */
   reachX = 0;
   /** when the last split step started (the animator hops and lands into a deeper stance; no effect on movement) */
@@ -134,6 +155,10 @@ export class Athlete {
   ballVel: { x: number; y: number; z: number } | null = null;
   /** assist nudge velocity in air */
   readonly airNudge = new THREE.Vector3();
+  /** fraction of the run's speed kept through the plant (an AI pin hitter going inside keeps more: AI.insideRun) */
+  plantCarry: number = PLAYER.plantCarry;
+  /** how much of the body's speed along the shot goes into a spike (an AI pin hitter going inside: AI.insideRun) */
+  swingCarry = 0;
   jersey = 0;
   name = '';
   number = 0;
@@ -188,6 +213,7 @@ export class Athlete {
     this.lastAction = null;
     this.airNudge.set(0, 0, 0);
     this.reachX = 0;
+    this.hopH = null;
   }
 
   get grounded(): boolean {
@@ -217,9 +243,24 @@ export class Athlete {
     this.stateT = 0;
     this.loadT = 0;
     this.loadRelease = false;
+    this.hopH = null;
     this.loadApproach = this.speed;
     this.onStep?.(this, true);
     return true;
+  }
+
+  /** a set jump: a controlled hop to `h` m, off the shortest plant. Returns false if a jump can't start now. */
+  hop(h: number): boolean {
+    if (!this.jumpPress()) return false;
+    this.hopH = h;
+    this.loadRelease = true;
+    return true;
+  }
+
+  /** the take-off speed that peaks (with the apex hang) at `H` m */
+  static takeoffSpeed(H: number): number {
+    const b = PLAYER.apexBand;
+    return Math.sqrt(Math.max(2 * BALL.gravity * H + b * b * (1 - 1 / PLAYER.apexGravityScale), b * b + 0.01));
   }
 
   jumpRelease(): void {
@@ -236,14 +277,10 @@ export class Athlete {
   }
 
   private takeoff(): void {
-    const H = this.computeJumpHeight();
-    const g = BALL.gravity;
-    const b = PLAYER.apexBand;
-    const s = PLAYER.apexGravityScale;
-    // solve takeoff speed so the peak (with apex hang) equals H
-    const v2 = 2 * g * H + b * b * (1 - 1 / s);
-    const vy = Math.sqrt(Math.max(v2, b * b + 0.01));
-    this.vel.y = vy;
+    const H = this.hopH ?? this.computeJumpHeight();
+    this.hopH = null;
+    // the takeoff speed is solved so the peak (with apex hang) equals H
+    this.vel.y = Athlete.takeoffSpeed(H);
     this.jumpH = H;
     this.state = 'air';
     this.stateT = 0;
@@ -312,6 +349,7 @@ export class Athlete {
     this.prevPos.copy(this.pos);
     this.prevYaw = this.yaw;
     this.stateT += dt;
+    this.stillT = this.state === 'ground' && this.speed < TIMING.setStillSpeed ? this.stillT + dt : 0;
     const st = this.stats;
     const cmd = this.cmd;
 
@@ -367,10 +405,10 @@ export class Athlete {
     } else if (this.state === 'load') {
       this.loadT += dt;
       // plant: brake hard down to the carried fraction of approach speed
-      const target = this.loadApproach * PLAYER.plantCarry;
+      const target = this.loadApproach * this.plantCarry;
       const sp = this.speed;
       if (sp > target) {
-        const ns = Math.max(target, sp - 24 * dt);
+        const ns = Math.max(target, sp - PLAYER.plantBrake * dt);
         const k = sp > 1e-5 ? ns / sp : 0;
         this.vel.x *= k;
         this.vel.z *= k;
@@ -423,7 +461,7 @@ export class Athlete {
     this.pos.z += this.vel.z * dt;
 
     // ---- court constraints: stay on own side of the centre line (small allowance)
-    const minZ = 0.22;
+    const minZ = FEET_OFF_NET;
     if (this.side === 1 && this.pos.z < minZ) {
       this.pos.z = minZ;
       if (this.vel.z < 0) this.vel.z = 0;
@@ -491,6 +529,12 @@ export class Athlete {
       idealT: -1,
       idealD: 1e9,
       idealFor: null,
+      absorbing: false,
+      arriveT: -1,
+      green: 0,
+      good: 0,
+      catchErr: 0,
+      touch: null,
       form: 'platform',
     };
     this.action = act;
