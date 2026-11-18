@@ -1,6 +1,5 @@
 import type { PositionId } from '../../config';
-import type { Game } from '../../app/game';
-import type { Mode, ModeId } from './mode';
+import type { DrillHost, Mode, ModeId } from './mode';
 import { SpikeDrill } from './spikeDrill';
 import { BlockDrill } from './blockDrill';
 import { ReceiveDrill } from './receiveDrill';
@@ -9,7 +8,7 @@ import { ServeDrill } from './serveDrill';
 import { FreePlay } from './freePlay';
 import { MiniRally } from './miniRally';
 
-export function createMode(id: ModeId, g: Game, pos: PositionId): Mode {
+export function createMode(id: ModeId, g: DrillHost, pos: PositionId): Mode {
   switch (id) {
     case 'free':
       return new FreePlay(g, pos);
