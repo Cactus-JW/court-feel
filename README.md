@@ -1135,6 +1135,17 @@ branch it goes into and fails when the known lists grow
   is repeatable, and `TRACE_SECONDS` sets the seconds per drill (60). It proves
   what the autopilots play: the touch controls, the lesson and the menus are
   the end-to-end run's job.
+* `tests/properties.test.ts` (part of `npm test`) states facts that must hold for
+  every input and tries each on hundreds of seeded ones (`tests/forAll.ts`), for
+  the bugs nobody wrote a case for: for any launch the ball lands where the
+  predictor says, never sinks into the floor, flies the mirrored path when
+  launched mirrored and gains no energy in free flight; a set solved for any
+  target comes down there; anything found in the browser's storage comes out as
+  valid settings; and for any seed a rally in the simulation keeps its
+  invariants at every step (`tests/invariants.ts`: every number finite, nobody
+  under the floor or out of the hall, the clock moving one step at a time) and
+  plays the same twice. The inputs are seeded, so the same cases run every time
+  and a failure prints the one that broke.
 * `tests/architecture.test.ts` (part of `npm test`) holds the shape of the code
   (the same decision record): every import points down a fixed order of layers,
   physics imports only `config`, and the simulation has no DOM and uses three.js
