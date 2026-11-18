@@ -32,6 +32,8 @@ export type Slot = 'S' | 'OH1' | 'MB' | 'OPP' | 'OH2' | 'L';
 export const SLOTS: Slot[] = ['S', 'OH1', 'MB', 'OPP', 'OH2', 'L'];
 export const SLOT_ROLE: Record<Slot, PositionId> = { S: 'S', OH1: 'OH', MB: 'MB', OPP: 'OPP', OH2: 'OH', L: 'L' };
 export const USER_SLOT: Record<PositionId, Slot> = { OH: 'OH1', OPP: 'OPP', MB: 'MB', S: 'S', L: 'L' };
+/** the three who pass the serve (the two outsides and the libero) */
+export const PASSERS: ReadonlySet<Slot> = new Set<Slot>(['OH1', 'OH2', 'L']);
 
 type Spot = { x: number; z: number };
 /** formations for the home side (+z); mirrored for the away side */
@@ -315,7 +317,7 @@ export class TeamPlayer implements Brain {
     // a touch is seen a reaction time after it: until then the body stays where the read put it
     // (a coverer, low and watching the block, picks up a ball off it sooner)
     const lt = ball.lastTouch;
-    const covering = lt?.kind === 'block' && lt.side !== a.side && now - this.coverT < 0.6;
+    const covering = lt?.kind === 'block' && lt.side !== a.side && now - this.coverT < AI.cover.hold;
     const read = covering ? this.coverRead : this.hitRead;
     if (lt) read.look(lt, lt.t, g.rng);
     if (!read.seen(now)) {
@@ -603,6 +605,9 @@ export class TeamAI {
     }
     this.shadeX = 0;
     this.jumpServe = false;
+    this.freeCall = false;
+    this.theirTouches = 0;
+    this.earlyFor = null;
     this.touches = 0;
     this.setFor = null;
     this.receiver = null;
@@ -1006,7 +1011,7 @@ export class TeamAI {
   upTarget(from: V3): { x: number; y: number; z: number; apex: number } {
     const U = AI.up;
     const at = this.keptUp(from, [U.near, U.far], U.turn);
-    return { x: at.x, y: 0.9, z: at.z, apex: Math.max(from.y + 1, lerp(U.apex[0], U.apex[1], this.g.rng.next())) };
+    return { x: at.x, y: 0.9, z: at.z, apex: Math.max(from.y + U.over, lerp(U.apex[0], U.apex[1], this.g.rng.next())) };
   }
 
   step(): void {
@@ -1125,8 +1130,12 @@ export class TeamAI {
         form = lt?.kind === 'serve' ? 'receive' : 'defense';
         // a free ball over (not an attack, not a serve, not a block): an easy first ball
         const free = lt && FREE_KINDS.has(lt.kind);
-        // (never the setter's: it is the one ball a team has time to pass well, and the setter sets it)
-        receive(lt?.kind === 'serve', free ? (this.players.get('S') ?? null) : null);
+        // (never the setter's: it is the one ball a team has time to pass well, and the setter sets it;
+        // unless nobody else gets there in time: then the setter digs it and someone else sets)
+        const S = this.players.get('S') ?? null;
+        const othersGet =
+          !!free && comingToUs && tDown > 0 && [...this.players.values()].some((a) => a !== S && this.reachTime(a, p) <= tDown - now);
+        receive(lt?.kind === 'serve', othersGet ? S : null);
         if (lt?.kind === 'serve') this.serveTransition(lt, setJob);
         if (free && comingToUs && tDown > 0) this.earlyTransition(lt, tDown, p, setJob);
         // their second ball was no set: their third can only be a free ball, and we get ready for it
@@ -1421,7 +1430,7 @@ export class TeamAI {
     const sit = this.situation;
     const back = slot === 'S' || slot === 'L' || slot === 'OH2';
     // their jump serve, read off the toss: the passers start deeper
-    if (form === 'receive' && this.jumpServe && (slot === 'OH1' || slot === 'OH2' || slot === 'L')) z += this.side * C.jumpBack;
+    if (form === 'receive' && this.jumpServe && PASSERS.has(slot)) z += this.side * C.jumpBack;
     if (form === 'defense' && back) x += this.shadeX;
     else if (form === 'defense' && slot !== 'MB' && sit === 'theirFirstBall') {
       const h = this.opponents?.players.get(slot === 'OH1' ? 'OPP' : 'OH1');
@@ -1486,7 +1495,7 @@ export class TeamAI {
     if (!S || !b || jobs.has(S) || this.frontRow().includes(S)) return;
     if (this.receiverFor !== t || !this.receiver || this.receiver === S) return;
     const now = this.g.simTime;
-    const read = t.kind === 'block' && now - b.coverT < 0.6 ? b.coverRead : b.hitRead;
+    const read = t.kind === 'block' && now - b.coverT < AI.cover.hold ? b.coverRead : b.hitRead;
     read.look(t, t.t, this.g.rng);
     if (!read.seen(now)) return;
     setJob(S, 'base', this.formSpot('offense', 'S'), true);
