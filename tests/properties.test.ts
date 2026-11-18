@@ -79,11 +79,14 @@ describe('the ball, for any launch', () => {
       (rng) => anyLaunch(rng),
       (launch) => {
         const b = ballOf(launch);
-        for (let i = 0; i < 4 / DT; i++) {
+        // one assertion a case, not one a step: an `expect` in a loop this hot is what takes the time
+        let wrong = '';
+        for (let i = 0; i < 4 / DT && !wrong; i++) {
           stepBall(b, DT, env);
-          for (const v of [b.p.x, b.p.y, b.p.z, b.v.x, b.v.y, b.v.z]) expect(Number.isFinite(v)).toBe(true);
-          expect(b.p.y).toBeGreaterThan(BALL.radius - 1e-6);
+          if (![b.p.x, b.p.y, b.p.z, b.v.x, b.v.y, b.v.z].every(Number.isFinite)) wrong = `not a number at step ${i}`;
+          else if (b.p.y <= BALL.radius - 1e-6) wrong = `${BALL.radius - b.p.y} m into the floor at step ${i}`;
         }
+        expect(wrong).toBe('');
       },
     );
   });
@@ -101,13 +104,13 @@ describe('the ball, for any launch', () => {
           v: { x: -launch.v.x, y: launch.v.y, z: launch.v.z },
           w: { x: launch.w.x, y: -launch.w.y, z: -launch.w.z },
         });
+        let apart = 0;
         for (let i = 0; i < 3 / DT; i++) {
           stepBall(a, DT, env);
           stepBall(b, DT, env);
-          expect(Math.abs(a.p.x + b.p.x)).toBeLessThan(1e-7);
-          expect(Math.abs(a.p.y - b.p.y)).toBeLessThan(1e-7);
-          expect(Math.abs(a.p.z - b.p.z)).toBeLessThan(1e-7);
+          apart = Math.max(apart, Math.abs(a.p.x + b.p.x), Math.abs(a.p.y - b.p.y), Math.abs(a.p.z - b.p.z));
         }
+        expect(apart).toBeLessThan(1e-7);
       },
     );
   });
@@ -121,13 +124,15 @@ describe('the ball, for any launch', () => {
         const b = ballOf(launch);
         const before = makeBall();
         const events: CollisionEvent[] = [];
+        let gained = 0;
         for (let i = 0; i < 3 / DT; i++) {
           copyBall(b, before);
           events.length = 0;
           stepBall(b, DT, env, events);
           if (events.length || b.rest) break;
-          expect(energy(b)).toBeLessThanOrEqual(energy(before) + 1e-9);
+          gained = Math.max(gained, energy(b) - energy(before));
         }
+        expect(gained).toBeLessThanOrEqual(1e-9);
       },
     );
   });
@@ -197,7 +202,8 @@ describe('a rally in the simulation, for any seed', () => {
           for (let i = 0; i < 6 / DT; i++) {
             const before = sim.simTime;
             sim.step(DT);
-            expect(brokenInvariants(sim, before, DT)).toEqual([]);
+            const broken = brokenInvariants(sim, before, DT);
+            if (broken.length) throw new Error(`step ${i}: ${broken.join('; ')}`);
             path.push(sim.ball.state.p.x, sim.ball.state.p.y, sim.ball.state.p.z);
             for (const a of sim.athletes) path.push(a.pos.x, a.pos.z);
           }
