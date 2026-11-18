@@ -1,5 +1,5 @@
 import type { PositionId } from '../../config';
-import type { Game } from '../game';
+import type { Game } from '../../app/game';
 import type { Mode, ModeId } from './mode';
 import { SpikeDrill } from './spikeDrill';
 import { BlockDrill } from './blockDrill';

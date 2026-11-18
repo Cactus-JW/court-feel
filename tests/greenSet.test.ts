@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AI, CONTACT, COURT, SIM } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import type { Touch } from '../src/game/ballEntity';
-import type { Game } from '../src/game/game';
+import type { Game } from '../src/app/game';
 import { laneFor, LANES, SETTER_TARGET } from '../src/game/plays';
 import { BlockerBrain } from '../src/ai/blocker';
 import { HitterBrain } from '../src/ai/hitter';

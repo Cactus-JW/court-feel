@@ -5,7 +5,7 @@ import { parseLaunchParams, parseVenueParam } from './app/launch';
 import { defaultSettings, loadSettings, saveSettings, systemPrefersReducedMotion } from './app/settings';
 import { playbookStorage } from './app/playbook';
 import { usePlaybookStore } from './game/playbook';
-import { Game } from './game/game';
+import { Game } from './app/game';
 import { Menu } from './ui/menu';
 import type { ModeId } from './game/modes/mode';
 import type { PositionId } from './config';
