@@ -1207,23 +1207,36 @@ branch it goes into and fails when the known lists grow
 
 ## Project layout
 
+Every import points down this list: a file may import from the lines above its
+own and never from the ones below ([decision record 0010](docs/adr/0010-the-simulation-runs-on-its-own.md),
+held by `tests/architecture.test.ts`). The simulation is everything down to the
+drills. It has no renderer and no DOM, and it takes nothing from a player but
+their intent, so it can be built and stepped in a unit test.
+
 ```
 src/config.ts          all tunables
-src/core/              input (with buffering), touch pad model, settings (validated), quick-start links,
-                       error reporter, build info, math, events
+src/core/              input (with buffering), touch pad model, error reporter, build info, math, events
 src/physics/           ball physics, predictor, trajectory solvers (pure, tested)
+src/game/              the simulation: athletes, the ball, contacts and timing, the judge, the plays;
+                       a player's intent, their seat and their actions; the lesson
+src/ai/                the brains: setter, hitter, blocker, server, team coordinator
+src/game/modes/        the drills, and the markers they ask for
+---------------------- everything below draws the simulation or drives it
 src/character/         procedural rig, sculpted mesh, face and number decals, animator (poses + IK), kits
-src/game/              game loop, athlete kinematics, contact/timing system, judge, modes, bots
-src/ai/                setter, hitter, blocker, server, team coordinator
-src/fx/                particles, trails, effects director, replay, post-processing
-src/audio/             Web Audio synthesis
 src/world/             arena, the venues (stands and crowd, sky, what stands round the court), floor mirror,
-                       procedural textures
+                       the ball as it is drawn, procedural textures
+src/camera/            the camera rig
+src/fx/                particles, trails, effects director, replay, post-processing, the drills' markers
+src/audio/             Web Audio synthesis
 src/ui/                HUD, menus (start screen sections, pause, Settings and Athlete sheets), each drill's
                        menu text and keys, icons, touch controls overlay, crash screen, debug overlay
-tests/                 unit tests
-scripts/               e2e and screenshot tooling
-docs/screenshots/      the README screenshots (real frames from the game)
+src/app/               the one place that builds every part: the game shell and its frame loop, how fast
+                       the play runs, the quality governor, the autopilots, stored settings, quick-start links
+src/main.ts            the page: menus, pause, errors
+tests/                 unit tests, the architecture rules (tests/architecture.*) and their lists
+scripts/               e2e, the trace comparison, the check that judges a pull request by its base branch
+docs/                  decision records (docs/adr), how the checks are arranged (docs/verification.md),
+                       the README screenshots (real frames from the game)
 .github/               CI, issue forms (feel report, bug, idea) and the pull request template
 ```
 
