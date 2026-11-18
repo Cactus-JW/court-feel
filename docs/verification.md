@@ -69,6 +69,9 @@ Ask these in order and stop at the first yes.
   objects, on a clock or dice in the simulation (`Math.random`, `Date.now`,
   `performance.now`), on a test that fakes the game, and on a new folder with no
   layer.
+- **The autopilots roll their own dice** (`tests/architecture.autopilot.test.ts`).
+  An autopilot stands in for a player, and a player's hands are not part of the
+  simulation: it fails when one reads the simulation's random stream.
 - **Unit tests that state a real-court fact**, in the test's name.
 - **CI on every pull request.**
 
