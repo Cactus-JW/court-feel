@@ -67,3 +67,6 @@ export const KNOWN_FAKE_GAME: readonly string[] = [
   'tests/setterCall.test.ts',
   'tests/teamDefence.test.ts',
 ];
+
+/** files in the layers that must be repeatable (physics, the simulation, the brains, the drills) that read a clock or roll dice of their own */
+export const KNOWN_CLOCK: readonly string[] = ['src/game/game.ts'];

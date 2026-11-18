@@ -1135,9 +1135,14 @@ branch: the change has to play exactly like `main` (`npm run trace:compare`, bel
 * `tests/architecture.test.ts` (part of `npm test`) holds the shape of the code
   (the same decision record): every import points down a fixed order of layers,
   physics imports only `config`, and the simulation has no DOM and uses three.js
-  for maths only. What still breaks this is listed by name in
+  for maths only. No two files import each other in a circle, and physics, the
+  simulation, the brains and the drills read no clock and roll no dice of their
+  own (`Math.random`, `Date.now`, `performance.now`), so the same start gives the
+  same play. What still breaks this is listed by name in
   `tests/architecture.known.ts`. The test fails on anything new, and on an entry
-  that has been fixed and not taken out, so the lists only get shorter.
+  that has been fixed and not taken out, so the lists only get shorter. ESLint
+  flags an import that points up a layer as it is typed, from the same table
+  (`tests/architecture.layers.json`).
 * URL shortcuts for quick testing: `?mode=spike&pos=OH&cam=fp&bot=perfect`
   (modes: free, spike, block, receive, setter, rally; bots: perfect, good,
   sloppy, tip; `&hand=left` plays as a lefty, `&venue=seaside` moves the court for that visit). Unknown values are ignored: an
