@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BALL, PLAYER, SET_LEVELS, SIM, TIMING } from '../config';
 import { Athlete } from '../game/athlete';
 import { AIM_DEPTH, aimPitchFor, aimPitchRange, ContactSystem, tossGroove } from '../game/contact';
-import { clamp, yawFromDir } from '../core/mathx';
+import { clamp, Rng, yawFromDir } from '../core/mathx';
 import type { V3 } from '../physics/ball';
 import type { Game } from './game';
 import { planApproach, planQuick, type ApproachPlan } from '../game/approach';
@@ -52,12 +52,22 @@ function steerExactly(intent: Intent, moveX: number, moveZ: number, sprint: bool
 }
 
 /**
+ * An autopilot stands in for a player, and a player's hands are not part of the simulation: the
+ * same hands, recorded and played back, have to give the same play with no autopilot there to roll
+ * anything. So an autopilot rolls dice of its own, from this seed, and never touches the
+ * simulation's stream.
+ */
+const AUTOPILOT_SEED = 77;
+
+/**
  * Autopilot for the spike drill. It drives the user's athlete through the
  * same input path as a player for every action (Space plant/jump, mouse
  * swing), and steers movement through the athlete command. Used by the
  * Playwright checks and the attract mode behind the start screen.
  */
 export class SpikeBot {
+  /** this autopilot's own dice, for how far off its timing is: never the simulation's (see AUTOPILOT_SEED) */
+  private readonly dice = new Rng(AUTOPILOT_SEED);
   private phase: 'wait' | 'approach' | 'load' | 'air' | 'done' = 'wait';
   private plan: {
     tc: number;
@@ -366,7 +376,7 @@ export class SpikeBot {
     this.holding = false;
     this.recorded = false;
     const q = this.quality;
-    const rnd = g.rng.next() * 2 - 1;
+    const rnd = this.dice.next() * 2 - 1;
     this.offset = q === 'perfect' ? 0 : q === 'good' ? rnd * 0.05 : rnd * 0.13;
   }
 }
@@ -376,6 +386,8 @@ export class SpikeBot {
  * hands (RMB) and presses Space so the block peaks as the ball crosses.
  */
 export class BlockBot {
+  /** this autopilot's own dice, for how far off its timing is: never the simulation's (see AUTOPILOT_SEED) */
+  private readonly dice = new Rng(AUTOPILOT_SEED);
   private jumped = false;
   private mx = 0;
   private b: V3 = { x: 0, y: 0, z: 0 };
@@ -425,7 +437,8 @@ export class BlockBot {
     const dx = tx - me.pos.x;
     if (Math.abs(dx) > 0.08 && me.state === 'ground') this.mx = Math.sign(dx) * Math.min(1, Math.abs(dx) / 0.4);
     if (!this.jumped) {
-      if (this.offset === 0 && this.quality !== 'perfect') this.offset = (g.rng.next() * 2 - 1) * (this.quality === 'good' ? 0.06 : 0.16);
+      if (this.offset === 0 && this.quality !== 'perfect')
+        this.offset = (this.dice.next() * 2 - 1) * (this.quality === 'good' ? 0.06 : 0.16);
       // standing block jump: load min + rise to peak
       const H = me.jumpMax * me.stats.standingJumpFrac;
       const vy = Math.sqrt(2 * BALL.gravity * H);
@@ -453,6 +466,8 @@ export class BlockBot {
  * (RMB down) and releases at the top of the bar, both off by its quality's timing error.
  */
 export class TouchBot {
+  /** this autopilot's own dice, for how far off its timing is: never the simulation's (see AUTOPILOT_SEED) */
+  private readonly dice = new Rng(AUTOPILOT_SEED);
   private mx = 0;
   private mz = 0;
   private pressed = false;
@@ -577,14 +592,14 @@ export class TouchBot {
       const L = SET_LEVELS[g.settings.setLevel];
       if (!this.rolled) {
         this.rolled = true;
-        const r = () => g.rng.next() * 2 - 1;
+        const r = () => this.dice.next() * 2 - 1;
         const q = this.quality;
         this.catchOff = q === 'perfect' ? 0 : q === 'good' ? r() * L.catch * 1.5 : Math.min(L.catch + 0.03, r() * (L.catch + 0.15));
         this.relOff = q === 'perfect' ? 0 : r() * L.green[0] * (q === 'good' ? 2 : 6);
       }
       return;
     }
-    if (this.offset === 0 && this.quality !== 'perfect') this.offset = (g.rng.next() * 2 - 1) * (this.quality === 'good' ? 0.08 : 0.25);
+    if (this.offset === 0 && this.quality !== 'perfect') this.offset = (this.dice.next() * 2 - 1) * (this.quality === 'good' ? 0.08 : 0.25);
     const spd = ball.speed();
     const fast = Math.min(1, Math.max(0, (spd - 12) / 10));
     const lead = TIMING.passLead + (TIMING.digLead - TIMING.passLead) * fast;
@@ -616,6 +631,8 @@ const SERVE_AIMS: readonly { x: number; z: number }[] = [
  * the hand meets the ball as it comes down. Every button goes through Input, as a player's do.
  */
 export class ServeBot {
+  /** this autopilot's own dice, for how far off its timing is: never the simulation's (see AUTOPILOT_SEED) */
+  private readonly dice = new Rng(AUTOPILOT_SEED);
   private phase: 'wait' | 'toss' | 'approach' | 'load' | 'air' | 'done' = 'wait';
   private t = 0;
   private plan: ApproachPlan | null = null;
@@ -692,7 +709,7 @@ export class ServeBot {
         if (this.t > 0.5) {
           inp.down('KeyQ');
           const q = this.quality;
-          const rnd = g.rng.next() * 2 - 1;
+          const rnd = this.dice.next() * 2 - 1;
           this.offset = q === 'perfect' ? 0 : q === 'good' ? rnd * 0.05 : rnd * 0.13;
           this.fired = false;
           this.plan = null;
