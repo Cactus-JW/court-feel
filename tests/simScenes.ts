@@ -22,9 +22,8 @@ export function freeBallToATeam(seed: number) {
     team.add(slot, a, false);
   }
   team.place('defense');
-  // the player's athlete stands off the court: the step needs one, and here it only watches
+  // a player's athlete stands off the court and only watches
   sim.me = new Athlete('OH', 1);
-  sim.me.isUser = true;
   sim.me.place(-7, 11, 0);
   sim.drill = { step: () => team.step(), onOutcome: () => {} };
   const from = { x: 1, y: 2.2, z: -4 };

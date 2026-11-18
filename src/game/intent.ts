@@ -40,6 +40,18 @@ export interface Intent {
   keys: string[];
 }
 
+/**
+ * An intent with its address: whose it is and which frame it is for. A log holds these, and they
+ * are what a player's machine would send to the one that runs the game.
+ */
+export interface Command {
+  /** the seat it is for (`Seat.id`) */
+  seat: number;
+  /** the frame it is for, counted from the start of the game */
+  frame: number;
+  intent: Intent;
+}
+
 export const idleIntent = (): Intent => ({
   moveX: 0,
   moveZ: 0,

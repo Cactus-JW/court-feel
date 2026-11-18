@@ -7,7 +7,6 @@ import type { SimulationHooks } from '../src/game/simulation';
 export const NO_HOOKS: SimulationHooks = {
   aimAssist: () => 0,
   aimTargetFor: (_a, out) => out,
-  userAimYaw: () => 0,
   contact: () => {},
   aiContact: () => {},
   ballEvent: () => {},
