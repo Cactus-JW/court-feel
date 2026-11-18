@@ -11,10 +11,15 @@
 // the same give the same hashes. Where they do not, the first difference is printed: the drill,
 // the moment and the values.
 //
+// Then the same drills are played again frame by frame with the animation on (nothing is painted)
+// and what is drawn and shown is compared: every call the HUD gets, the camera, and where the ball,
+// the athletes (every joint) and the drill's floor markers are. Not screenshots: the data the
+// picture is made from. What it does not cover: the lessons, the menus, touch input, effects and sound.
+//
 // Nothing is stored in the repo. A feature that changes the play on purpose has nothing to
 // re-record: this is run for a `refactor`, which must change nothing (docs/adr/0010).
 //
-// TRACE_SECONDS sets the simulated seconds per drill (60). Output: scripts/out/trace/. Exit code 1 on a difference.
+// TRACE_SECONDS sets the simulated seconds per drill (60), TRACE_DISPLAY_SECONDS those watched for the display (30). Output: scripts/out/trace/. Exit code 1 on a difference.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -50,6 +55,15 @@ const RUNS = [
   { mode: 'rally', pos: 'S', bot: 'good' },
   { mode: 'rally', pos: 'L', bot: 'good' },
 ];
+
+/**
+ * The lessons are not played: a lesson waits for the player at each step and the autopilots do not
+ * play one (tried: it stays on its first step). Until one does, a lesson is covered by its unit
+ * tests (tests/tutorial.test.ts) and by hand.
+ */
+const LESSONS = [];
+/** simulated seconds of each drill that are watched for the display (the animation makes this pass the slow one) */
+const DISPLAY_SECONDS = Number(process.env.TRACE_DISPLAY_SECONDS ?? 30);
 
 const git = (args, cwd = root) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
@@ -200,6 +214,129 @@ function playOne({ mode, pos, bot, slowmo = false, seconds, seed }) {
   return { samples, events, simTime: g.simTime };
 }
 
+/**
+ * Runs in the page: play one drill frame by frame with the animation on (nothing is painted) and
+ * write down what is shown: every call the HUD gets, where the camera is, where the ball, the
+ * athletes and the drill's floor markers are drawn. Not screenshots: the data the picture is made
+ * from, which is the same on every machine. Like `playOne`, it reads the game through
+ * `window.__court` only, and is where both shapes are read when a refactor moves something.
+ */
+function watchOne({ mode, pos, bot, slowmo = false, lesson = null, seconds, seed }) {
+  const g = window.__court;
+  g.settings.replays = false;
+  g.settings.firstPerson = false;
+  g.settings.slowmoAssist = slowmo;
+  g.rng.reseed(seed);
+  if (lesson) g.beginTutorial({ lesson, replay: true });
+  else g.startMode(mode, pos);
+  window.__menu.showStart(false);
+  g.enableBot(bot);
+
+  const f64 = new Float64Array(1);
+  const bytes = new Uint8Array(f64.buffer);
+  let hash = 0x811c9dc5;
+  const mix = (byte) => {
+    hash ^= byte;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  };
+  const num = (v) => {
+    f64[0] = v;
+    for (let i = 0; i < 8; i++) mix(bytes[i]);
+  };
+  const text = (t) => {
+    for (const ch of t) mix(ch.charCodeAt(0) & 0xff);
+  };
+
+  // what the HUD is told: every call, by name and arguments
+  const hud = g.hud;
+  const proto = Object.getPrototypeOf(hud);
+  const calls = [];
+  const counts = {};
+  const wrapped = [];
+  const say = (v) => {
+    if (typeof v !== 'object' || v === null) return String(v);
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return '[object]';
+    }
+  };
+  for (const name of Object.getOwnPropertyNames(proto)) {
+    const d = Object.getOwnPropertyDescriptor(proto, name);
+    if (name === 'constructor' || name === 'update' || typeof d.value !== 'function') continue;
+    wrapped.push(name);
+    hud[name] = (...args) => {
+      const line = `${name}(${args.map(say).join(', ')})`;
+      text(line);
+      counts[name] = (counts[name] ?? 0) + 1;
+      calls.push([name, `${g.simTime.toFixed(4)} ${line}`]);
+      return d.value.apply(hud, args);
+    };
+  }
+
+  const ballMesh = () => (g.ballView ?? g.ball).mesh;
+  const pose = (o) => {
+    num(o.position.x);
+    num(o.position.y);
+    num(o.position.z);
+    num(o.quaternion.x);
+    num(o.quaternion.y);
+    num(o.quaternion.z);
+    num(o.quaternion.w);
+  };
+  const who = (a) => (a.isUser ? 'me' : `${a.role}${a.side === 1 ? 'H' : 'A'}`);
+  const samples = [];
+  const frames = Math.round(seconds * 60);
+  for (let f = 1; f <= frames; f++) {
+    g.play(1 / 60);
+    pose(g.rig.camera);
+    const ball = ballMesh();
+    num(Number(ball.visible));
+    pose(ball);
+    for (const a of g.athletes) {
+      const v = g.views.get(a);
+      if (!v) continue;
+      pose(v.root);
+      // the whole body, every fourth frame: every joint and every part
+      if (f % 4 === 0) v.root.traverse((o) => pose(o));
+    }
+    // the drill's own markers on the floor
+    for (const o of g.mode?.objects ?? []) {
+      num(Number(o.visible));
+      pose(o);
+      num(o.scale.x);
+      num(o.scale.z);
+    }
+    num(Number(g.tutorial.active));
+    if (f % 15 === 0) {
+      const state = [];
+      const put = (label, v) => state.push([label, typeof v === 'boolean' ? Number(v) : v]);
+      const v3 = (label, v) => {
+        put(`${label}.x`, v.x);
+        put(`${label}.y`, v.y);
+        put(`${label}.z`, v.z);
+      };
+      v3('camera', g.rig.camera.position);
+      put('ball.shown', ball.visible);
+      v3('ball drawn at', ball.position);
+      g.athletes.forEach((a, i) => {
+        const v = g.views.get(a);
+        if (v) v3(`athlete[${i} ${who(a)}] drawn at`, v.root.position);
+      });
+      put('markers', (g.mode?.objects ?? []).filter((o) => o.visible).length);
+      put('lesson', g.tutorial.active ? `step ${g.tutorial.step}` : 'off');
+      put('hud calls', calls.length);
+      samples.push({ frame: f, hash: hash.toString(16).padStart(8, '0'), state });
+    }
+  }
+  for (const name of wrapped) delete hud[name];
+  g.bot = null;
+  if (lesson) g.stopMode();
+  // a call made on most frames (the crosshair, the load bar) is in the hash; the list keeps the ones a player would read
+  const shown = calls.filter(([name]) => counts[name] < frames / 2).map(([, line]) => line);
+  return { samples, calls: shown };
+}
+
 /** play every drill in a built app and return the traces */
 async function record(dist, label) {
   const server = await serve(dist);
@@ -230,6 +367,15 @@ async function record(dist, label) {
       if (errors.length) throw new Error(`${label}: ${name} threw in the page: ${errors[0]}`);
       runs.push({ name, ...r });
     }
+    // a second pass over the same drills, and the lessons, for what is drawn and shown
+    for (const run of [...RUNS, ...LESSONS]) {
+      const name = run.lesson ? `lesson/${run.lesson}` : `${run.mode}/${run.pos}/${run.bot}${run.slowmo ? '/slow-mo assist' : ''}`;
+      const d = await page.evaluate(watchOne, { ...run, seconds: DISPLAY_SECONDS, seed: SEED });
+      if (errors.length) throw new Error(`${label}: ${name} threw in the page while it was watched: ${errors[0]}`);
+      const sim = runs.find((r) => r.name === name);
+      if (sim) sim.display = d;
+      else runs.push({ name, samples: [], events: [], simTime: 0, display: d });
+    }
     console.log(
       `${label}: ${runs.length} drills, ${SECONDS} s each, ${runs.reduce((n, r) => n + r.events.length, 0)} contacts and outcomes, in ${((Date.now() - t0) / 1000).toFixed(0)} s`,
     );
@@ -250,7 +396,7 @@ const show = (v) => (typeof v === 'number' ? String(v) : `'${v}'`);
 function difference(a, b, nameA, nameB) {
   const differs = (ra, rb) => ra.samples.some((s, k) => s.hash !== rb.samples[k]?.hash) || ra.events.length !== rb.events.length;
   const at = a.findIndex((ra, i) => differs(ra, b[i]));
-  if (at < 0) return [];
+  if (at < 0) return displayDifference(a, b, nameA, nameB);
   const ra = a[at];
   const rb = b[at];
   const k = Math.max(
@@ -273,6 +419,47 @@ function difference(a, b, nameA, nameB) {
     lines.push(
       `    first different contact or outcome: '${ra.events[first] ?? 'nothing'}' (${nameA}) and '${rb.events[first] ?? 'nothing'}' (${nameB})`,
     );
+  }
+  const later = a.filter((r, i) => i > at && differs(r, b[i])).map((r) => r.name);
+  if (later.length) lines.push(`also different, perhaps only because of it: ${later.join(', ')}`);
+  return lines;
+}
+
+/**
+ * The simulation is the same: is what is drawn and shown the same too? The first drill whose
+ * display differs is explained, by what the HUD was told and by where things are drawn.
+ */
+function displayDifference(a, b, nameA, nameB) {
+  const differs = (ra, rb) =>
+    !!ra.display &&
+    !!rb.display &&
+    (ra.display.samples.some((s, k) => s.hash !== rb.display.samples[k]?.hash) ||
+      ra.display.calls.join('\n') !== rb.display.calls.join('\n'));
+  const at = a.findIndex((ra, i) => differs(ra, b[i]));
+  if (at < 0) return [];
+  const da = a[at].display;
+  const db = b[at].display;
+  const lines = [`${a[at].name}: the simulation is the same, but what is drawn or shown differs`];
+  const c = da.calls.findIndex((x, i) => x !== db.calls[i]);
+  if (c >= 0 || da.calls.length !== db.calls.length) {
+    const first = c >= 0 ? c : Math.min(da.calls.length, db.calls.length);
+    lines.push(
+      `    first different thing the HUD is told: '${da.calls[first] ?? 'nothing'}' (${nameA}) and '${db.calls[first] ?? 'nothing'}' (${nameB})`,
+    );
+  }
+  const k = da.samples.findIndex((s, i) => s.hash !== db.samples[i]?.hash);
+  if (k >= 0) {
+    const sa = da.samples[k];
+    const sb = db.samples[k];
+    lines.push(`    drawn differently by frame ${sa.frame} (${(sa.frame / 60).toFixed(2)} s into the drill)`);
+    const fields = sa.state.filter(([label, v], i) => sb.state[i]?.[0] !== label || sb.state[i][1] !== v);
+    for (const [label, v] of fields.slice(0, 8)) {
+      const other = sb.state.find(([l]) => l === label);
+      lines.push(`    ${label}: ${show(v)} (${nameA}) and ${other ? show(other[1]) : 'nothing'} (${nameB})`);
+    }
+    if (fields.length > 8) lines.push(`    and ${fields.length - 8} more values`);
+    if (!fields.length)
+      lines.push('    the difference is in a pose, a marker or a HUD value that changes every frame, not in where things stand');
   }
   const later = a.filter((r, i) => i > at && differs(r, b[i])).map((r) => r.name);
   if (later.length) lines.push(`also different, perhaps only because of it: ${later.join(', ')}`);
@@ -316,13 +503,15 @@ if (command === 'compare') {
   save('base', base);
   save('head', head);
   lines = difference(base, head, sha, 'this checkout');
-  if (!lines.length) console.log(`same play: every drill gives the same states, contacts and outcomes as ${sha}`);
+  if (!lines.length)
+    console.log(`same play: every drill gives the same states, contacts and outcomes as ${sha}, and is drawn and shown the same`);
 } else if (command === 'self') {
   const first = await record(headDist, 'first run');
   const second = await record(headDist, 'second run');
   save('head', first);
   lines = difference(first, second, 'first run', 'second run');
-  if (!lines.length) console.log('repeatable: two runs of this checkout give the same states, contacts and outcomes');
+  if (!lines.length)
+    console.log('repeatable: two runs of this checkout give the same states, contacts and outcomes, and are drawn and shown the same');
 } else {
   console.error(`unknown command '${command}': use 'self' or 'compare [ref]'`);
   process.exit(2);

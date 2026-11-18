@@ -12,7 +12,7 @@ npm run check                     # typecheck, lint, format check, unit tests. R
 npm test                          # unit tests only (Vitest, tests/)
 npm run format                    # fix formatting with Prettier
 npm run e2e                       # every drill in headless Chromium, several minutes, writes scripts/out/
-npm run trace:compare             # a refactor only: plays every drill here and on main and compares every frame
+npm run trace:compare             # a refactor only: plays every drill here and on main and compares every frame, the play and what is drawn
 ```
 
 Run `npm run e2e` when a change touches a drill, the autopilots, input, touch controls or the menus. First time: `npx playwright install chromium`.
