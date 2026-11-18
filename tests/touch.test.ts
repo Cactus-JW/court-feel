@@ -4,6 +4,7 @@ import { CameraRig } from '../src/camera/cameraRig';
 import type { Stick } from '../src/core/input';
 import { TouchPad, type PadButton, type PadInput } from '../src/core/touchPad';
 import { Athlete } from '../src/game/athlete';
+import { readIntent } from '../src/game/intent';
 import { UserController } from '../src/game/userController';
 
 const DT = 1 / SIM.hz;
@@ -112,7 +113,7 @@ describe('touch pad: joystick', () => {
     const { input, pad } = rig();
     const cam = new CameraRig(16 / 9);
     cam.yaw = 0;
-    const uc = new UserController(input as any, cam);
+    const uc = new UserController();
     const a = new Athlete('OH', 1);
     a.place(0, 8, 0);
     uc.athlete = a;
@@ -120,7 +121,7 @@ describe('touch pad: joystick', () => {
     pad.move(1, 150, 300 - TOUCH.stickRadius * 0.5);
     let t = 0;
     for (let i = 0; i < SIM.hz; i++) {
-      uc.frame(DT);
+      uc.frame(DT, readIntent(input, cam));
       a.step(DT, (t += DT));
     }
     expect(a.cmd.moveZ).toBeLessThan(0); // forward = towards the net (-z) with yaw 0
@@ -130,7 +131,7 @@ describe('touch pad: joystick', () => {
     expect(shuffle).toBeLessThan(POSITIONS.OH.shuffleSpeed);
     pad.move(1, 150, 300 - TOUCH.stickRadius * 1.5);
     for (let i = 0; i < SIM.hz; i++) {
-      uc.frame(DT);
+      uc.frame(DT, readIntent(input, cam));
       a.step(DT, (t += DT));
     }
     expect(a.cmd.sprint).toBe(true);
@@ -142,7 +143,7 @@ describe('touch pad: hold buttons', () => {
   it('JUMP is Space: hold loads, release takes off', () => {
     const { input, pad } = rig();
     const cam = new CameraRig(16 / 9);
-    const uc = new UserController(input as any, cam);
+    const uc = new UserController();
     const a = new Athlete('OH', 1);
     a.place(0, 8, 0);
     uc.athlete = a;
@@ -154,7 +155,7 @@ describe('touch pad: hold buttons', () => {
     let t = 0;
     const run = (n: number) => {
       for (let i = 0; i < n; i++) {
-        uc.frame(DT);
+        uc.frame(DT, readIntent(input, cam));
         a.step(DT, (t += DT));
       }
     };

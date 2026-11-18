@@ -25,6 +25,7 @@ import { REFLECT_LAYER } from '../world/floorReflection';
 import { Post } from '../fx/post';
 import { Athlete, handSign } from '../game/athlete';
 import { bodyStats } from '../game/body';
+import { copyIntent, idleIntent, readIntent, type Intent } from '../game/intent';
 import { UserController } from '../game/userController';
 import { DebugOverlay, type DebugInfo } from '../ui/debug';
 import { BallEntity, type TouchKind } from '../game/ballEntity';
@@ -91,7 +92,7 @@ export class Game implements AiHost {
   modeId: ModeId = 'spike';
   position: PositionId = 'OH';
   /** autopilot driving the user's inputs (tests / attract mode) */
-  bot: { step(dt: number): void; after(): void } | null = null;
+  bot: { step(dt: number): void; steer(intent: Intent): void } | null = null;
 
   private lastRenderSimT = 0;
   private accum = 0;
@@ -199,7 +200,7 @@ export class Game implements AiHost {
       setAssist: (a) => (a.isUser ? this.settings.setAimAssist : 0.3),
       setByFeel: () => !this.settings.setRing,
       aimTargetFor: (a, out) => this.aimTargetFor(a, out),
-      userAimYaw: () => this.rig.yaw,
+      userAimYaw: () => this.user.intent.yaw,
       contact: (ev) => this.onContact(ev),
       aiContact: (athlete, kind, speed) => this.events.emit('aiContact', { athlete, kind, speed }),
       ballEvent: (e) => this.events.emit('ballEvent', e),
@@ -232,7 +233,7 @@ export class Game implements AiHost {
     this.applyVenue();
     this.post.preRender = () => this.arena.reflection.render(this.rig.camera);
     this.input = new Input(this.renderer.domElement);
-    this.user = new UserController(this.input, this.rig);
+    this.user = new UserController();
     this.debug = new DebugOverlay(container);
     this.hud = new Hud(container);
     this.hud.camera = this.rig.camera;
@@ -381,6 +382,8 @@ export class Game implements AiHost {
     this.ret = null;
     this.me.place(x, z, yaw);
     this.rig.yaw = yaw;
+    // a teleport turns the player's look with their body
+    this.user.intent.yaw = yaw;
     this.rig.snap();
     this.user.clear();
     this.eyeInit = false;
@@ -404,9 +407,7 @@ export class Game implements AiHost {
     const me = this.me;
     r.t += dt;
     const d = Math.hypot(me.pos.x - r.x, me.pos.z - r.z);
-    const keys =
-      ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((k) => this.input.isDown(k)) ||
-      this.input.stick.active;
+    const keys = this.user.intent.steering;
     if (keys) r.userDriven = true;
     if (d < 0.1 || (r.userDriven && d < 0.9)) {
       this.ret = null;
@@ -622,7 +623,8 @@ export class Game implements AiHost {
       if (this.tutorial.ownsButtons())
         return out.set(a.pos.x, 0, -a.side * (this.tutorial.serving ? TUTORIAL.serveAimDepth : TUTORIAL.aimDepth));
       const from = a.action && a.action.kind === 'swing' ? a.action.contactPoint : a.pos;
-      return aimTargetFromLook(from.x, from.z, this.rig.yaw, this.rig.pitch, this.rig.mode === 'fp', a.side, out);
+      const look = this.user.intent;
+      return aimTargetFromLook(from.x, from.z, look.yaw, look.pitch, look.firstPerson, a.side, out);
     }
     return out.copy(a.aiAim);
   }
@@ -822,7 +824,7 @@ export class Game implements AiHost {
    */
   private assistSetStep(): void {
     const me = this.me;
-    if (this.settings.setAimAssist <= 0 || me.state !== 'ground' || !this.mode?.userSetsNext?.()) return;
+    if (!this.user.intent.helped || this.settings.setAimAssist <= 0 || me.state !== 'ground' || !this.mode?.userSetsNext?.()) return;
     if (me.action?.kind === 'set' && me.action.absorbing) return;
     // going up for it: the steps go to where the hop takes off from (the spot, less what your run carries)
     const jump = this.contact.setCatch(me)?.jump;
@@ -877,8 +879,7 @@ export class Game implements AiHost {
       this.input.takeMouse();
       if (this.bot && this.mode) {
         this.bot.step(dt);
-        this.user.frame(dt);
-        this.bot.after();
+        this.user.frame(dt, this.hands());
         this.stepReturn(dt);
       }
       return;
@@ -890,12 +891,30 @@ export class Game implements AiHost {
     if (this.input.consumePress('KeyV')) this.toggleCamera();
     if (this.input.consumePress('KeyN')) this.mode?.restartRep();
     if (this.input.consumePress('KeyR')) this.fx.startReplay();
-    this.user.frame(dt);
+    this.user.frame(dt, this.hands());
     this.assistSetStep();
-    this.bot?.after();
     // the lesson's together rep: the coach holds your line (what you hold decides whether time runs)
     this.tutorial.drive(this.me);
     this.stepReturn(dt);
+  }
+
+  /**
+   * Whose hands play the user's athlete, when they are not this machine's keys and camera: a
+   * recording being played back, or (one day) a player on another machine. Null: read `Input`.
+   */
+  handsFrom: (() => Intent) | null = null;
+  /** when set, every frame's intent is added to it: the whole of what the player did, in order */
+  handsLog: Intent[] | null = null;
+  private readonly handsNow = idleIntent();
+
+  /** this frame's intent for the user's athlete */
+  private hands(): Intent {
+    if (this.handsFrom) return this.handsFrom();
+    const intent = readIntent(this.input, this.rig, this.handsNow);
+    // an autopilot presses the buttons and turns the camera like a person, and says where its feet go outright
+    this.bot?.steer(intent);
+    this.handsLog?.push(copyIntent(intent));
+    return intent;
   }
 
   enableBot(q: string): void {

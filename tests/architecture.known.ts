@@ -18,7 +18,6 @@ export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/modes/mode.ts -> src/world/textures.ts',
   'src/game/modes/serveDrill.ts -> src/fx/approachGuide.ts',
   'src/game/modes/spikeDrill.ts -> src/fx/approachGuide.ts',
-  'src/game/userController.ts -> src/camera/cameraRig.ts',
 ];
 
 /** simulation files that touch the DOM (window, document, storage) */
