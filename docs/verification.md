@@ -76,6 +76,12 @@ Ask these in order and stop at the first yes.
   that may listen for keys, the mouse, the pointer or touch, with the reason for
   each, and fails when another file starts to. Nothing in the simulation may: it
   is handed an intent.
+- **Numbers live in config** (`tests/architecture.numbers.test.ts`). The count of
+  numbers each file in physics, the simulation, the brains and the drills holds
+  of its own is written down (`tests/architecture.numbers.json`, about 1,200 in
+  38 files) and only goes down. A new one fails until it has a name in
+  `src/config.ts`. It does not move the ones already there: that is the work the
+  count is the measure of.
 - **Unit tests that state a real-court fact**, in the test's name.
 - **CI on every pull request.**
 
@@ -157,7 +163,6 @@ These live in prose only, so they are the ones most likely to be broken.
 
 | Rule | Where it should go |
 |---|---|
-| Every tunable number lives in `src/config.ts` | A lint ratchet, once the 900 or so inline numbers are sorted into tunables and plain arithmetic |
 | A changed mechanic comes with a test that states the real-court fact | Review, helped by the "test first" rule |
 
 When one of these gets a check, move it up this page.
