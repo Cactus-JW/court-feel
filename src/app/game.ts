@@ -32,7 +32,8 @@ import { DebugOverlay, type DebugInfo } from '../ui/debug';
 import { BallEntity, type TouchKind } from '../game/ballEntity';
 import { BallView } from '../world/ballView';
 import { Simulation } from '../game/simulation';
-import { DebugGizmos } from '../game/debugGizmos';
+import { DebugGizmos } from '../fx/debugGizmos';
+import { SceneMarkers } from '../fx/drillMarkers';
 import type { BallEnv } from '../physics/ball';
 import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
@@ -72,6 +73,8 @@ const MAX_FAILED_FRAMES = 10;
 export class Game implements AiHost {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
+  /** what the drill has put on the court for the player to read (a ring, the zone to hit, the block's shadow): the drill says what, this draws it */
+  readonly markers = new SceneMarkers(this.scene);
   readonly rig: CameraRig;
   arena: Arena;
   readonly post: Post;

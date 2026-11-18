@@ -8,8 +8,8 @@ import type { ContactEvent } from '../contact';
 import type { GameEvents } from '../gameEvents';
 import type { Judge, Outcome } from '../judge';
 import type { Tutorial } from '../tutorial';
-import { makeRingTexture } from '../../world/textures';
 import { drillBall } from '../attempt';
+import type { DrillMarkers } from './markers';
 
 export type ModeId = 'free' | 'spike' | 'block' | 'receive' | 'setter' | 'serve' | 'rally';
 
@@ -95,10 +95,13 @@ export interface DrillHost extends AiHost {
   readonly events: Pick<Emitter<GameEvents>, 'emit'>;
   readonly hud: DrillHud;
   crowd(amount: number, cheer?: boolean): void;
-  readonly scene: { add(o: THREE.Object3D): unknown; remove(o: THREE.Object3D): unknown };
+  /** what the drill puts on the court for the player to read: it says what and where, the display draws it */
+  readonly markers: DrillMarkers;
   readonly rig: { readonly mode: string; pitch: number };
   /** how each athlete is drawn right now (a replay poses them) */
-  readonly views: { get(a: Athlete): { readonly root: THREE.Object3D } | undefined };
+  readonly views: {
+    get(a: Athlete): { readonly root: { readonly visible: boolean; readonly position: { readonly x: number } } } | undefined;
+  };
   readonly fx: { readonly replay: { readonly contact: THREE.Vector3 } };
 }
 
@@ -108,7 +111,10 @@ export abstract class Mode {
   protected spawned: Athlete[] = [];
   /** extra lines for the F3 overlay */
   debugLines?(): string[];
-  protected objects: THREE.Object3D[] = [];
+  /** what this drill has put on the court (tools that compare what is drawn read it here) */
+  get objects(): readonly unknown[] {
+    return this.g.markers.objects;
+  }
   score = 0;
   streak = 0;
   bestStreak = 0;
@@ -164,26 +170,8 @@ export abstract class Mode {
     this.g.hud.setCallSheet(null);
     for (const a of this.spawned) this.g.removeAthlete(a);
     this.spawned = [];
-    for (const o of this.objects) {
-      this.g.scene.remove(o);
-      o.traverse((c) => {
-        const m = c as THREE.Mesh;
-        if (m.geometry) m.geometry.dispose();
-        const mat = m.material as (THREE.Material & { map?: THREE.Texture | null }) | undefined;
-        if (mat) {
-          mat.map?.dispose();
-          mat.dispose();
-        }
-      });
-    }
-    this.objects = [];
+    this.g.markers.clear();
     this.g.clearBrains();
-  }
-
-  protected add(o: THREE.Object3D): THREE.Object3D {
-    this.g.scene.add(o);
-    this.objects.push(o);
-    return o;
   }
 
   protected bumpStreak(ok: boolean): void {
@@ -191,61 +179,4 @@ export abstract class Mode {
     this.bestStreak = Math.max(this.bestStreak, this.streak);
     this.g.hud.setStreak(this.streak);
   }
-}
-
-/** translucent target zone on the floor with a bright border */
-export class ZoneMarker {
-  readonly group = new THREE.Group();
-  private fill: THREE.Mesh;
-  private border: THREE.LineSegments;
-  private t = 0;
-
-  constructor(color = 0xffc23a) {
-    this.fill = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false }),
-    );
-    this.fill.rotation.x = -Math.PI / 2;
-    const edges = new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1));
-    this.border = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
-    this.border.rotation.x = -Math.PI / 2;
-    this.group.add(this.fill, this.border);
-    this.group.position.y = 0.012;
-    this.group.renderOrder = 2;
-  }
-
-  set(x0: number, x1: number, z0: number, z1: number): void {
-    const w = Math.abs(x1 - x0);
-    const d = Math.abs(z1 - z0);
-    this.group.position.set((x0 + x1) / 2, 0.012, (z0 + z1) / 2);
-    this.fill.scale.set(w, d, 1);
-    this.border.scale.set(w, d, 1);
-    this.group.visible = true;
-  }
-
-  update(dt: number): void {
-    this.t += dt;
-    (this.fill.material as THREE.MeshBasicMaterial).opacity = 0.12 + Math.sin(this.t * 4) * 0.05;
-  }
-}
-
-export function makeFloorRing(color: number, size: number): THREE.Mesh {
-  const m = new THREE.Mesh(
-    new THREE.PlaneGeometry(size, size),
-    // the court is pulled towards the camera with a polygon offset: pull the ring further, or the court draws over it
-    new THREE.MeshBasicMaterial({
-      map: makeRingTexture(0.18),
-      color,
-      transparent: true,
-      opacity: 0.7,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -4,
-      polygonOffsetUnits: -4,
-    }),
-  );
-  m.rotation.x = -Math.PI / 2;
-  m.position.y = 0.011;
-  m.renderOrder = 2;
-  return m;
 }
