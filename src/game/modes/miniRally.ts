@@ -249,9 +249,9 @@ export class MiniRally extends Mode {
       const c = this.setterCalls;
       // the libero backing up calls nothing (a backup's set goes up high to a pin): the keys only pick
       c.canCall = this.userSetter;
-      c.readKeys(g.input);
+      c.readKeys(this.keys);
       // H: you can't get to it. A team-mate takes the second ball, and your hitters wait for a high ball
-      if (g.input.consumePress('KeyH') && this.userSetsNext() && this.home.askHelp()) {
+      if (g.keyPressed('KeyH') && this.userSetsNext() && this.home.askHelp()) {
         for (const k of SETTER_KEYS) holdForHigh(this.hitters, k);
         applyCalls(this.hitters, c, true);
         g.hud.call('YOU', 'HELP!', "can't get there", 'out', (out) => out.set(g.me.rpos.x, g.me.rpos.y + g.me.height + 0.42, g.me.rpos.z));
@@ -280,7 +280,7 @@ export class MiniRally extends Mode {
       }
     }
     if (!this.plays) return;
-    for (let i = 0; i < this.plays.length; i++) if (this.g.input.consumePress('Digit' + (i + 1))) this.selectCall(i);
+    for (let i = 0; i < this.plays.length; i++) if (this.g.keyPressed('Digit' + (i + 1))) this.selectCall(i);
   }
 
   /** F3: what each team is in the middle of (the AI's situation: `AI.sit`) */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SIM } from '../src/config';
 import { Athlete } from '../src/game/athlete';
-import { copyIntent, readIntent, type Hands, type Intent, type Look } from '../src/game/intent';
+import { copyIntent, readIntent, takeKey, type Hands, type Intent, type Look } from '../src/game/intent';
 import { UserController } from '../src/game/userController';
 
 // A player's hands reach the simulation as an intent: plain data, one a frame. What is tested
@@ -26,6 +26,8 @@ class Keys implements Hands {
   isDown = (c: string): boolean => this.held.has(c);
   consumePress = (c: string): boolean => this.pressed.delete(c);
   consumeRelease = (c: string): boolean => this.released.delete(c);
+  peekPress = (c: string): boolean => this.pressed.has(c);
+  take = (c: string): boolean => this.pressed.delete(c);
 }
 const hands = (): Keys => new Keys();
 const look = (yaw: number, pitch = 0, mode = 'tp'): Look => ({ yaw, pitch, mode });
@@ -58,6 +60,27 @@ describe("a player's intent", () => {
     const i = readIntent(input, look(0));
     expect(Math.hypot(i.moveX, i.moveZ)).toBe(0);
     expect(i.steering).toBe(true);
+  });
+
+  it('carries a command key until something acts on it, and then it is gone: one press is one call', () => {
+    const input = hands();
+    input.down('Digit2');
+    // nobody acts on it this frame (a drill between reps): it is still waiting next frame
+    expect(readIntent(input, look(0)).keys).toEqual(['Digit2']);
+    const next = readIntent(input, look(0));
+    expect(next.keys).toEqual(['Digit2']);
+    // a drill acts on it, twice in the same frame (two simulation steps): only the first sees it
+    expect(takeKey(next, 'Digit2')).toBe(true);
+    input.take('Digit2');
+    expect(takeKey(next, 'Digit2')).toBe(false);
+    expect(readIntent(input, look(0)).keys).toEqual([]);
+  });
+
+  it('does not carry a key that is not a command to the game', () => {
+    const input = hands();
+    input.down('KeyZ');
+    input.down('KeyB');
+    expect(readIntent(input, look(0)).keys).toEqual(['KeyB']);
   });
 
   it('lets the game help a person’s feet onto a set: only an autopilot says otherwise', () => {

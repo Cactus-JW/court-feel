@@ -39,6 +39,9 @@ class FakeInput implements PadInput {
   consumeRelease(c: string): boolean {
     return this.released.delete(c);
   }
+  peekPress(c: string): boolean {
+    return this.pressed.has(c);
+  }
   clearEdges(): void {
     this.pressed.clear();
     this.released.clear();

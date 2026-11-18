@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import type { PositionId, ServeKind, Settings } from '../../config';
 import type { Emitter } from '../../core/events';
-import type { Input } from '../../core/input';
 import type { Athlete } from '../athlete';
 import type { AiHost, Brain } from '../brains';
 import type { CallSheetView } from '../callRuns';
@@ -72,7 +71,8 @@ export interface DrillHost extends AiHost {
 
   // ---- the user's seat
   readonly me: Athlete;
-  readonly input: Input;
+  /** a command key was pressed (`COMMAND_KEYS`: the calls, their block, the next feed). True once for each press */
+  keyPressed(code: string): boolean;
   readonly settings: Settings;
   /** the serve the user has picked: the Serve Drill sets it, the contact system reads it */
   serveKind: ServeKind;
@@ -118,6 +118,9 @@ export abstract class Mode {
     protected g: DrillHost,
     protected position: PositionId,
   ) {}
+
+  /** the command keys, as something that reads keys expects them (`SetterCalls.readKeys`) */
+  protected readonly keys = { consumePress: (code: string): boolean => this.g.keyPressed(code) };
 
   abstract setup(): void;
   abstract step(dt: number): void;
