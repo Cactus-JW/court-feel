@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { BALL, COURT, PLAYER, TIMING, type Hand, type PositionId, type PositionStats } from '../config';
-import { standingReach } from '../character/rig';
+import { standingReach } from './proportions';
 import { bodyStats, type CustomBody } from './body';
 import type { SetTouch } from './setTiming';
 import { angleLerp, clamp, clamp01, damp, dirFromYaw, lerp, rightFromYaw, wrapAngle } from '../core/mathx';

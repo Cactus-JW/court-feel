@@ -3,7 +3,8 @@ import { clamp01, smoothstep } from '../core/mathx';
 import { FINGER_JOINT, FINGER_ROOT, FINGERS, THUMB_JOINT, THUMB_RADII, thumbPath } from './hand';
 import { FACE, faceUV, numberUV } from './kitTexture';
 import { MeshBuilder, radial, tube, type Ring, type Weights } from './meshBuilder';
-import type { BoneName, Kit, RigDims } from './rig';
+import type { RigDims } from '../game/proportions';
+import type { BoneName, Kit } from './rig';
 
 /**
  * The athlete's surface, sculpted in the rest pose (arms down, palms to the
