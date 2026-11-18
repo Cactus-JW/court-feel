@@ -26,7 +26,8 @@ import { Post } from '../fx/post';
 import { Athlete, handSign } from '../game/athlete';
 import { bodyStats } from '../game/body';
 import { copyIntent, idleIntent, readIntent, readKeys, takeKey, type Intent } from '../game/intent';
-import { UserController } from '../game/userController';
+import type { Seat } from '../game/seat';
+import type { UserController } from '../game/userController';
 import { DebugOverlay, type DebugInfo } from '../ui/debug';
 import { BallEntity, type TouchKind } from '../game/ballEntity';
 import { BallView } from '../world/ballView';
@@ -53,7 +54,7 @@ import { kbd } from '../core/kbd';
 import { type Mode, type ModeId } from '../game/modes/mode';
 import { createMode } from '../game/modes/registry';
 import { makeRingTexture } from '../world/textures';
-import { UserActions } from '../game/userActions';
+import type { UserActions } from '../game/userActions';
 import { lessonStore } from './lessonStore';
 import { Pace } from './pace';
 import { QualityGovernor } from './quality';
@@ -75,7 +76,11 @@ export class Game implements AiHost {
   arena: Arena;
   readonly post: Post;
   readonly input: Input;
-  readonly user: UserController;
+  /** this machine's player: their athlete, their controller, the actions they hold. A second player would be a second seat */
+  readonly seat: Seat;
+  get user(): UserController {
+    return this.seat.controller;
+  }
   /** a listener that throws is reported, the others still run and the step carries on */
   readonly events = new Emitter<GameEvents>((err, type) => this.reportError(err, `'${String(type)}' event handler`, false));
   readonly debug: DebugOverlay;
@@ -86,7 +91,9 @@ export class Game implements AiHost {
   readonly ballView: BallView;
   readonly gizmos: DebugGizmos;
   readonly views = new Map<Athlete, AthleteView>();
-  readonly actions: UserActions;
+  get actions(): UserActions {
+    return this.seat.actions;
+  }
   readonly fx: Effects;
   private currentMode: Mode | null = null;
   modeId: ModeId = 'spike';
@@ -168,7 +175,12 @@ export class Game implements AiHost {
   /** test hook: the user's athlete is driven by the team AI */
   autoUser = false;
   /** the serve the player has picked (keys 1-3 in the Serve drill): their next toss is that serve's toss */
-  serveKind: ServeKind = 'float';
+  get serveKind(): ServeKind {
+    return this.seat.serveKind;
+  }
+  set serveKind(kind: ServeKind) {
+    this.seat.serveKind = kind;
+  }
   /**
    * Errors caught by the game: a frame or an event handler that threw. `fatal` means the
    * game has stopped (frames kept throwing). Without a handler they go to the console.
@@ -200,7 +212,6 @@ export class Game implements AiHost {
       setAssist: (a) => (a.isUser ? this.settings.setAimAssist : 0.3),
       setByFeel: () => !this.settings.setRing,
       aimTargetFor: (a, out) => this.aimTargetFor(a, out),
-      userAimYaw: () => this.user.intent.yaw,
       contact: (ev) => this.onContact(ev),
       aiContact: (athlete, kind, speed) => this.events.emit('aiContact', { athlete, kind, speed }),
       ballEvent: (e) => this.events.emit('ballEvent', e),
@@ -233,7 +244,6 @@ export class Game implements AiHost {
     this.applyVenue();
     this.post.preRender = () => this.arena.reflection.render(this.rig.camera);
     this.input = new Input(this.renderer.domElement);
-    this.user = new UserController();
     this.debug = new DebugOverlay(container);
     this.hud = new Hud(container);
     this.hud.camera = this.rig.camera;
@@ -267,13 +277,13 @@ export class Game implements AiHost {
     this.aimReticle.renderOrder = 4;
     this.scene.add(this.aimReticle);
 
-    this.me = new Athlete('OH', 1, { body: settings.bodies.OH, hand: settings.hand });
-    this.me.isUser = true;
+    this.seat = this.sim.addSeat(new Athlete('OH', 1, { body: settings.bodies.OH, hand: settings.hand }), {
+      inputTime: () => this.inputTime(),
+      tutorial: { ownsButtons: () => this.tutorial.ownsButtons(), quiet: () => this.tutorial.quiet() },
+      notePress: (err, contactT) => this.notePress(err, contactT),
+    });
     this.me.place(-3.2, 4.5, 0);
     this.addAthlete(this.me);
-    this.user.athlete = this.me;
-    this.actions = new UserActions(this);
-    this.sim.actions = this.actions;
     this.fx = new Effects(this, container);
     // the venue was applied above, before there was a ball or any sound: a saved or linked venue starts with its own
     this.applyVenueToBallAndSound();
@@ -437,11 +447,10 @@ export class Game implements AiHost {
     this.position = pos;
     const old = this.me;
     const a = new Athlete(pos, 1, { body: this.settings.bodies[pos], hand: this.settings.hand });
-    a.isUser = true;
     this.removeAthlete(old);
+    // the seat's athlete: it is the player's from here on
     this.me = a;
     this.addAthlete(a, 1);
-    this.user.athlete = a;
   }
 
   /** the user's model has to be rebuilt for a new height (done once per frame at most, while a slider drags) */
@@ -623,7 +632,7 @@ export class Game implements AiHost {
       if (this.tutorial.ownsButtons())
         return out.set(a.pos.x, 0, -a.side * (this.tutorial.serving ? TUTORIAL.serveAimDepth : TUTORIAL.aimDepth));
       const from = a.action && a.action.kind === 'swing' ? a.action.contactPoint : a.pos;
-      const look = this.user.intent;
+      const look = this.sim.seatOf(a)?.intent ?? this.user.intent;
       return aimTargetFromLook(from.x, from.z, look.yaw, look.pitch, look.firstPerson, a.side, out);
     }
     return out.copy(a.aiAim);
