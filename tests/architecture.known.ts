@@ -6,18 +6,16 @@
 // entries when it rebases; nothing else adds to them. One thing can look like an addition and is
 // not: a refactor step that takes a breach out of the simulation can leave it with `Game`, the
 // shell that still builds the display (the ball's meshes became `game.ts -> world/ballView.ts`).
-// That is the same breach, one step nearer to where it ends. The same goes for `Game` itself: it is
-// the app's shell (src/app/game.ts), and each file below the app that imports it is listed until it
-// is handed a narrow host of its own, as the brains were (`AiHost`). Keep each list sorted, one entry per line.
+// That is the same breach, one step nearer to where it ends. `Game` itself is the app's shell
+// (src/app/game.ts) and nothing below the app imports it: each part is handed a narrow host of its
+// own (`AiHost`, `DrillHost`, `TutorialHost`, `UserActionsHost`, `EffectsHost`, `TouchHost`).
+// Keep each list sorted, one entry per line.
 
 /** imports that reach a layer the importing file may not see, as 'importer -> imported' (type-only imports count) */
 export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/athlete.ts -> src/character/rig.ts',
   'src/game/body.ts -> src/character/rig.ts',
-  'src/game/modes/mode.ts -> src/app/game.ts',
   'src/game/modes/mode.ts -> src/world/textures.ts',
-  'src/game/modes/receiveDrill.ts -> src/app/game.ts',
-  'src/game/modes/registry.ts -> src/app/game.ts',
   'src/game/modes/serveDrill.ts -> src/fx/approachGuide.ts',
   'src/game/modes/spikeDrill.ts -> src/fx/approachGuide.ts',
   'src/game/userController.ts -> src/camera/cameraRig.ts',

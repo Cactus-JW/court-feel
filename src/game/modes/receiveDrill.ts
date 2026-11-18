@@ -10,8 +10,7 @@ import type { ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { attackHeight, laneFor, SETTER_SPOT, SETTER_TARGET } from '../plays';
 import { kbd } from '../../core/kbd';
-import { makeFloorRing, Mode } from './mode';
-import type { Game } from '../../app/game';
+import { makeFloorRing, Mode, type DrillHost } from './mode';
 
 /** where the user receives from, by position */
 const RECEIVE_SPOT: Record<PositionId, { x: number; z: number }> = {
@@ -25,7 +24,7 @@ const RECEIVE_SPOT: Record<PositionId, { x: number; z: number }> = {
 type Phase = 'intro' | 'feed' | 'live' | 'result';
 
 /** 0-3 pass rating from where the ball will come down near the setter */
-export function ratePass(g: Game, side: 1 | -1): { rating: number; dist: number; over: boolean } {
+export function ratePass(g: Pick<DrillHost, 'ball' | 'env' | 'simTime'>, side: 1 | -1): { rating: number; dist: number; over: boolean } {
   const pred = g.ball.ensurePrediction(g.env, g.simTime);
   const t = pred.descendThrough(2.35, g.simTime);
   const target = { x: SETTER_TARGET.x * side, z: SETTER_TARGET.z * side };
