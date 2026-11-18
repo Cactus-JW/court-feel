@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import {
-  ASSIST,
   CAMERA,
   CHARACTER,
   COURT,
@@ -55,6 +54,7 @@ import { createMode } from '../game/modes/registry';
 import { makeRingTexture } from '../world/textures';
 import { UserActions } from '../game/userActions';
 import { lessonStore } from './lessonStore';
+import { Pace } from './pace';
 import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
 import { Effects } from '../fx/effects';
 import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tutorial';
@@ -94,9 +94,18 @@ export class Game implements AiHost {
 
   private lastRenderSimT = 0;
   private accum = 0;
-  timeScale = 1;
+  /** how fast the play runs: the slow-mo assists, the lesson's clock and the hit-stop (src/app/pace.ts) */
+  readonly pace = new Pace();
+  get timeScale(): number {
+    return this.pace.timeScale;
+  }
+  set timeScale(v: number) {
+    this.pace.timeScale = v;
+  }
   /** the game speed from the slow-mo assists right now (the set bot times its frames by it) */
-  slowmo = 1;
+  get slowmo(): number {
+    return this.pace.slowmo;
+  }
   /** the set coming down onto the user's hands (refreshed each frame), for the set slow-mo and the timing ring */
   private setPrev: SetPreview | null = null;
   /** the set coming to you, before you are under it: the bar shows early when the ball is yours to set */
@@ -124,9 +133,13 @@ export class Game implements AiHost {
   }
   private setSpot!: SetSpot;
   private spotP = { x: 0, y: 0, z: 0 };
-  /** the lesson's clock: 1 real time, slower through a taught rep, 0 while the ball waits for the player */
-  tutor = 1;
-  hitStop = 0;
+  /** seconds the play holds still after a clean hit: the effects ask for it, the pace spends it */
+  get hitStop(): number {
+    return this.pace.hitStop;
+  }
+  set hitStop(v: number) {
+    this.pace.hitStop = v;
+  }
   paused = false;
   private last = 0;
   private fpsAcc = 0;
@@ -501,7 +514,7 @@ export class Game implements AiHost {
 
   /** Skip: don't stay frozen for a frame after the lesson ends */
   snapTutor(): void {
-    this.tutor = 1;
+    this.pace.tutor = 1;
   }
 
   stopMode(): void {
@@ -928,38 +941,22 @@ export class Game implements AiHost {
     const step = 1 / SIM.hz;
     // slow-mo assist while lining up a contact: a spike's, so not in a jump set (it has its own)
     // unless you swing at the ball
-    // choosing a play: the game waits for you (it runs, slowly)
-    let slowTarget = this.wheel.open ? ASSIST.playWheelSlow : 1;
     const swinging = this.me.airIntent !== 'set' || this.me.action?.kind === 'windup';
     const dip = (this.settings.slowmoAssist || this.tutorial.wantsContactDip()) && this.me.state === 'air' && swinging && this.idealValid;
-    if (dip) {
-      const until = this.idealCache.t - this.simTime;
-      if (until > 0 && until < ASSIST.slowmoWindow && this.idealCache.d < this.contact.reach(this.me) + 0.4)
-        slowTarget = ASSIST.slowmoScale;
-    }
     // your set (Settings: Set slow-mo): time slows for the catch, and more while the ball loads in
     // your hands, the same on every level; only when you are under the ball or have pressed
     const sp = this.inMenu ? null : this.contact.setPreview(this.me);
     this.setPrev = sp && (sp.pressed || sp.absorbing || sp.centreD < this.contact.setReach(this.me) + 0.4) ? sp : null;
     this.setComing = sp;
-    if (this.setPrev && this.settings.setSlowmo) {
-      const until = this.setPrev.tIdeal - this.simTime;
-      if (this.setPrev.absorbing) slowTarget = Math.min(slowTarget, ASSIST.setSlowmoLoad);
-      else if (until < ASSIST.setSlowmoWindow && until > -TIMING.setCatchLate) slowTarget = Math.min(slowTarget, ASSIST.setSlowmoCatch);
-    }
-    this.slowmo = lerp(this.slowmo, slowTarget, damp(12, realDt));
-    // the lesson's own clock never stacks on top of the assist dip. A moment the ball waits at
-    // is taken at once (and never simulated past: `stopAt`); everything else eases.
-    const tutorTarget = this.tutorial.timeScale();
-    this.tutor = this.tutorial.snapScale() ? tutorTarget : lerp(this.tutor, tutorTarget, damp(10, realDt));
+    // a moment the lesson's ball waits at is never simulated past: `stopAt`
     const stopAt = this.tutorial.stopAt();
-    const scale = Math.min(this.slowmo, this.tutor);
-    let simDt = realDt * this.timeScale * scale;
-    if (this.hitStop > 0) {
-      const used = Math.min(this.hitStop, realDt);
-      this.hitStop -= used;
-      simDt = (realDt - used) * this.timeScale * scale;
-    }
+    const simDt = this.pace.simSeconds(realDt, {
+      wheelOpen: this.wheel.open,
+      swing: dip ? { until: this.idealCache.t - this.simTime, inReach: this.idealCache.d < this.contact.reach(this.me) + 0.4 } : null,
+      set:
+        this.setPrev && this.settings.setSlowmo ? { until: this.setPrev.tIdeal - this.simTime, absorbing: this.setPrev.absorbing } : null,
+      lesson: { scale: this.tutorial.timeScale(), snap: this.tutorial.snapScale() },
+    });
     this.accum += simDt;
     const ts = performance.now();
     let n = 0;
