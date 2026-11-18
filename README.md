@@ -1032,6 +1032,9 @@ in `SETTING_RANGES` in `src/config.ts`.
 
 ## Testing
 
+The principle behind these checks, and where a new rule should live, is in
+[docs/verification.md](docs/verification.md).
+
 CI (`.github/workflows/ci.yml`) runs two jobs on every pull request and on
 `main`: **check** (typecheck, ESLint, Prettier, unit tests, production build)
 and **e2e** (below). Both should be required checks for merging into `main`.
