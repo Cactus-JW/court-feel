@@ -24,7 +24,6 @@ export const KNOWN_IMPORTS: readonly string[] = [
   'src/game/modes/spikeDrill.ts -> src/fx/approachGuide.ts',
   'src/game/tutorial.ts -> src/app/game.ts',
   'src/game/tutorial.ts -> src/game/modes/mode.ts',
-  'src/game/userActions.ts -> src/app/game.ts',
   'src/game/userController.ts -> src/camera/cameraRig.ts',
   'src/ui/touchControls.ts -> src/app/game.ts',
 ];
