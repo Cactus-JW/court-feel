@@ -42,6 +42,13 @@ The reason a mechanic works the way it does is written down. Read the doc commen
 
 When you make a call that someone would otherwise argue about again, write the reason down: in a doc comment next to the code, saying what was turned down, or as a record in `docs/adr/` when no single place in the code can hold it. [docs/adr/README.md](docs/adr/README.md) has the test and the format.
 
+## How to work on a change
+
+- **Approach before code.** For a change to the simulation (physics, timing, contacts, AI, a drill's rules), say first what the real court does, which tests will state it and which files it touches. Code written to see whether an approach works is thrown away, not tidied up and kept.
+- **The test comes first.** Write the test that states the real-court fact and watch it fail. Then write the code that passes it. A test written after the code tends to describe the code.
+- **Three failed attempts, then stop.** If a fix has not worked after three tries, stop and say what was tried, what each showed and what you would look at next. A fourth guess costs more than the question.
+- **A file that keeps growing is a prompt to look for a boundary**, not a failure. A large file with one job and a clear edge is fine. One that several features have to edit at once is where the next split belongs.
+
 ## Docs that move with a change
 
 - README: controls, modes, settings and `config.ts` sections. The start screen's key list (`src/ui/menu.ts`) and the in-game hints say the same things, so keep them in step.
