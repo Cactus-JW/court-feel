@@ -1,5 +1,5 @@
 import { BODY, CONTACT, POSITIONS, type BodyOverride, type PositionId, type PositionStats } from '../config';
-import { standingReach } from '../character/rig';
+import { standingReach } from './proportions';
 import { clamp } from '../core/mathx';
 
 /**
