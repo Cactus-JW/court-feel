@@ -4,7 +4,7 @@ import { Athlete } from './athlete';
 import { AIM_DEPTH, aimPitchFor, aimPitchRange, ContactSystem, tossGroove } from './contact';
 import { clamp, yawFromDir } from '../core/mathx';
 import type { V3 } from '../physics/ball';
-import type { Game } from './game';
+import type { Game } from '../app/game';
 import { planApproach, planQuick, type ApproachPlan } from './approach';
 import { quickSpot, setterTouchY } from './plays';
 import type { AiHost } from './brains';

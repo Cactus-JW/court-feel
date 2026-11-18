@@ -10,7 +10,7 @@ import type { ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
 import { attackHeight, laneFor, SETTER_SPOT, SETTER_TARGET } from '../plays';
 import { kbd, makeFloorRing, Mode } from './mode';
-import type { Game } from '../game';
+import type { Game } from '../../app/game';
 
 /** where the user receives from, by position */
 const RECEIVE_SPOT: Record<PositionId, { x: number; z: number }> = {

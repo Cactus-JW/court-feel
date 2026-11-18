@@ -1,7 +1,7 @@
 import { SERVE } from '../config';
 import { clamp01 } from '../core/mathx';
 import { tossFor } from './contact';
-import type { Game } from './game';
+import type { Game } from '../app/game';
 
 /**
  * Binds the user's buttons to athlete actions. Everything starts on the

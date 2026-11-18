@@ -9,7 +9,7 @@ import { Athlete } from '../src/game/athlete';
 import type { Touch } from '../src/game/ballEntity';
 import { applyCalls, syncRuns, type CallHitters } from '../src/game/callRuns';
 import { blockHands, ContactSystem, type ContactHost, type SetResult } from '../src/game/contact';
-import type { Game } from '../src/game/game';
+import type { Game } from '../src/app/game';
 import { attackHeight, laneFor, LANES, QUICK, quickSpot, SETTER_PLAYS, SETTER_TARGET } from '../src/game/plays';
 import { SetterCalls } from '../src/game/setterCalls';
 import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';

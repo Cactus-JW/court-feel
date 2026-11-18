@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { PositionId } from '../../config';
 import type { Athlete } from '../athlete';
 import type { ContactEvent } from '../contact';
-import type { Game } from '../game';
+import type { Game } from '../../app/game';
 import type { Outcome } from '../judge';
 import { makeRingTexture } from '../../world/textures';
 import { drillBall } from '../attempt';

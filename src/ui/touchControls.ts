@@ -2,7 +2,7 @@ import { PLAYER, TOUCH } from '../config';
 import { clamp01 } from '../core/mathx';
 import { TouchPad, type PadButton } from '../core/touchPad';
 import { ContactSystem } from '../game/contact';
-import type { Game } from '../game/game';
+import type { Game } from '../app/game';
 import { SET_PLAYS } from '../game/plays';
 import { SET_PICKS, type SetPick } from '../game/setterCalls';
 

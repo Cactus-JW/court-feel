@@ -2,7 +2,7 @@ import { PLAYER, SERVE, SERVE_KINDS, SIM, TIMING, TUTORIAL as T, type ServeKind 
 import { clamp } from '../core/mathx';
 import type { Athlete, Grade } from './athlete';
 import { ContactSystem, tossGroove } from './contact';
-import type { Game } from './game';
+import type { Game } from '../app/game';
 import { kbd } from './modes/mode';
 
 /**

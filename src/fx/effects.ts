@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BALL, FX } from '../config';
 import { clamp, clamp01, lerp, smooth01 } from '../core/mathx';
-import type { Game } from '../game/game';
+import type { Game } from '../app/game';
 import type { AthleteView } from '../character/athleteView';
 import type { ContactEvent } from '../game/contact';
 import { AttemptTracker, type Attempt } from '../game/attempt';
