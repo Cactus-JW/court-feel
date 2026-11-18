@@ -1,0 +1,29 @@
+{
+  "comment": "The layers of docs/adr/0010, lowest first, and what each may import besides itself. One table for the architecture test (tests/architecture.scan.ts) and for the editor's lint rule (eslint.config.js). The folder names are today's: when a file moves, only `folders` changes. The first matching folder wins.",
+  "mayImport": {
+    "config": [],
+    "core": ["config"],
+    "physics": ["config"],
+    "sim": ["physics", "core", "config"],
+    "ai": ["sim", "physics", "core", "config"],
+    "drills": ["ai", "sim", "physics", "core", "config"],
+    "display": ["drills", "ai", "sim", "physics", "core", "config"],
+    "app": ["display", "drills", "ai", "sim", "physics", "core", "config"]
+  },
+  "folders": [
+    ["src/config.ts", "config"],
+    ["src/main.ts", "app"],
+    ["src/app/", "app"],
+    ["src/core/", "core"],
+    ["src/physics/", "physics"],
+    ["src/ai/", "ai"],
+    ["src/game/modes/", "drills"],
+    ["src/game/", "sim"],
+    ["src/ui/", "display"],
+    ["src/fx/", "display"],
+    ["src/audio/", "display"],
+    ["src/camera/", "display"],
+    ["src/world/", "display"],
+    ["src/character/", "display"]
+  ]
+}

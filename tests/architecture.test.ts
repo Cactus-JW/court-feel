@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { KNOWN_DOM, KNOWN_FAKE_GAME, KNOWN_IMPORTS, KNOWN_SCENE } from './architecture.known';
-import { filesUnder, importsOf, layerOf, MAY_IMPORT, read, sceneClassesIn, SIMULATION, touchesDom, type Layer } from './architecture.scan';
+import { KNOWN_CLOCK, KNOWN_DOM, KNOWN_FAKE_GAME, KNOWN_IMPORTS, KNOWN_SCENE } from './architecture.known';
+import {
+  clocksAndDiceIn,
+  DETERMINISTIC,
+  filesUnder,
+  importCircles,
+  importsOf,
+  layerOf,
+  MAY_IMPORT,
+  read,
+  sceneClassesIn,
+  SIMULATION,
+  touchesDom,
+  type Layer,
+} from './architecture.scan';
 
 // The shape of the code (docs/adr/0010): the simulation runs on its own, and every import points
 // down. The code is on its way there. What still breaks the rule is listed by name in
@@ -64,8 +77,13 @@ describe('architecture: every import points down', () => {
     expect([...files, ...packages]).toEqual([]);
   });
 
+  it('no two files import each other in a circle, however long the way round', () => {
+    // type-only imports do not count: they are gone at run time
+    expect(importCircles(SRC)).toEqual([]);
+  });
+
   it('the known list is sorted and has no entry twice', () => {
-    for (const list of [KNOWN_IMPORTS, KNOWN_DOM, KNOWN_SCENE, KNOWN_FAKE_GAME]) {
+    for (const list of [KNOWN_IMPORTS, KNOWN_DOM, KNOWN_SCENE, KNOWN_FAKE_GAME, KNOWN_CLOCK]) {
       expect([...list]).toEqual([...new Set(list)].sort());
     }
   });
@@ -79,6 +97,16 @@ describe('architecture: the simulation runs with no page and no renderer', () =>
   it('no simulation file builds scene objects, apart from the ones already known: three.js is maths there', () => {
     const building = inSimulation.filter((f) => sceneClassesIn(f).length > 0);
     expect(drift(building, KNOWN_SCENE, 'the simulation uses three.js for maths only')).toEqual([]);
+  });
+});
+
+describe('architecture: the same start gives the same play', () => {
+  it('physics, the simulation, the brains and the drills read no clock and roll no dice of their own', () => {
+    // time comes from the simulation's clock and chance from its one seeded stream: anything else
+    // makes two runs differ, which breaks the trace comparison, a replay and a second player
+    const repeatable = layered.filter((f) => f.layer && DETERMINISTIC.includes(f.layer)).map((f) => f.file);
+    const reaching = repeatable.filter((f) => clocksAndDiceIn(f).length > 0);
+    expect(drift(reaching, KNOWN_CLOCK, 'use the simulation clock and its random stream')).toEqual([]);
   });
 });
 
