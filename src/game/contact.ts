@@ -990,6 +990,8 @@ export class ContactSystem {
     const ball = h.ball;
     const c = this.setCatch(a);
     const lt = ball.lastTouch;
+    // a ball our team has set or attacked is to hit (or gone): never one to set again
+    if (lt && lt.side === a.side && (lt.kind === 'set' || lt.kind === 'spike' || lt.kind === 'tip')) return false;
     const friendly = !lt || lt.side === a.side || lt.kind === 'feed';
     if (!c) {
       // it has just come down through the hands: still a (late) catch while it is within reach,
