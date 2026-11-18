@@ -13,6 +13,8 @@ export interface Touch {
   kind: TouchKind;
   t: number;
   side: 1 | -1 | 0;
+  /** a block the ball came back off softly, to the hitter's side (recycled: `CONTACT.recycleP`) */
+  recycle?: boolean;
 }
 
 /**
