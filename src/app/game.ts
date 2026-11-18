@@ -55,6 +55,7 @@ import { makeRingTexture } from '../world/textures';
 import { UserActions } from '../game/userActions';
 import { lessonStore } from './lessonStore';
 import { Pace } from './pace';
+import { QualityGovernor } from './quality';
 import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
 import { Effects } from '../fx/effects';
 import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tutorial';
@@ -713,33 +714,19 @@ export class Game implements AiHost {
 
   // ------------------------------------------------------------ quality governor
   /** 0 = full (MSAA, 1.5x DPR cap), 1 = no MSAA + 1x DPR, 2 = 0.8x scale + 1024 shadows + no floor mirror */
-  quality = 0;
-  private qAcc = 0;
-  private qFrames = 0;
-  private qCooldown = 3;
-  private qSlow = 0;
+  get quality(): number {
+    return this.governor.level;
+  }
+  private readonly governor = new QualityGovernor();
 
   private governQuality(dt: number): void {
     if (this.manual || document.hidden) return;
-    this.qCooldown -= dt;
-    this.qAcc += dt;
-    this.qFrames++;
-    if (this.qAcc < 2) return;
-    const avg = this.qAcc / this.qFrames;
-    this.qAcc = 0;
-    this.qFrames = 0;
-    if (this.qCooldown > 0 || this.quality >= 2) return;
-    // two slow windows in a row (below ~50 fps for 4 s): step down one level
-    this.qSlow = avg > 1 / 50 ? this.qSlow + 1 : 0;
-    if (this.qSlow >= 2) {
-      this.qSlow = 0;
-      this.setQuality(this.quality + 1);
-    }
+    const next = this.governor.frame(dt);
+    if (next !== null) this.setQuality(next);
   }
 
   setQuality(q: number): void {
-    this.quality = Math.max(0, Math.min(2, q));
-    this.qCooldown = 4;
+    this.governor.set(q);
     const dpr = window.devicePixelRatio || 1;
     this.post.setSamples(this.quality === 0 ? 4 : 0);
     this.arena.reflection.setEnabled(this.quality < 2);

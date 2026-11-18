@@ -1580,6 +1580,26 @@ export const AUDIO = {
  */
 export const PLAYBOOK = { minGap: 0.6, nameMax: 16 } as const;
 
+/**
+ * The quality governor (src/app/quality.ts): the picture gets cheaper when the machine cannot keep
+ * up, so the play never slows. Level 0 is full (MSAA, pixel ratio up to 1.5), 1 has no MSAA and a
+ * pixel ratio of 1, `lowest` draws at 0.8x with smaller shadows and no floor mirror. Tuned on a
+ * laptop with integrated graphics.
+ */
+export const QUALITY = {
+  lowest: 2,
+  /** frames are averaged over this long (s) */
+  window: 2,
+  /** a window averaging below this many frames a second is slow */
+  slowFps: 50,
+  /** this many slow windows in a row step the quality down one level */
+  slowWindows: 2,
+  /** no step for this long after the game starts (s): loading costs frames */
+  startCooldown: 3,
+  /** nor for this long after a change (s): the change itself costs frames */
+  changeCooldown: 4,
+} as const;
+
 export const AI = {
   reactionTime: 0.18,
   /**
