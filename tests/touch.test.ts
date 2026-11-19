@@ -6,6 +6,7 @@ import { TouchPad, type PadButton, type PadInput } from '../src/core/touchPad';
 import { Athlete } from '../src/game/athlete';
 import { readIntent } from '../src/game/intent';
 import { UserController } from '../src/game/userController';
+import { Hud } from '../src/ui/hud';
 
 const DT = 1 / SIM.hz;
 
@@ -282,5 +283,17 @@ describe('touch pad: hold buttons', () => {
     expect(input.held.size).toBe(0);
     expect(input.stick.active).toBe(false);
     expect(pad.pointers.size).toBe(0);
+  });
+});
+
+describe('touch: a drill says buttons, not keys', () => {
+  it("a hitter's intro names the route chips and ROUTES, not the keys 1-5 and C", () => {
+    const spike = 'Approach: Shift + W · plant: Space · hold LMB, release to hit · 1-5 call your route · C see them';
+    expect(Hud.translateText(spike)).toBe(
+      'Approach: the stick out · plant: JUMP · hold HIT, release to hit · the chips call your route · ROUTES see them',
+    );
+    expect(Hud.translateText('Play your position · win the point · 1-4 call your route · C see them')).toBe(
+      'Play your position · win the point · the chips call your route · ROUTES see them',
+    );
   });
 });
