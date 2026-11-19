@@ -1125,7 +1125,9 @@ export class TeamAI {
    * only when nobody else is close). Someone is always sent (a desperate dig beats
    * watching it drop) unless `exclude` was the only option. Given the time until the ball is
    * down (`budget`: given for a ball off a block and a second ball), a ball the libero gets to with
-   * `AI.pick.libero` s to spare is the libero's, whoever else is near.
+   * `AI.pick.libero` s to spare is the libero's, whoever else is near. Given `down` (s until it is
+   * down), the user's seam preference is only for a ball they get to: one they don't goes to
+   * whoever is least late, never across the court to the user over the players beside it.
    */
   private pickReceiver(
     p: V3,
@@ -1134,6 +1136,7 @@ export class TeamAI {
     exclude2: Athlete | null = null,
     budget?: number,
     margin = AI.pick.libero,
+    down?: number,
   ): Athlete | null {
     if (budget !== undefined && this.liberoGets(p, budget, exclude, exclude2, margin)) return this.players.get('L') ?? null;
     let best: Athlete | null = null;
@@ -1144,8 +1147,9 @@ export class TeamAI {
       // (a serve is received in lanes: the ball in front of a passer is theirs)
       let t = this.reachTime(a, p, serve ? AI.pick.lane : 1);
       if (slot === 'S') t += AI.pick.setter; // the setter digs only if nobody else is close
-      // the seam: the libero's, or the user's (one preference, not both added up)
-      if (slot === 'L' || a.isUser) t -= AI.pick.seam;
+      // the seam: the libero's, or the user's (one preference, not both added up); the user's only on
+      // a ball they get to, so "your ball" never goes across the court past the players beside it
+      if (slot === 'L' || (a.isUser && (down === undefined || t <= down))) t -= AI.pick.seam;
       if (t < bestT) {
         bestT = t;
         best = a;
@@ -1386,7 +1390,7 @@ export class TeamAI {
         if (this.receiver && this.receiverFor === lt && !strayed && !takeOver) {
           setJob(this.receiver, 'receive');
         } else if (comingToUs && tDown > 0 && (inBounds || mustPlay)) {
-          let r = this.pickReceiver(p, serve, exclude, null, claim ? tDown - now : undefined, margin);
+          let r = this.pickReceiver(p, serve, exclude, null, claim ? tDown - now : undefined, margin, tDown - now);
           if (r?.isUser && L && !L.isUser && seam(r) && this.liberoGets(p, tDown - now, exclude, null, margin)) r = L;
           this.receiver = r;
           this.receiverFor = lt;
@@ -1493,7 +1497,7 @@ export class TeamAI {
                   if (!this.secondSetter) {
                     // nobody whose job it is: the closest plays it, and sets it if they get under it in
                     // time (the user plays their own ball; a hitter already on its approach keeps running)
-                    const r = this.pickReceiver(p, false, lt?.athlete ?? null, helped ? caller : null, tDown - now);
+                    const r = this.pickReceiver(p, false, lt?.athlete ?? null, helped ? caller : null, tDown - now, undefined, tDown - now);
                     const hb = r ? this.brains.get(r)?.hitter : null;
                     const running = !!hb && hb.phase !== 'ready' && hb.phase !== 'recover';
                     if (r && !r.isUser && !running && spare(r) >= 0) this.secondSetter = r;
@@ -1546,7 +1550,8 @@ export class TeamAI {
           } else if (lt?.kind !== 'set' || (h && !h.isUser && hb && !hb.hitter) || stranded) {
             if (this.freeFor !== lt) {
               this.freeFor = lt;
-              this.freeAthlete = comingToUs && tDown > 0 ? this.pickReceiver(p, false, lt?.athlete ?? null) : null;
+              this.freeAthlete =
+                comingToUs && tDown > 0 ? this.pickReceiver(p, false, lt?.athlete ?? null, null, undefined, undefined, tDown - now) : null;
             }
             const r = this.freeAthlete;
             if (r && lt?.athlete !== r) setJob(r, 'free');
