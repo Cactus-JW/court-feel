@@ -264,6 +264,13 @@ function snapshot() {
   const r2 = (n) => +n.toFixed(2);
   /** on screen: the element and every ancestor are displayed (a section that is not showing still has its children) */
   const vis = (e) => !!e && e.getClientRects().length > 0;
+  /** an element's words, one space apart, without its key caps ("3 Shoot Quick", not "3ShootQuickC") */
+  const words = (e) => {
+    const out = [];
+    const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) if (!n.parentElement.closest('kbd')) out.push(n.textContent.trim());
+    return out.filter(Boolean).join(' ');
+  };
   /** a button's words without its key cap ("PLAY", not "PLAYENTER") */
   const label = (b) => {
     if (!b) return null;
@@ -369,6 +376,8 @@ function snapshot() {
         banner: shown('.hud-banner') ? txt('.hud-banner') : null,
         message: shown('.hud-msg') ? txt('.hud-msg') : null,
         call: shown('.callout') ? { who: txt('.callout-who'), word: txt('.callout-word'), sub: txt('.callout-sub') } : null,
+        // a hitter's route strip at the bottom: the route, its tempo, then the setter's play once one is called
+        route: disp('.route-strip') ? words(q('.route-strip')) || null : null,
       }
     : null;
   const m = g.mode;
@@ -438,7 +447,7 @@ function digest(s) {
   if (s.hud) {
     d.title = s.hud.title;
     d.score = s.hud.score;
-    for (const k of ['grade', 'banner', 'message', 'call']) if (s.hud[k]) d[k] = s.hud[k];
+    for (const k of ['grade', 'banner', 'message', 'call', 'route']) if (s.hud[k]) d[k] = s.hud[k];
   }
   if (s.game) {
     d.clock = s.game.clock;
