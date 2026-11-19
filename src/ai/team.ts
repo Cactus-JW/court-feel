@@ -8,7 +8,7 @@ import type { AiHost, Brain } from '../game/brains';
 import { applyCalls, callOptions, runCalls, sideLane, syncRuns, type CallHitters } from '../game/callRuns';
 import { COMBOS, type Combo } from '../game/combos';
 import type { TeamPlayView } from '../game/routes';
-import { clashes, SetterCalls, type SetterKey } from '../game/setterCalls';
+import { clashes, clashWith, SETTER_KEYS, SetterCalls, type SetterKey } from '../game/setterCalls';
 import { AI_TOUCH, planSetJump } from '../game/setJump';
 import {
   attackHeight,
@@ -55,6 +55,11 @@ export interface TeamPlay {
   state: 'signalled' | 'running' | 'off';
   /** each hitter's route in it (yours, when you are a hitter of ours, is your own call) */
   calls: SetterCalls;
+  /**
+   * AI hitters who gave way to you: you changed your route onto their spot once the play was
+   * running (too late for the setter to call another). They wait for a high ball and get no set.
+   */
+  yields: Set<SetterKey>;
 }
 
 /** the three who pass the serve (the two outsides and the libero) */
@@ -589,8 +594,17 @@ export class TeamAI {
   private lastTouchRef: unknown = null;
   /** set selection bias towards the user (when the user is a front-row hitter) */
   userSetBias = 0.6;
+  private ownCall: SetPlay | null = null;
   /** the set the user has called for themselves (keys 1-5); null = the first of their position's */
-  userPlay: SetPlay | null = null;
+  get userPlay(): SetPlay | null {
+    return this.ownCall;
+  }
+  /** your call wins whenever you make it: a play already called is fitted round it again (`fitPlay`) */
+  set userPlay(p: SetPlay | null) {
+    if (p === this.ownCall) return;
+    this.ownCall = p;
+    this.fitPlay();
+  }
   /** our AI setter runs combination plays (`AI.plays`; the Mini Rally turns it on) */
   playsOn = false;
   /** the plays our setter picks from (the Mini Rally gives the user's team the play wheel, saved plays included) */
@@ -724,16 +738,68 @@ export class TeamAI {
     const S = this.players.get('S');
     if (!this.playsOn || !S || S.isUser || this.play) return;
     if (this.playRng.next() >= AI.plays[on]) return;
+    const combo = this.pickFit();
+    if (!combo) return;
+    const calls = new SetterCalls();
+    calls.setCombo(combo);
+    this.play = { combo, on, state: 'signalled', calls, yields: new Set() };
+    applyCalls(this.playHitters(), calls, false);
+  }
+
+  /** a play from our pool that fits round your route (`playRng`), with your route in it; null: none fits */
+  private pickFit(): Combo | null {
     const you = this.userRoute();
     const fits = this.playPool()
       .map((c) => (you ? { ...c, calls: { ...c.calls, [you.key]: you.play.short } } : c))
       .filter((c) => !clashes(c.calls));
-    if (!fits.length) return;
-    const combo = fits[Math.min(fits.length - 1, Math.floor(this.playRng.next() * fits.length))];
-    const calls = new SetterCalls();
-    calls.setCombo(combo);
-    this.play = { combo, on, state: 'signalled', calls };
-    applyCalls(this.playHitters(), calls, false);
+    if (!fits.length) return null;
+    return fits[Math.min(fits.length - 1, Math.floor(this.playRng.next() * fits.length))];
+  }
+
+  /** the play's calls as the hitters run them: yours in it, and 'High' for a hitter who gave way to you */
+  private playCalls(p: TeamPlay): Record<SetterKey, string> {
+    const calls = { ...p.combo.calls };
+    for (const k of p.yields) calls[k] = 'High';
+    const you = this.userRoute();
+    if (you) calls[you.key] = you.play.short;
+    return calls;
+  }
+
+  /**
+   * You changed your route after the play was called. Signalled (before our pass): the setter
+   * calls a play that fits round your new route instead (from the plays that fit, as `decidePlay`),
+   * or none when none does. Running (the pass is played, too late to call another): the AI hitter
+   * whose spot you took gives way, waits for a high ball and gets no set, so two hitters never go
+   * up on one spot. Off: the base sets, nothing to fit.
+   */
+  private fitPlay(): void {
+    const p = this.play;
+    const you = this.userRoute();
+    if (!p || !you || p.state === 'off') return;
+    if (!clashes(this.playCalls(p))) return;
+    if (p.state === 'signalled') {
+      const combo = this.pickFit();
+      if (!combo) {
+        this.endPlay();
+        return;
+      }
+      p.combo = combo;
+      p.calls.setCombo(combo);
+      applyCalls(this.playHitters(), p.calls, false);
+      return;
+    }
+    const hitters = this.playHitters();
+    for (let k = clashWith(this.playCalls(p), you.key, you.play.short); k; k = clashWith(this.playCalls(p), you.key, you.play.short)) {
+      p.yields.add(k);
+      p.calls.forceHigh(k);
+      const h = hitters.get(k);
+      if (!h) continue;
+      // a run already under way is too late to stop: they pull out of it, and no set goes to them
+      h.brain.holdRun();
+      h.brain.lane = sideLane(p.calls.highLane(k), this.side);
+      h.brain.inFront = undefined;
+      h.brain.passToSetter = null;
+    }
   }
 
   /** the play is over (their touch, a dead ball): every hitter back to their own lane */
@@ -776,8 +842,13 @@ export class TeamAI {
     this.freeRolled = false;
     const p = this.play;
     if (!p || p.state !== 'signalled' || this.touches !== 1 || this.playPassFor === lt) return;
-    if (lt.kind !== 'pass' && lt.kind !== 'dig' && lt.kind !== 'free') return;
     this.playPassFor = lt;
+    // our first touch was no pass (an overpass attacked straight back): no play off it, and their
+    // next touch ends it, so the next free ball can bring a new one
+    if (lt.kind !== 'pass' && lt.kind !== 'dig' && lt.kind !== 'free') {
+      this.playOff();
+      return;
+    }
     const touch = this.setterTouch(g);
     const good = !!touch && (p.on === 'receive' ? touch.off <= AI.quickWeight.perfectOff : touch.off <= AI.outOfSystem);
     if (!touch || !good) {
@@ -821,7 +892,7 @@ export class TeamAI {
     for (const o of callOptions(g, hitters, p.calls, false)) {
       const k = o.key as SetterKey;
       const h = hitters.get(k);
-      if (!h || h.a === setter || h.a.state === 'dive') continue;
+      if (!h || h.a === setter || h.a.state === 'dive' || p.yields.has(k)) continue;
       const quick = 'onTime' in o;
       if (quick && !o.onTime) continue;
       const running = h.brain.phase === 'approach' || h.brain.phase === 'load' || h.brain.phase === 'air';
@@ -857,11 +928,13 @@ export class TeamAI {
   playView(): TeamPlayView | null {
     const p = this.play;
     if (!p) return null;
-    const you = this.userRoute();
-    const calls = { ...p.combo.calls };
-    if (you) calls[you.key] = you.play.short;
-    return { name: p.combo.name, idea: p.combo.idea, calls, on: p.on, state: p.state };
+    const calls = this.playCalls(p);
+    // the same object while nothing in it changed: the HUD redraws only on a change
+    const key = `${p.combo.name}|${p.on}|${p.state}|${SETTER_KEYS.map((k) => calls[k]).join('|')}`;
+    if (this.view?.key !== key) this.view = { key, v: { name: p.combo.name, idea: p.combo.idea, calls, on: p.on, state: p.state } };
+    return this.view.v;
   }
+  private view: { key: string; v: TeamPlayView } | null = null;
 
   /** where a first ball (pass, dig) by `a` goes: the setter target, or high to the 3 m line when the setter plays it */
   firstBallTarget(a: Athlete): { x: number; y: number; z: number; apex: number } {
@@ -1022,6 +1095,8 @@ export class TeamAI {
       else {
         const set = this.playSet(g, setter, perfect);
         if (set) return set;
+        // nobody left to set on the play: the base sets, with the hitters back on their lanes
+        this.playOff();
       }
     }
     const user = this.user;
@@ -1127,7 +1202,9 @@ export class TeamAI {
    * down (`budget`: given for a ball off a block and a second ball), a ball the libero gets to with
    * `AI.pick.libero` s to spare is the libero's, whoever else is near. Given `down` (s until it is
    * down), the user's seam preference is only for a ball they get to: one they don't goes to
-   * whoever is least late, never across the court to the user over the players beside it.
+   * whoever is least late, never across the court to the user over the players beside it. (On a
+   * serve the times are scaled by `AI.pick.lane`, so they are not real seconds and that check is
+   * lenient there: lanes, not the clock, decide who passes a serve.)
    */
   private pickReceiver(
     p: V3,

@@ -340,7 +340,7 @@ const runs = [
   ['spike', 'MB'],
   ['spike', 'S'],
   ['spike', 'L'],
-  // spike drill routes (keys 2 and 3): hut / go, push / shoot, fast / back 2
+  // spike drill set calls (keys 2 and 3): go / inside 3, shoot / back quick, fast back / back 2
   ['spike', 'OH', 1],
   ['spike', 'OH', 2],
   ['spike', 'MB', 1],

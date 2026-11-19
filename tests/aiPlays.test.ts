@@ -135,6 +135,87 @@ describe('AI setters run combination plays (Mini Rally)', () => {
     expect(names.size).toBeGreaterThan(3);
   });
 
+  it('you change your route after the play is signalled: the setter calls one that fits round it', () => {
+    AI.plays.receive = 1;
+    const { team: t, rally } = team(1, 'OH');
+    const X = COMBOS.find((c) => c.name === 'X')!;
+    const tandem = COMBOS.find((c) => c.name === 'Tandem')!;
+    t.playPool = () => [X];
+    rally();
+    expect(t.playView()?.name).toBe('X');
+    // the 2 is hit where the opposite's X is: the X no longer fits, the tandem does
+    t.playPool = () => [X, tandem];
+    t.userPlay = SET_PLAYS.OH!.find((p) => p.short === '2')!;
+    const v = t.playView()!;
+    expect(v.name).toBe('Tandem');
+    expect(v.state).toBe('signalled');
+    expect(clashes(v.calls)).toBe(false);
+    // and the opposite runs the tandem's route, not the X
+    const opp = t.brains.get(t.players.get('OPP')!)!.hitter!;
+    expect(opp.lane.label).toBe('Opposite back set (red)');
+  });
+
+  it('you change your route and no play fits round it: the setter drops the play, every hitter back on their own lane', () => {
+    AI.plays.receive = 1;
+    const { team: t, rally } = team(1, 'OH');
+    t.playPool = () => COMBOS.filter((c) => c.name === 'X');
+    rally();
+    t.userPlay = SET_PLAYS.OH!.find((p) => p.short === '2')!;
+    expect(t.play).toBeNull();
+    const opp = t.brains.get(t.players.get('OPP')!)!.hitter!;
+    expect(opp.lane.label).toBe('Opposite back set (red)');
+  });
+
+  it('you change your route once the play is running: the team-mate in your way gives way (no set to their spot)', () => {
+    AI.plays.receive = 1;
+    const { team: t, rally, pass } = team(1, 'OH');
+    t.playPool = () => COMBOS.filter((c) => c.name === 'X');
+    rally();
+    pass(SETTER_TARGET.x, SETTER_TARGET.z);
+    expect(t.play?.state).toBe('running');
+    t.userPlay = SET_PLAYS.OH!.find((p) => p.short === '2')!;
+    const v = t.playView()!;
+    expect(v.calls.OH).toBe('2');
+    expect(v.calls.OPP).not.toBe('X');
+    expect(clashes(v.calls)).toBe(false);
+    const x = SET_PLAYS.OPP!.find((p) => p.short === 'X')!;
+    expect(t.brains.get(t.players.get('OPP')!)!.hitter!.lane.label).not.toBe(x.lane.label);
+  });
+
+  it('our first touch on their free ball is an attack (an overpass hit straight back): the play is off, and over at their touch', () => {
+    AI.plays.free = 1;
+    const { g, team: t, theirFree } = team(1, null);
+    theirFree();
+    expect(t.play?.state).toBe('signalled');
+    g.ball.lastTouch = { athlete: t.players.get('OH1')!, kind: 'spike', t: g.simTime, side: 1 };
+    g.simTime += DT;
+    t.step();
+    expect(t.play?.state).toBe('off');
+    // (their attack back: a dig of theirs coming over would be a free ball, and a new play on it)
+    g.ball.lastTouch = { athlete: null, kind: 'spike', t: g.simTime, side: -1 };
+    g.simTime += DT;
+    t.step();
+    expect(t.play).toBeNull();
+    // and their next free ball can bring a new play
+    theirFree();
+    expect(t.play?.state).toBe('signalled');
+  });
+
+  it('a running play with nobody left to set on it: the play is off, so the hitters are back on the lanes the base sets go to', () => {
+    AI.plays.receive = 1;
+    const { g, team: t, rally, pass } = team(1, null);
+    t.playPool = () => COMBOS.filter((c) => c.name === 'X');
+    rally();
+    pass(SETTER_TARGET.x, SETTER_TARGET.z);
+    expect(t.play?.state).toBe('running');
+    const S = t.players.get('S')!;
+    S.place(SETTER_SPOT.x, SETTER_SPOT.z, Math.PI / 2);
+    for (const slot of ['OH1', 'MB', 'OPP', 'OH2'] as const) t.players.get(slot)!.state = 'dive';
+    t.callSet(g, S);
+    expect(t.play?.state).toBe('off');
+    expect(t.brains.get(t.players.get('OPP')!)!.hitter!.lane.label).toBe('Opposite back set (red)');
+  });
+
   it("their setter's play is run on their side of the net: their opposite's X crosses on their court", () => {
     AI.plays.receive = 1;
     const { team: t, rally } = team(-1, null);
