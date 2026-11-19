@@ -162,7 +162,7 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
       { k: '1 to 5  C', a: 'Call your route; C shows your routes and the play your setter called', hitters: true },
       {
         k: '1 to 4  C  H',
-        a: "You set: pick the hitter (again before the pass: their next set), the play wheel before the serve, help when you can't get to it",
+        a: "You set: pick the hitter (again before the pass: their next set), the play wheel until our pass, help when you can't get to it",
         who: ['S'],
       },
     ],
@@ -173,7 +173,7 @@ export const DRILL_INFO: Record<ModeId, DrillInfo> = {
       { k: 'BLOCK', a: 'Hold: hands up and jump, or set' },
       { k: 'ROUTE', a: "Top left: call your route; ROUTES shows them and your setter's play", hitters: true },
       { k: 'SET TO', a: 'Top left: tap the hitter you set. Again before the pass: their next set', who: ['S', 'L'] },
-      { k: 'PLAY', a: 'Top left, before the serve: the play wheel', who: ['S'] },
+      { k: 'PLAY', a: 'Top left: the play wheel, from the end of a point until our pass', who: ['S'] },
       { k: 'HELP', a: "Top left: a team-mate takes the second ball when you can't get to it", who: ['S', 'L'] },
     ],
   },

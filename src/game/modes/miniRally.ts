@@ -225,7 +225,9 @@ export class MiniRally extends Mode {
     this.t = 0;
     this.userTouches = 0;
     this.outOfSystem = false;
-    this.setterCalls.nextBall(g.settings.keepSetPick);
+    // (after a point the calls were freed at its end, so what you picked since stays; a re-serve
+    // in the middle of a rally frees them here)
+    if (this.setterCalls.locked) this.setterCalls.nextBall(g.settings.keepSetPick);
     this.jumpCalled = false;
     g.hud.clearCall();
     this.updateScore();
@@ -350,11 +352,17 @@ export class MiniRally extends Mode {
   }
 
   /**
-   * The user setter calls a play on the wheel while the ball is dead, before the serve: the
-   * wheel slows the game, so never in a live rally (keys 1-4 still change the calls until the pass)
+   * The user setter calls a play on the wheel whenever the next ball is still to call: from the end
+   * of a point, through their serve (until our pass), and in a rally from your set (or their touch)
+   * until our next pass. The game never slows for it (`wheelSlows`): before the serve the server
+   * waits while it is open; once the ball is in play only your set's own slow-mo slows anything.
    */
   playCalls(): SetterCalls | null {
-    return this.userSetter && this.phase === 'prepare' && !this.setterCalls.locked ? this.setterCalls : null;
+    return this.userSetter && !this.setterCalls.locked ? this.setterCalls : null;
+  }
+
+  wheelSlows(): boolean {
+    return false;
   }
 
   /** the key hint for the user's set (the call strip above it shows the hitters and calls) */
@@ -556,6 +564,8 @@ export class MiniRally extends Mode {
     this.t = 0;
     g.ballLive = false;
     g.judge.disarm();
+    // the next ball is a new one to call: the keys and the wheel open while the banner shows
+    this.setterCalls.nextBall(g.settings.keepSetPick);
     if (winner === 1) this.scoreHome++;
     else this.scoreAway++;
     this.reps++;

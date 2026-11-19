@@ -803,7 +803,11 @@ export const ASSIST = {
    * cues pays (the user's call, 2026-11-18)
    */
   setByFeel: 1.2,
-  /** the play wheel is open (before the pass): the game runs at this speed while you choose */
+  /**
+   * the play wheel is open (Setter Drill, before the pass): the game runs at this speed while you
+   * choose. The Mini Rally never slows for it (its serve waits instead; in a rally only your set's
+   * own slow-mo slows the game: the user's call, 2026-11-19)
+   */
   playWheelSlow: 0.2,
   /**
    * The set's footwork (aim assist, `src/game/setAssist.ts`): while the ball is yours to set and

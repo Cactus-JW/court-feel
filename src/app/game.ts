@@ -871,6 +871,7 @@ export class Game implements AiHost {
       w.hide();
       return false;
     }
+    w.setAside(this.ballLive);
     w.move(dx, dy);
     let pick = -1;
     const plays = wheelPlays();
@@ -989,7 +990,8 @@ export class Game implements AiHost {
     // a moment the lesson's ball waits at is never simulated past: `stopAt`
     const stopAt = this.tutorial.stopAt();
     const simDt = this.pace.simSeconds(realDt, {
-      wheelOpen: this.wheel.open,
+      // choosing a play: the game waits for you (it runs, slowly), unless the drill says not to
+      wheelOpen: this.wheel.open && (this.mode?.wheelSlows?.() ?? true),
       swing: dip ? { until: this.idealCache.t - this.simTime, inReach: this.idealCache.d < this.contact.reach(this.me) + 0.4 } : null,
       set:
         this.setPrev && this.settings.setSlowmo ? { until: this.setPrev.tIdeal - this.simTime, absorbing: this.setPrev.absorbing } : null,

@@ -158,6 +158,8 @@ export abstract class Mode {
   setterPicks?(): readonly import('../setterCalls').SetPick[] | null;
   /** the user is a hitter calling their own route (keys 1-5): the route strip and panel (C) show them. Null: no routes */
   routes?(): import('../routes').RouteView | null;
+  /** the game slows while the play wheel is open (`ASSIST.playWheelSlow`); a mode that waits for it otherwise says no */
+  wheelSlows?(): boolean;
   /** the user setter's calls while a play can still be called (before the pass): the play wheel opens on them */
   playCalls?(): import('../setterCalls').SetterCalls | null;
   /** the ball in flight is the user's to set (shows where to stand for it) */

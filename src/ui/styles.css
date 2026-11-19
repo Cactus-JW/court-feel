@@ -50,6 +50,9 @@ canvas { display: block; outline: none; }
 /* the play wheel: the setter's combinations, called before the pass. The slice the mouse is on is gold; the play the calls make now is lit */
 .play-wheel { position: absolute; left: 50%; top: 50%; display: none; transform: translate(-50%, -50%); text-shadow: none; }
 .play-wheel svg { display: block; }
+/* the ball is in play: the wheel steps aside, off the court, smaller (a pick goes by direction, not position) */
+.play-wheel.aside { left: 24px; top: 50%; transform: translateY(-50%) scale(0.72); transform-origin: left center; opacity: 0.94; }
+body.touchmode .play-wheel.aside { left: 50%; top: calc(48px + env(safe-area-inset-top, 0px)); transform: translateX(-50%) scale(0.56); transform-origin: center top; }
 .pw-slice { fill: rgba(8,10,16,0.74); stroke: rgba(255,255,255,0.16); stroke-width: 1; }
 .pw-slice.on { fill: rgba(60,70,92,0.82); stroke: rgba(255,255,255,0.4); }
 .pw-slice.sel { fill: rgba(96,72,14,0.86); stroke: var(--gold); stroke-width: 2; }
