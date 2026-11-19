@@ -990,8 +990,6 @@ export class ContactSystem {
     const ball = h.ball;
     const c = this.setCatch(a);
     const lt = ball.lastTouch;
-    // a ball our team has set or attacked is to hit (or gone): never one to set again
-    if (lt && lt.side === a.side && (lt.kind === 'set' || lt.kind === 'spike' || lt.kind === 'tip')) return false;
     const friendly = !lt || lt.side === a.side || lt.kind === 'feed';
     if (!c) {
       // it has just come down through the hands: still a (late) catch while it is within reach,
@@ -1006,6 +1004,16 @@ export class ContactSystem {
     if (c.at.z * a.side <= 0) return false;
     const near = Math.hypot(c.at.x - a.pos.x, c.at.z - a.pos.z) < 2.5;
     return near && friendly;
+  }
+
+  /**
+   * A ball our team has set or attacked: a hitter's to hit, not a setter's to set. It gets no setter
+   * cues and no set slow-mo (setPreview) until you press to set it, but the right button still sets
+   * it (wantsSet): an overhand third ball over the net is legal and common off a bad set.
+   */
+  private oursToHit(a: Athlete): boolean {
+    const lt = this.host.ball.lastTouch;
+    return !!lt && lt.side === a.side && (lt.kind === 'set' || lt.kind === 'spike' || lt.kind === 'tip');
   }
 
   /** how far from the hands point a set can still be played */
@@ -1294,7 +1302,8 @@ export class ContactSystem {
   /**
    * The set coming down onto `a`'s hands, then loading in them: for the timing ring and the bar,
    * the set slow-mo and the bot. Before the catch, when it reaches the hands; while it loads,
-   * the bar and the windows the touch earned.
+   * the bar and the windows the touch earned. Not for a ball our team set or attacked (`oursToHit`)
+   * until you press to set it: a set coming to a hitter is theirs to hit.
    */
   setPreview(a: Athlete): SetPreview | null {
     const h = this.host;
@@ -1325,7 +1334,7 @@ export class ContactSystem {
         bar: { start: act.arriveT, target: act.arriveT + TIMING.setLoad, green: act.green, good: act.good },
       };
     }
-    if (!this.wantsSet(a)) return null;
+    if (!this.wantsSet(a) || (!act && this.oursToHit(a))) return null;
     const c = this.setCatch(a);
     if (!c) return null;
     const tIdeal = c.t;

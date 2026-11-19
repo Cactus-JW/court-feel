@@ -48,7 +48,17 @@ describe('a hitter never gets the setter cues for a ball that is theirs to hit',
 
   it('a ball your setter sets you is to hit: no set preview, so no set slow-mo, ring, bar or floor spot', () => {
     const { sim, oh } = stage('set');
-    expect(sim.contact.wantsSet(oh)).toBe(false);
     expect(sim.contact.setPreview(oh)).toBeNull();
+  });
+
+  it('a bad set can still be set over (a legal overhand third ball): the right button sets, never blocks', () => {
+    const { sim, oh } = stage('set');
+    expect(sim.contact.wantsSet(oh)).toBe(true);
+  });
+
+  it('once you press to set it, your set gets its cues as any set does', () => {
+    const { sim, oh } = stage('set');
+    sim.contact.pressSet(oh, sim.simTime);
+    expect(sim.contact.setPreview(oh)).not.toBeNull();
   });
 });
