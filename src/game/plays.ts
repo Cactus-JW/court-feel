@@ -312,7 +312,7 @@ export const SETTER_PLAYS: Record<'OH' | 'MB' | 'OPP' | 'PIPE', SetPlay[]> = {
 
 /**
  * The routes a front-row hitter calls for themselves (keys 1-5, in this order): every set a setter
- * can give them. An AI setter's play is built around your call (TeamAI.planPlay).
+ * can give them. An AI setter's play is built around your call (TeamAI.decidePlay).
  */
 export const SET_PLAYS: Partial<Record<PositionId, readonly SetPlay[]>> = {
   OH: SETTER_PLAYS.OH,

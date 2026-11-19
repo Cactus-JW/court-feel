@@ -36,6 +36,9 @@ const py = (z: number) => (TOP + z * PX).toFixed(1);
 /** hit spots nearer than this (m) along the net share one marker */
 const SAME_SPOT = 0.5;
 
+/** two draw keys hold the same things (the play by identity: TeamAI.playView keeps it while unchanged) */
+const same = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 function tempoMeter(t: RouteTempo): string {
@@ -70,8 +73,9 @@ export class RouteHud {
   private open = false;
   private strip: HTMLDivElement;
   private panel: HTMLDivElement;
-  private stripKey = '';
-  private panelKey = '';
+  /** what each was last drawn for (TeamAI.playView keeps its object while the play is unchanged) */
+  private stripKey: unknown[] = [];
+  private panelKey: unknown[] = [];
   private lastOn = -1;
   private lastPos = '';
 
@@ -93,8 +97,8 @@ export class RouteHud {
 
   private drawStrip(v: RouteView | null): void {
     const p = v ? v.plays[v.on] : null;
-    const key = v && p ? JSON.stringify([v.position, v.on, v.play, v.high, this.open]) : '';
-    if (key === this.stripKey) return;
+    const key = v && p ? [v.position, v.on, v.play, v.high, this.open] : [];
+    if (same(key, this.stripKey)) return;
     this.stripKey = key;
     this.strip.style.display = v && p ? '' : 'none';
     this.strip.classList.toggle('panel-open', this.open);
@@ -128,8 +132,8 @@ export class RouteHud {
     this.panel.classList.toggle('open', show);
     this.panel.setAttribute('aria-hidden', show ? 'false' : 'true');
     if (!v || !show) return;
-    const key = JSON.stringify([v.position, v.on, v.play, v.high]);
-    if (key === this.panelKey) return;
+    const key = [v.position, v.on, v.play, v.high];
+    if (same(key, this.panelKey)) return;
     this.panelKey = key;
     this.panel.style.setProperty('--c', callCss(v.position));
     const list = v.plays
