@@ -47,7 +47,7 @@ import { SetRing } from '../fx/setRing';
 import { SetSpot } from '../fx/setSpot';
 import { SetBar } from '../ui/setBar';
 import { PlayWheel } from '../ui/playWheel';
-import type { RouteView } from './routes';
+import type { RouteView } from '../game/routes';
 import { SetRadar } from '../ui/setRadar';
 import { Judge } from '../game/judge';
 import { Hud } from '../ui/hud';

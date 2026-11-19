@@ -97,7 +97,7 @@ export class SpikeDrill extends Mode {
   private plannedFor: unknown = null;
   private ringPulse = 0;
   private tmp = { x: 0, y: 0, z: 0 };
-  /** set calls for this position (keys 1-3), if it has any */
+  /** the routes this position calls (keys 1-5), if it has any */
   private plays: readonly SetPlay[] | null = null;
   private callIdx = 0;
   /** an approach planned before the set (quick / tempo balls) for the autopilot */
@@ -298,11 +298,12 @@ export class SpikeDrill extends Mode {
     this.t = 0;
     // the tutorial speaks through the coach line; the drill's own intro (and its tip mention) stays down
     if (!g.tutorial.active) {
+      const routes = this.plays ? ` · 1-${this.plays.length} call your route · C see them` : '';
       g.hud.message(
         this.position === 'MB'
-          ? 'Quick: run on the pass · jump as the setter touches it · hold LMB, release to hit · 1-3 set call'
+          ? `Quick: run on the pass · jump as the setter touches it · hold LMB, release to hit${routes}`
           : this.plays
-            ? 'Approach: Shift + W · plant: Space · hold LMB, release to hit · 1-3 set call'
+            ? `Approach: Shift + W · plant: Space · hold LMB, release to hit${routes}`
             : 'Approach: Shift + W · plant: Space · hold LMB to wind up, release to hit',
         3.6,
       );

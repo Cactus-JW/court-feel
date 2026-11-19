@@ -1,3 +1,4 @@
+import { PLAYBOOK } from '../config';
 import { isQuick, needsGoodPass, type SetPlay } from './plays';
 import { hitX, type SetterKey } from './setterCalls';
 
@@ -37,7 +38,7 @@ export interface RouteView {
 export function routeTempo(p: SetPlay): RouteTempo {
   if (isQuick(p)) return 'quick';
   if (needsGoodPass(p)) return 'fast';
-  return p.lane.apexAbove < 1.4 ? 'medium' : 'high';
+  return p.lane.apexAbove < PLAYBOOK.hutTop ? 'medium' : 'high';
 }
 
 /** a route as drawn on the home side's court (+z, facing the net): where the run starts and where the ball is hit */

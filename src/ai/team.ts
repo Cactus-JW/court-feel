@@ -636,7 +636,7 @@ export class TeamAI {
     public side: 1 | -1,
     private g: AiHost,
   ) {
-    this.playRng = new Rng(side === 1 ? 4101 : 4102);
+    this.playRng = new Rng(side === 1 ? AI.plays.seed.home : AI.plays.seed.away);
   }
 
   add(slot: Slot, a: Athlete, isUser: boolean): void {
