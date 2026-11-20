@@ -1,11 +1,12 @@
 # Spike Drill
 
-In the Spike Drill a coach tosses to your setter, the setter sets your lane, and you approach, jump and swing. Each contact is graded (Perfect, Good, Early, Late, Miss) and each rep is scored on timing, power, the kill and hitting the highlighted target zone. You can call the set, put an opposing block up, watch replays, switch camera and reset the rep.
+In the Spike Drill a coach tosses to your setter, the setter sets your lane, and you approach, jump and swing. Each contact is graded (Perfect, Good, Early, Late, Miss) and each rep is scored on timing, power, the kill and hitting the highlighted target zone. You can call your route, see them all, put an opposing block up, watch replays, switch camera and reset the rep.
 
 ## Sub-features
 
 - `spike-rep` plays one rep: toss, set, your graded contact, the outcome, the score.
-- `spike-set-call` changes the next set with the keys `1`, `2`, `3` (outside hitter: high ball, go, 3 ball).
+- `spike-set-call` changes the next set with the keys `1` to `5`: your route, any a setter can give you (outside: High, Hut, Go, 3, 2; the middle has four, 1, Push, Shoot, Back 1; the opposite Back, Fast, Back 2, Back 1, X). A strip at the bottom shows the route and its tempo (high, medium, fast or quick).
+- `spike-route-panel` opens the route panel with `c`: your half of the court from above with every route's run and hit spot, and the list with each route's tempo. `c` again closes it; the game does not stop for it.
 - `spike-block` cycles the opposing block off, single, double with `b`.
 - `spike-replay-auto` replays a Perfect spike that hits the floor, in slow motion, and any key skips it.
 - `spike-replay-key` replays the last attempt with `r` once the ball is dead: a contact of any grade, a miss, or a set left to drop.
@@ -27,7 +28,7 @@ Preconditions:
 - The recipe uses the manual clock and, for the rep, the autopilot (`bot=perfect`). Both are test hooks: name them in the proof.
 
 - **Enter by link.** Open the drill as an outside hitter with the clock frozen. Run `court open '?mode=spike&pos=OH&bot=perfect' --fresh --manual`. The state line shows `"title":"Spike Drill · Outside high ball (4)"`, a score of `0 pts · rep 0 · set 1: High ball · target: <zone>`, `"clock":"manual"` and `"simTime":0`.
-- **Call the set.** Press `2`. Run `court key 2` and `court step 0.05`. The state line shows `"title":"Spike Drill · Outside go"`, a score containing `set 2: Go (fast to the pin)` and `"message":"Next set: 2 · Go (fast to the pin)"`.
+- **Call the set.** Press `3`. Run `court key 3` and `court step 0.05`. The state line shows `"title":"Spike Drill · Outside go"`, a score containing `set 3: Go (fast to the pin)` and `"message":"Next set: 3 · Go (fast to the pin)"`. The route strip at the bottom shows as `"route":"3 Go Fast"`.
 - **Play the rep.** Let the autopilot approach, jump and swing. Run `court step 20 --until 'window.__verify.events.some(e => e.type === "contact" && e.who === "me")'`. The state line shows `"grade":{"text":"PERFECT","sub":"<speed> km/h · full power"}`. Run `court shot spike-contact`: the hitter is at the net with the grade on screen.
 - **Score the rep.** Run `court step 5 --until 'g.mode.reps === 1'`. The state line shows a score starting `<points> pts · rep 1` and a banner starting `KILL`. Run `court events`: a `contact` by `me` with `"kind": "spike"` and `"grade": "Perfect"`, then an `outcome` with `"kind": "in"`, `"side": "away"`, `"winner": "home"`.
 - **Automatic replay.** Keep stepping until the replay starts. Run `court step 5 --until 'g.fx.replaying'`. The state line shows `"screen":"replay"`. Run `court step 1.2` and `court shot spike-replay`: a letterboxed frame with `REPLAY` at the top left.
@@ -45,7 +46,7 @@ Preconditions:
 - The autopilot presses jump and swing through the game's input layer but steers the feet directly. A bot rep does not prove WASD or Shift. The hand-input bullet does.
 - The hand-input bullet proves the keys reach the athlete, not a graded hit. Its swing meets no ball, so a `MISS` grade there is expected.
 - The target zone is picked at random for each rep. Only a run that starts with `--fresh --manual` repeats the same zones and points.
-- Set calls exist for OH, OPP and MB. As S or L the keys `1` to `3` do nothing and the score line has no `set` part.
+- Routes exist for OH, OPP and MB. As S or L the keys `1` to `5` do nothing, the score line has no `set` part and there is no route strip.
 - The automatic replay needs the `Perfect-spike replays` switch on (the default, under Settings, Camera) and a Perfect spike that lands. `--fresh` restores the default.
 - During a replay any key press skips it, including the key you meant for the drill. Step until `!g.fx.replaying` before pressing drill keys.
 - `r` only works once the ball is dead and while the attempt is still in the replay buffer (the last 8 seconds of live play). Wait on `g.replayAvailable()`, as the recipe does.

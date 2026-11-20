@@ -47,6 +47,7 @@ import { SetRing } from '../fx/setRing';
 import { SetSpot } from '../fx/setSpot';
 import { SetBar } from '../ui/setBar';
 import { PlayWheel } from '../ui/playWheel';
+import type { RouteView } from '../game/routes';
 import { SetRadar } from '../ui/setRadar';
 import { Judge } from '../game/judge';
 import { Hud } from '../ui/hud';
@@ -138,6 +139,8 @@ export class Game implements AiHost {
   private setGuide!: SetGuide;
   private setRadar!: SetRadar;
   private wheel!: PlayWheel;
+  /** the route panel is open (a hitter's C; the app draws it, `routeView`) */
+  routesOpen = false;
 
   /** the play wheel is open: a drill holds its next ball, and the game runs slow */
   get wheelOpen(): boolean {
@@ -849,6 +852,7 @@ export class Game implements AiHost {
    * The play wheel (C, while the mode lets you call a play): hold C and move the mouse to a
    * play, let go to call it; or press C, then the play's number (a tap on touch) or click.
    * C again closes it. Returns whether the wheel has the mouse this frame.
+   * A hitter calling their own route has no wheel: C opens and closes the route panel.
    */
   private playWheelFrame(dx: number, dy: number): boolean {
     const w = this.wheel;
@@ -857,6 +861,7 @@ export class Game implements AiHost {
     const released = this.input.consumeRelease('KeyC');
     if (!calls) {
       w.hide();
+      if (pressed && this.routeView()) this.routesOpen = !this.routesOpen;
       return false;
     }
     if (!w.open) {
@@ -866,6 +871,7 @@ export class Game implements AiHost {
       w.hide();
       return false;
     }
+    w.setAside(this.ballLive);
     w.move(dx, dy);
     let pick = -1;
     const plays = wheelPlays();
@@ -875,6 +881,11 @@ export class Game implements AiHost {
     if (calls.setCombo(plays[pick])) this.hud.message(`Play · ${plays[pick].name}`, 1.4);
     w.hide();
     return false;
+  }
+
+  /** your routes as a hitter, for the route strip and panel (null: you are not calling your own route) */
+  routeView(): RouteView | null {
+    return this.mode && !this.inMenu ? (this.mode.routes?.() ?? null) : null;
   }
 
   private frameInput(dt: number): void {
@@ -979,7 +990,8 @@ export class Game implements AiHost {
     // a moment the lesson's ball waits at is never simulated past: `stopAt`
     const stopAt = this.tutorial.stopAt();
     const simDt = this.pace.simSeconds(realDt, {
-      wheelOpen: this.wheel.open,
+      // choosing a play: the game waits for you (it runs, slowly), unless the drill says not to
+      wheelOpen: this.wheel.open && (this.mode?.wheelSlows?.() ?? true),
       swing: dip ? { until: this.idealCache.t - this.simTime, inReach: this.idealCache.d < this.contact.reach(this.me) + 0.4 } : null,
       set:
         this.setPrev && this.settings.setSlowmo ? { until: this.setPrev.tIdeal - this.simTime, absorbing: this.setPrev.absorbing } : null,
@@ -1164,6 +1176,7 @@ export class Game implements AiHost {
     this.arena.update(realDt);
     this.updateAimReticle(realDt);
     this.hud.update(realDt);
+    if (!this.routeView()) this.routesOpen = false;
     this.onFrame?.();
     if (this.mode && !this.inMenu) {
       const tutoring = this.tutorial.active;

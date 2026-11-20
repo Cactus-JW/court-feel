@@ -123,6 +123,11 @@ export class PlayWheel {
     this.draw();
   }
 
+  /** the ball is in play: the wheel sits at the side, off the court (a pick goes by direction) */
+  setAside(aside: boolean): void {
+    this.el.classList.toggle('aside', aside);
+  }
+
   hide(): void {
     if (!this.open) return;
     this.open = false;

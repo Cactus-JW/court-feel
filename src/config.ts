@@ -803,7 +803,11 @@ export const ASSIST = {
    * cues pays (the user's call, 2026-11-18)
    */
   setByFeel: 1.2,
-  /** the play wheel is open (before the pass): the game runs at this speed while you choose */
+  /**
+   * the play wheel is open (Setter Drill, before the pass): the game runs at this speed while you
+   * choose. The Mini Rally never slows for it (its serve waits instead; in a rally only your set's
+   * own slow-mo slows the game: the user's call, 2026-11-19)
+   */
   playWheelSlow: 0.2,
   /**
    * The set's footwork (aim assist, `src/game/setAssist.ts`): while the ball is yours to set and
@@ -1576,9 +1580,11 @@ export const AUDIO = {
  * The play designer (start screen, Plays). Two front-row hitters can't be given sets hit less
  * than `minGap` m apart along the net (a back quick for the middle and the opposite, a 2 and an
  * X): they would run into each other. The tandem and the X leave 0.75-0.9 m, at two tempos.
- * `nameMax`: the longest name that fits the wheel.
+ * `nameMax`: the longest name that fits the wheel. `hutTop`: a set that peaks less than this many m
+ * over the tape is a hut (medium tempo) on the route strip, higher a high ball; the hut peaks at
+ * 1.15 m, the high balls at 1.45-1.65 m (`LANES` in game/plays.ts).
  */
-export const PLAYBOOK = { minGap: 0.6, nameMax: 16 } as const;
+export const PLAYBOOK = { minGap: 0.6, nameMax: 16, hutTop: 1.4 } as const;
 
 /**
  * The quality governor (src/app/quality.ts): the picture gets cheaper when the machine cannot keep
@@ -2123,6 +2129,16 @@ export const AI = {
    * The setter sends it only if the hand is due `minT`-`maxT` s after the touch.
    */
   tempo: { share: 0.5, flight: 0.95, minT: 0.6, maxT: 1.2 },
+  /**
+   * Combination plays (COMBOS, the play wheel) run by an AI setter. On their free ball ("FREE!")
+   * the setter calls one `free` of the time, and it runs off any pass in system. Before their serve
+   * the setter signals one `receive` of the time, and it runs only off a perfect pass (within
+   * `quickWeight.perfectOff` m of the setter's spot): off anything less the play is off and the
+   * setter runs the base sets (the user's call, 2026-11-18: a team drilled on a free ball, careful
+   * in serve receive). Out of system every set goes up high, play or not. Each team draws its plays
+   * from its own dice (`seed`, home and away), so calling plays never shifts the rally's own draws.
+   */
+  plays: { free: 0.6, receive: 0.25, seed: { home: 4101, away: 4102 } },
   /**
    * Against a closed block (every usual shot into the hands), and off a bad pass whenever a block
    * is up, an AI pin hitter wipes it off the outside hand (weight `toolShot`) or rolls it over

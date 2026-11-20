@@ -1,0 +1,74 @@
+import { describe, expect, it } from 'vitest';
+import { Athlete } from '../src/game/athlete';
+import { Simulation } from '../src/game/simulation';
+import { SLOT_ROLE, SLOTS, TeamAI, USER_SLOT } from '../src/ai/team';
+import type { V3 } from '../src/physics/ball';
+import { solveApex } from '../src/physics/solve';
+import { NO_HOOKS } from './simHooks';
+
+/**
+ * Our team on a real simulation, you the outside. A ball off their block drops at `at`, `apex` m
+ * above where it left the hands (low: down fast; high: time to get there).
+ */
+function offTheirBlock(at: V3, apex: number) {
+  const sim = new Simulation(NO_HOOKS);
+  sim.ballLive = true;
+  const us = new TeamAI(1, sim);
+  const them = new TeamAI(-1, sim);
+  us.opponents = them;
+  them.opponents = us;
+  for (const slot of SLOTS) {
+    const mine = slot === USER_SLOT.OH;
+    const a = new Athlete(SLOT_ROLE[slot], 1);
+    if (mine) {
+      a.isUser = true;
+      sim.me = a;
+    }
+    us.add(slot, a, mine);
+    them.add(slot, new Athlete(SLOT_ROLE[slot], -1), false);
+  }
+  us.place('defense');
+  them.place('defense');
+  const from = { x: at.x + 0.2, y: 3.0, z: 0.3 };
+  const v = { x: 0, y: 0, z: 0 };
+  solveApex(from, at, from.y + apex, { x: 0, y: 0, z: 0 }, v);
+  sim.ball.launch(from, v);
+  const blocker = [...them.players.values()].find((a) => a.role === 'MB')!;
+  sim.ball.lastTouch = { athlete: blocker, kind: 'block', t: 0, side: -1 };
+  return { sim, us, me: sim.me };
+}
+
+/** a team-mate just up to block (or hit) at the net, beside where the ball comes down */
+function upAtTheNet(a: Athlete, x: number, z: number) {
+  a.place(x, z, 0);
+  a.state = 'air';
+  a.pos.y = 0.8;
+  a.vel.set(0, 1.5, 0);
+}
+
+describe('"your ball" off the block goes to who gets there', () => {
+  const AT = { x: -1.2, y: 0.75, z: 1.4 };
+
+  it('a ball nobody gets to in time is not called yours from 3 m away, with the two players up at the net beside it', () => {
+    const { us, me } = offTheirBlock(AT, 0.05);
+    me.place(AT.x, AT.z + 3, 0);
+    upAtTheNet(us.players.get('OPP')!, -1.0, 0.8);
+    upAtTheNet(us.players.get('MB')!, -0.4, 0.8);
+    us.step();
+    expect(us.receiver).not.toBe(me);
+    expect(us.receiver?.role).toBe('OPP');
+  });
+
+  it('a ball you get to as soon as a team-mate does (a seam) is still yours', () => {
+    // a soft one, up high: time for both of you; you and the opposite the same distance away
+    const { us, me } = offTheirBlock({ x: -1.5, y: 0.75, z: 3.0 }, 1.6);
+    // (each 1.6 m from where it is played: 0.4 m on the net side of where it drops)
+    me.place(-1.5, 4.2, 0);
+    us.players.get('OPP')!.place(-1.5, 1.0, 0);
+    // (the libero takes any ball off a block it gets to: here it is across the court)
+    us.players.get('L')!.place(4.0, 8.5, 0);
+    us.step();
+    expect(us.receiver?.role).toBe(me.role);
+    expect(us.receiver).toBe(me);
+  });
+});

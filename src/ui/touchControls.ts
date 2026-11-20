@@ -58,6 +58,9 @@ export const SETTER_KEY_LABELS: Record<string, string> = {
   '5': 'DUMP',
 };
 
+/** while you call your own route as a hitter, C is the ROUTES chip (the route panel) */
+export const HITTER_KEY_LABELS: Record<string, string> = { ...TOUCH_KEY_LABELS, C: 'ROUTES' };
+
 const HOLD_BUTTONS: { id: PadButton; cls: string; label: string }[] = [
   { id: 'hit', cls: 't-hit', label: 'HIT' },
   { id: 'jump', cls: 't-jump', label: 'JUMP' },
@@ -121,7 +124,7 @@ export class TouchControls {
   private chips: HTMLDivElement;
   private chipsFor = '';
   /** the setter's chips are up: hints name them for the number keys */
-  private setterLabels = false;
+  private labels = TOUCH_KEY_LABELS;
   private pauseBtn: HTMLDivElement;
   private skipBtn: HTMLDivElement;
   private replayBtn: HTMLElement;
@@ -202,7 +205,7 @@ export class TouchControls {
     this.enabled = on;
     this.g.input.touch = on;
     document.body.classList.toggle('touchmode', on);
-    this.g.hud.keyLabels = on ? (this.setterLabels ? SETTER_KEY_LABELS : TOUCH_KEY_LABELS) : null;
+    this.g.hud.keyLabels = on ? this.labels : null;
     if (!on) {
       this.pad.releaseAll();
       this.show(false);
@@ -382,8 +385,6 @@ export class TouchControls {
     // PLAY opens the play wheel (then tap a play). Setter Drill: ROW puts you in the front row, where DUMP is on.
     // tutorial reps: no set-call chips and no block toggle (one Outside story, block off)
     const setter = picks !== null;
-    this.setterLabels = setter;
-    if (this.enabled) this.g.hud.keyLabels = setter ? SETTER_KEY_LABELS : TOUCH_KEY_LABELS;
     if (setter) {
       el('span', 't-chip-l', this.chips, 'SET TO');
       // a chip per hitter you can set now (Digit1 outside ... Digit5 the dump)
@@ -393,13 +394,15 @@ export class TouchControls {
       // Mini Rally: you can't get to the second ball, a team-mate takes it
       if (g.modeId === 'rally') chip('help', 'HELP');
     }
+    // your route as a hitter: a chip per route, by its call (1-5); ROUTES opens the route panel
     const calls = !setter && !g.tutorial.active && (g.modeId === 'spike' || g.modeId === 'rally') && SET_PLAYS[g.position];
     if (calls) {
-      el('span', 't-chip-l', this.chips, 'SET CALL');
-      chip('d1', '1');
-      chip('d2', '2');
-      chip('d3', '3');
+      el('span', 't-chip-l', this.chips, 'ROUTE');
+      calls.forEach((p, i) => chip(`d${i + 1}` as PadButton, p.short.toUpperCase()));
+      chip('play', 'ROUTES');
     }
+    this.labels = setter ? SETTER_KEY_LABELS : calls ? HITTER_KEY_LABELS : TOUCH_KEY_LABELS;
+    if (this.enabled) this.g.hud.keyLabels = this.labels;
     if (g.modeId === 'spike' && !g.tutorial.active) chip('vsblock', 'VS BLOCK');
     // a serve lesson teaches one serve: no chips to pick another
     if (g.modeId === 'serve' && !g.tutorial.active) {

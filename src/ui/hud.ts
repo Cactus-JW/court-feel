@@ -351,6 +351,9 @@ export class Hud {
     [/\bF feed\b/g, 'FEED feed'],
     [/\bT auto\b/g, 'AUTO auto'],
     [/with the mouse/g, 'by dragging'],
+    // a hitter's routes are chips on a phone, and the route panel is the ROUTES button
+    [/\b1-\d call your route\b/g, 'the chips call your route'],
+    [/\bC see them\b/g, 'ROUTES see them'],
   ];
 
   static translateText(t: string): string {

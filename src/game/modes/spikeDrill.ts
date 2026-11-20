@@ -25,6 +25,7 @@ import { Mode } from './mode';
 import { planApproach, planQuick, planToPoint, simulateApproach, type ApproachPlan } from '../approach';
 import { BlockerBrain } from '../../ai/blocker';
 import { blockShadowOnCourt, HANDS_WIDTH, type HandSpan } from '../blockShadow';
+import type { RouteView } from '../routes';
 
 /** block practice: nobody, one blocker fronting your lane, or that blocker plus a middle closing */
 export type BlockLevel = 0 | 1 | 2;
@@ -96,8 +97,8 @@ export class SpikeDrill extends Mode {
   private plannedFor: unknown = null;
   private ringPulse = 0;
   private tmp = { x: 0, y: 0, z: 0 };
-  /** set calls for this position (keys 1-3), if it has any */
-  private plays: SetPlay[] | null = null;
+  /** the routes this position calls (keys 1-5), if it has any */
+  private plays: readonly SetPlay[] | null = null;
   private callIdx = 0;
   /** an approach planned before the set (quick / tempo balls) for the autopilot */
   earlyPlan: ApproachPlan | null = null;
@@ -232,6 +233,12 @@ export class SpikeDrill extends Mode {
     this.shadow.draw(blockShadowOnCourt(contact, spans, this.g.env.netTop + HANDS_ABOVE_NET, COURT.halfWidth, COURT.halfLength));
   }
 
+  /** your routes and the one you are calling (the route strip and panel) */
+  routes(): RouteView | null {
+    if (!this.plays || this.g.tutorial.active) return null;
+    return { position: this.position as RouteView['position'], plays: this.plays, on: this.callIdx, play: null, high: false };
+  }
+
   /** choose the set call for the next ball (0-based) */
   selectCall(i: number): void {
     if (!this.plays || i < 0 || i >= this.plays.length) return;
@@ -291,11 +298,12 @@ export class SpikeDrill extends Mode {
     this.t = 0;
     // the tutorial speaks through the coach line; the drill's own intro (and its tip mention) stays down
     if (!g.tutorial.active) {
+      const routes = this.plays ? ` · 1-${this.plays.length} call your route · C see them` : '';
       g.hud.message(
         this.position === 'MB'
-          ? 'Quick: run on the pass · jump as the setter touches it · hold LMB, release to hit · 1-3 set call'
+          ? `Quick: run on the pass · jump as the setter touches it · hold LMB, release to hit${routes}`
           : this.plays
-            ? 'Approach: Shift + W · plant: Space · hold LMB, release to hit · 1-3 set call'
+            ? `Approach: Shift + W · plant: Space · hold LMB, release to hit${routes}`
             : 'Approach: Shift + W · plant: Space · hold LMB to wind up, release to hit',
         3.6,
       );
@@ -328,7 +336,7 @@ export class SpikeDrill extends Mode {
     if (me.state === 'air' || me.action?.kind === 'windup')
       return `hold ${kbd('LMB')} = wind up (longer = harder) · release = hit · tap = tip &nbsp; aim with the mouse`;
     if (me.state === 'load') return `release ${kbd('Space')} to jump`;
-    const calls = this.plays ? ` · ${kbd('1')}${kbd('2')}${kbd('3')} set call` : '';
+    const calls = this.plays ? ` · ${kbd('1')}-${kbd(String(this.plays.length))} route · ${kbd('C')} routes` : '';
     const block = ` · ${kbd('B')} block: ${BLOCK_NAMES[this.blockLevel]}`;
     if (this.play?.inFront !== undefined)
       return `${kbd('Shift')}+${kbd('W')} run on the pass · ${kbd('Space')} jump with the setter's touch${calls}${block} · ${kbd('V')} camera · ${kbd('N')} reset rep`;

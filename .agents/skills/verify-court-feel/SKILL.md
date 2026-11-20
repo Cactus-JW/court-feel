@@ -77,7 +77,7 @@ Read-only. Run it first, and again whenever a result looks off. It exits 0 when 
 
 A command that gets no answer from the page fails after 60 seconds (`open` 330, `shot` 120, `step` 900, `wait` its `--timeout` plus 10), so one stuck command cannot block the session. `doctor` and `stop` never wait behind a running command.
 
-Every action command prints its result and one `state` line: the screen (`welcome`, `start`, `play`, `paused`, `settings`, `replay`, `crash`), the HUD title and score, and any grade, banner, message or call on screen. On the start screen the line has `start`: the section (`home`, `train`, `play`, `learn`), the position, the drill and the view that section's gold button would start, and that button's label. `settings` is either full-screen sheet, Settings or Athlete, over the start screen or the pause menu: the line then has `"sheet":"settings"` with the `tab` in view, or `"sheet":"athlete"`. `state unchanged` means the same as after the previous command. A failed command prints `FAILED` and exits 1.
+Every action command prints its result and one `state` line: the screen (`welcome`, `start`, `play`, `paused`, `settings`, `replay`, `crash`), the HUD title and score, and any grade, banner, message, call or route strip on screen. On the start screen the line has `start`: the section (`home`, `train`, `play`, `learn`), the position, the drill and the view that section's gold button would start, and that button's label. `settings` is either full-screen sheet, Settings or Athlete, over the start screen or the pause menu: the line then has `"sheet":"settings"` with the `tab` in view, or `"sheet":"athlete"`. `state unchanged` means the same as after the previous command. A failed command prints `FAILED` and exits 1.
 
 A minimal run:
 
