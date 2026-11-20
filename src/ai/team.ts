@@ -1475,14 +1475,15 @@ export class TeamAI {
         // In time is its platform there, `AI.digReach` from its feet, not its feet under the ball:
         // a defender digs what it gets its arms to (MatusGib, 2026-11-20: off a soft block "the
         // libero does not always take the ball even though they are in time", and you had to);
-        // not on a ball down sooner than `AI.pick.mine` (a hard-driven one: whoever it comes at
-        // digs it). Serve receive goes by lanes
+        // not on a ball down sooner than `AI.pick.mine` (a hard-driven one: no reaching past whoever
+        // it comes at, so the libero takes it only when its feet get there in time, as on the
+        // court it takes the seam). Serve receive goes by lanes
         const offBlock = lt?.kind === 'block';
         const L = this.players.get('L');
         const defence = !serve && !offBlock && !!lt && lt.side !== this.side && !!L && !L.isUser;
         const claim = offBlock || defence;
         const margin = claim ? AI.pick.liberoDig : AI.pick.libero;
-        // (a ball down too soon to call is dug by whoever it comes at: no reaching past them)
+        // (a ball down too soon to call: the libero's feet must get there, its arms do not reach past anyone)
         const time = comingToUs && tDown > 0 ? tDown - now : 0;
         const reach = claim && time >= AI.pick.mine ? AI.digReach : 0;
         const free = !serve && !!lt && lt.side !== this.side && FREE_KINDS.has(lt.kind);
@@ -1507,12 +1508,14 @@ export class TeamAI {
           const was = this.receiverFor === lt ? this.receiver : null;
           let r = this.pickReceiver(p, serve, exclude, null, claim ? tDown - now : undefined, margin, tDown - now, reach);
           if (r?.isUser && L && !L.isUser && seam(r) && this.liberoGets(p, tDown - now, exclude, null, margin, reach)) r = L;
-          // the libero calls it: a free ball, a ball it takes off whoever was sent, or one a team-mate gets to first
+          // the libero calls it: a free ball, a ball it takes off whoever was sent, or one a team-mate gets to first.
+          // A ball down sooner than `AI.pick.mine` is not called off an AI team-mate (no time to
+          // shout), but one you were told was yours always is: never taken off you without a word
           if (
             r &&
             r === L &&
             !L.isUser &&
-            time >= AI.pick.mine &&
+            (time >= AI.pick.mine || !!was?.isUser) &&
             this.liberoCall !== lt &&
             ((!!was && was !== L) || this.liberoCalls(p, serve, free, exclude))
           )

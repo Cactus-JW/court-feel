@@ -1752,12 +1752,15 @@ export const AI = {
    * pin hitter getting ready to attack). A ball off a block it takes on the same terms (with its
    * feet under the ball, a soft block beside a hitter landing at the net went to the hitter: "the
    * libero does not always take the ball even though they are in time", MatusGib, 2026-11-20; 9 of
-   * 200 block balls in 16 x 600 s of all-AI rally went to the outside, 1 after). It calls "MINE!" on a
-   * free ball it takes and on a ball it takes from a team-mate who gets there first. Only a ball down
-   * `mine` s or more after the libero is sent is called, or reached for with its arms past a
-   * team-mate: a hard-driven ball is dug by whoever it comes at, with no time to shout (a word and a
-   * team-mate backing off: our own judgement; a 100 km/h spike to the back court is down in 0.4 s,
-   * a roll shot, a tip, a free ball or a soft block in 1 s or more). Serve
+   * 200 block balls coming down in our court in 16 x 600 s of all-AI rally went to the outside, 0
+   * after). It calls "MINE!" on a free ball it takes and on a ball it takes from a team-mate who gets
+   * there first. Only a ball down `mine` s or more after the libero is sent is called off an AI
+   * team-mate, or reached for with its arms past one: a hard-driven ball goes to the libero only when
+   * its feet get there in time (it takes the seam), otherwise to whoever it comes at, with no time to
+   * shout (a word and a team-mate backing off: our own judgement; a 100 km/h spike to the back court
+   * is down in 0.4 s, a roll shot, a tip, a free ball or a soft block in 1 s or more). A ball first
+   * called the user's that the libero takes is always called, however soon it is down: never taken
+   * off the user without a word. Serve
    * receive still goes by lanes. And between the user and an AI libero, any first ball the libero gets
    * to (with `libero` s to spare) is the libero's ("if the libero can take it, it takes it":
    * MatusGib, 2026-11-14); a serve only in the seam (the libero there within `seam` s of the

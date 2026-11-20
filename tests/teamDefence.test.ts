@@ -297,7 +297,7 @@ describe('who takes the ball (Mini Rally)', () => {
       t.team.reachTime(t.team.players.get('OH2')!, { x: -0.9, y: 0.75, z: 8.3 }),
     );
     expect(t.team.receiver).toBe(L);
-    // a hard, flat one at the deep defender: the libero can't get there, the one it comes at digs it
+    // a hard, flat one at the deep defender: the libero's feet can't get there, the one it comes at digs it
     const q = homeTeam();
     q.team.place('defense');
     const deep = q.team.players.get('OH2')!;
@@ -340,7 +340,7 @@ describe('who takes the ball (Mini Rally)', () => {
       expect(t.team.liberoCall).toBeNull();
     });
 
-    it('not a hard-driven ball: one down too soon to call is dug by whoever it comes at, the libero beside them or not', () => {
+    it('not a hard-driven ball: one down too soon to call is not reached for past whoever it comes at (the libero takes it only if its feet get there)', () => {
       const t = homeTeam();
       t.team.place('defense');
       const deep = t.team.players.get('OH2')!;
@@ -369,14 +369,14 @@ describe('who takes the ball (Mini Rally)', () => {
   });
 
   /** their block sends our attack back down at (-1.8, 3.0); you (our outside) 0.6 m from it, the libero at `L` */
-  const offTheirBlock = (L: { x: number; z: number }) => {
+  const offTheirBlock = (L: { x: number; z: number }, apex = 3.6) => {
     const t = homeTeam();
     t.team.place('defense');
     const you = t.team.players.get('OH1')!;
     you.isUser = true;
     you.place(-1.9, 2.4, 0);
     t.team.players.get('L')!.place(L.x, L.z, 0);
-    t.touch('block', -1, { x: -1.5, y: 3.0, z: -0.2 }, { x: -1.8, y: 0.75, z: 3.0 }, 3.6);
+    t.touch('block', -1, { x: -1.5, y: 3.0, z: -0.2 }, { x: -1.8, y: 0.75, z: 3.0 }, apex);
     t.run(0.05);
     return { t, you, L: t.team.players.get('L')! };
   };
@@ -392,6 +392,17 @@ describe('who takes the ball (Mini Rally)', () => {
     L.place(-0.6, 3.6, 0);
     t.run(0.05);
     expect(t.team.receiver).toBe(L);
+  });
+
+  it('a ball first called yours that the libero takes is always called MINE!, however little time is left', () => {
+    // a low ball off their block (down in under `AI.pick.mine` s): too soon to call off an AI
+    // team-mate, but you were told "Your ball!", so the libero taking it must say so
+    const { t, you, L } = offTheirBlock({ x: 2.5, z: 7.5 }, 3.0);
+    expect(t.team.receiver).toBe(you);
+    L.place(-0.9, 3.4, 0);
+    t.run(0.05);
+    expect(t.team.receiver).toBe(L);
+    expect(t.team.liberoCall).toBe(t.ball.lastTouch);
   });
 });
 
