@@ -110,6 +110,44 @@ describe('the line judge, outside the antennae', () => {
     expect(o.kind).toBe('out');
   });
 
+  it('chased back outside the other antenna it is out: it has to come back on the side it went out', () => {
+    const b = watch(5.5, 3.0, 0.5, 1);
+    b.to(5.8, 3.0, -0.5);
+    b.to(4.0, 2.5, -4.0);
+    b.touch(1);
+    // round the far post: back over the net's line outside the left antenna
+    b.to(-5.6, 2.5, -0.5);
+    const o = b.to(-5.8, 2.5, 0.5)!;
+    expect(o).not.toBeNull();
+    expect(o.kind).toBe('outside-antenna');
+    expect(o.winner).toBe(-1);
+  });
+
+  it('a ball out wide that hits a post is out against the team that sent it', () => {
+    const b = watch(5.4, 2.0, -0.4, -1);
+    expect(b.to(5.4, 2.0, 0.2)).toBeNull();
+    expect(b.j.outWide).toBe(-1);
+    const o = b.to(5.5, 2.0, 0.4, [{ kind: 'post', x: 5.5, y: 2.0, z: 0.4, impact: 5 }])!;
+    expect(o.kind).toBe('out');
+    expect(o.winner).toBe(1);
+  });
+
+  it('the judge says whose ball is out wide while it is in the air, and forgets it with the ball', () => {
+    const b = watch(6.0, 2.5, 0.4, 1);
+    expect(b.j.outWide).toBeNull();
+    b.to(6.2, 2.4, -0.4);
+    expect(b.j.outWide).toBe(1);
+    // the ball is thrown away (N, a new feed): a new ball starts clean
+    b.j.disarm();
+    expect(b.j.outWide).toBeNull();
+    b.ball.pos = { x: 6.2, y: 3.0, z: 2.0 };
+    b.j.arm(b.ball);
+    b.to(1.0, 3.0, 0.5);
+    expect(b.to(0.5, 3.0, -0.5)).toBeNull();
+    b.to(0.0, 1.0, -4.0);
+    expect(b.land()!.kind).toBe('in');
+  });
+
   it('a ball that touches an antenna is called antenna at once', () => {
     const b = watch(COURT.antennaX - 0.1, TOP + 0.4, 0.2, -1);
     const o = b.to(COURT.antennaX - 0.1, TOP + 0.4, 0.05, [

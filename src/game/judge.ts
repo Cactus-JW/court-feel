@@ -55,8 +55,19 @@ export class Judge {
     this.crossings = 0;
   }
 
+  /** the ball is dead or thrown away: a crossing it made out wide goes with it */
   disarm(): void {
     this.armed = false;
+    this.wide = null;
+  }
+
+  /**
+   * The team whose ball crossed the net outside the antennae and is still live, or null. It is
+   * already out: a drill that ends a rep on the other team's touch (a dig, a pass of the serve, a
+   * block) leaves that ball to the judge, which calls it OUT (ANTENNA) in the same step.
+   */
+  get outWide(): 1 | -1 | null {
+    return this.armed && this.wide ? this.wide.team : null;
   }
 
   /** call after each ball step */
@@ -115,7 +126,7 @@ export class Judge {
     this.prevZ = p.z;
     this.prevX = p.x;
     this.prevY = p.y;
-    if (res) this.armed = false;
+    if (res) this.disarm();
     return res;
   }
 
