@@ -388,12 +388,14 @@ describe('line judge', () => {
     expect(o.kind).toBe('out');
     expect(o.winner).toBe(-1);
   });
-  it('crossing outside the antennae is a fault', () => {
+  it('crossing outside the antennae is a fault (called once it can no longer be played back: tests/judge.test.ts)', () => {
     const j = new Judge();
-    const ball = { pos: { x: 5.2, y: 3, z: 0.3 }, active: true, lastTouch: { side: 1 } } as any;
+    const ball = { pos: { x: 5.2, y: 3, z: 0.3 }, active: true, lastTouch: { side: 1, t: 0 } } as any;
     j.arm(ball);
     ball.pos = { x: 5.25, y: 3, z: -0.3 };
-    const o = j.step(ball, [], COURT.netHeightMen)!;
+    expect(j.step(ball, [], COURT.netHeightMen)).toBeNull();
+    ball.pos = { x: 4.0, y: 0.105, z: -3 };
+    const o = j.step(ball, [{ kind: 'floor', x: 4.0, y: 0.105, z: -3, impact: 8 }], COURT.netHeightMen)!;
     expect(o.kind).toBe('outside-antenna');
     expect(o.winner).toBe(-1);
   });

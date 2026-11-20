@@ -542,7 +542,9 @@ export class SpikeDrill extends Mode {
     let good = false;
     // the opposing block touched your ball: stuffed back onto our floor, or tooled off their hands
     const lt = g.ball.lastTouch;
-    const blockTouch = this.blockLevel > 0 && lt?.kind === 'block' && lt.side === -1;
+    // (a spike that went round the antenna was out before their hands met it: that is no tool)
+    const outWide = o?.kind === 'outside-antenna' && o.winner === -1;
+    const blockTouch = this.blockLevel > 0 && lt?.kind === 'block' && lt.side === -1 && !outWide;
     let tooled = false;
     if (ev && ev.grade !== 'Miss' && blockTouch) {
       if (o && o.kind === 'in' && o.side === 1) label = 'BLOCKED';

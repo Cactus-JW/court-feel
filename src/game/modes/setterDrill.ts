@@ -300,8 +300,15 @@ export class SetterDrill extends Mode {
     }
     // (our attack: their spike off a ball you overset is not)
     if ((ev.kind === 'spike' || ev.kind === 'tip') && ev.athlete.side === g.me.side) this.attacked = true;
-    // their back row got a platform under your attack: no kill
-    if (this.phase === 'live' && this.attacked && ev.athlete.side === -1 && (ev.kind === 'pass' || ev.kind === 'dig'))
+    // their back row got a platform under your attack: no kill (unless it went round the antenna:
+    // it was out already, and the judge calls it OUT (ANTENNA) in this same step)
+    if (
+      this.phase === 'live' &&
+      this.attacked &&
+      ev.athlete.side === -1 &&
+      (ev.kind === 'pass' || ev.kind === 'dig') &&
+      g.judge.outWide !== g.me.side
+    )
       this.finish(null, true);
   }
 

@@ -163,6 +163,8 @@ export class FreePlay extends Mode {
     this.machine.aim(Math.atan2(v.y, Math.hypot(v.x, v.z)), yaw);
     g.ball.launch(from, v, w, knuckle, g.simTime, g.rng.next() * 1000);
     g.ball.lastTouch = { athlete: null, kind: this.feed === 'set' ? 'set' : 'feed', t: g.simTime, side: this.feed === 'set' ? 1 : -1 };
+    // a machine ball is always a new ball: nothing the last one did (N on a ball out wide) carries over
+    g.judge.disarm();
     g.judge.arm(g.ball);
     this.lastWasMachine = true;
   }

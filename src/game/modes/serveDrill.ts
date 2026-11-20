@@ -338,8 +338,9 @@ export class ServeDrill extends Mode {
       return;
     }
     // their first touch of the serve: the pass it forced, and the end of the rep (a whiffed pass
-    // carries on to the floor: an ace)
-    if (this.phase === 'flight' && ev.athlete.side === this.away.side && ev.grade !== 'Miss') {
+    // carries on to the floor: an ace). A serve that crossed outside the antenna was out before they
+    // played it: the judge calls it in this same step.
+    if (this.phase === 'flight' && ev.athlete.side === this.away.side && ev.grade !== 'Miss' && g.judge.outWide === null) {
       const p = ratePass(g, this.away.side);
       const r = rateServe(p.rating, p.over);
       this.finish(r.rating, r.label);
@@ -350,7 +351,8 @@ export class ServeDrill extends Mode {
     const g = this.g;
     if (this.phase === 'flight') {
       const lt = g.ball.lastTouch;
-      if (lt?.kind !== 'serve') return;
+      // (out wide, the call can come on their touch: the serve was out all the same)
+      if (lt?.kind !== 'serve' && o.kind !== 'outside-antenna') return;
       if (o.kind === 'in' && o.side === this.away.side) this.finish(4, 'ACE');
       else if (o.netTouch && (o.kind === 'under-net' || o.kind === 'in')) this.finish(0, 'IN THE NET');
       else this.finish(0, o.kind === 'in' || o.kind === 'under-net' ? 'SHORT' : 'OUT');
