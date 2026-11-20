@@ -785,16 +785,19 @@ export class ContactSystem {
     const stuffed = covered && !ball.lastTouch?.recycle;
     const P = hands ? this.handsPoint(a, this._p) : this.platformPoint(a, this._p);
     const assist = h.aimAssist(a);
-    // hard-driven balls: a little extra reach (a lunge), the same for everyone
+    // hard-driven balls: a little extra reach (a lunge), the same for everyone; a dive reaches
+    // further with one arm out (`CONTACT.diveOut.reach`)
     const hard = clamp01((ball.speed() - 14) / 10);
-    const r = (hands ? CONTACT.setRadius : CONTACT.passRadius) + assist * 0.25 + hard * CONTACT.digLunge;
+    const diving = a.state === 'dive';
+    const r =
+      (hands ? CONTACT.setRadius : CONTACT.passRadius) + assist * 0.25 + hard * CONTACT.digLunge + (diving ? CONTACT.diveOut.reach : 0);
     // forgiving vertically for low digs
     const dist = (Q: THREE.Vector3) => {
       const dy = bp.y - Q.y;
       return Math.hypot(bp.x - Q.x, dy * (dy < 0 ? 0.6 : 1), bp.z - Q.z);
     };
     let d = dist(P);
-    let form: PassForm = a.state === 'dive' ? 'dive' : hands ? 'hands' : 'platform';
+    let form: PassForm = diving ? 'dive' : hands ? 'hands' : 'platform';
     if (form === 'platform' && d > r * 0.6) {
       // a ball going by to one side: the platform swings out to it, the feet stay where they are
       const rt = rightFromYaw(a.yaw, _r);
@@ -908,6 +911,11 @@ export class ContactSystem {
     const passApex = Math.max(T.apex + (grade === 'Perfect' ? 0 : (h.rand() - 0.3) * 1.2), bp.y + 0.6) + (form === 'dive' ? 1 : 0);
     const apex = covered ? lerp(coverUp, passApex, control) : passApex;
     solveApex({ x: bp.x, y: bp.y, z: bp.z }, target, apex, { x: 0, y: 0, z: 0 }, out);
+    // what the body can do with it: a dive controls only what it meets on the middle of the arms,
+    // a fast ball sent over goes partly the way it bounces, and no pass is harder than the body can make it
+    if (form === 'dive') this.diveOut(a, ball.vel, dBest / r, out);
+    else if (T.z * a.side < 0) this.overControl(ball.vel, incoming, out);
+    this.passPower(a, form, bp.y, incoming, out);
     ball.hit(out, { x: (h.rand() - 0.5) * 6, y: 0, z: (h.rand() - 0.5) * 6 }, 0, t);
     ball.lastTouch = { athlete: a, kind: dig ? 'dig' : 'pass', t, side: a.side };
     a.lastTouchT = t;
@@ -931,6 +939,70 @@ export class ContactSystem {
       target: new THREE.Vector3(target.x, target.y, target.z),
     });
     return true;
+  }
+
+  /**
+   * A dive's touch (`CONTACT.diveOut`): `out` is where it was aimed; `edge` how far out on the arms
+   * it was met (0 the middle, 1 the fingertips). The less it is controlled, the lower it goes, and
+   * along the floor the more it goes the way the diver and the ball (`vin`) were going, turned at random.
+   */
+  private diveOut(a: Athlete, vin: V3, edge: number, out: V3): void {
+    const D = CONTACT.diveOut;
+    const rand = this.host.rand;
+    const k = (1 - clamp01(edge)) ** 2;
+    const g = BALL.gravity;
+    const aimUp = out.y > 0 ? (out.y * out.y) / (2 * g) : 0;
+    const up = lerp(lerp(D.barely[0], D.barely[1], rand()), aimUp, k);
+    const nx = a.vel.x * D.body - vin.x * D.rebound;
+    const nz = a.vel.z * D.body - vin.z * D.rebound;
+    const hx = lerp(nx, out.x, k);
+    const hz = lerp(nz, out.z, k);
+    const turn = (rand() * 2 - 1) * D.turn * (1 - k);
+    out.x = hx * Math.cos(turn) - hz * Math.sin(turn);
+    out.z = hx * Math.sin(turn) + hz * Math.cos(turn);
+    out.y = Math.sqrt(2 * g * up);
+  }
+
+  /**
+   * A third ball sent over coming in fast (`CONTACT.overControl`): part of it comes off the arms the
+   * way it bounces off a platform turned to the aim `out` (the part into it back at `rebound`, the
+   * part across it on at `slide`), not where it was aimed.
+   */
+  private overControl(vin: V3, incoming: number, out: V3): void {
+    const O = CONTACT.overControl;
+    const loss = O.loss * clamp01((incoming - O.easy) / (O.hard - O.easy));
+    const n = Math.hypot(out.x, out.y, out.z);
+    if (loss <= 0 || n <= 0) return;
+    const nx = out.x / n;
+    const ny = out.y / n;
+    const nz = out.z / n;
+    const into = vin.x * nx + vin.y * ny + vin.z * nz;
+    const bx = O.slide * (vin.x - into * nx) - O.rebound * into * nx;
+    const by = O.slide * (vin.y - into * ny) - O.rebound * into * ny;
+    const bz = O.slide * (vin.z - into * nz) - O.rebound * into * nz;
+    out.x = lerp(out.x, bx, loss);
+    out.y = lerp(out.y, by, loss);
+    out.z = lerp(out.z, bz, loss);
+  }
+
+  /**
+   * No pass leaves the arms faster than the body can send it (`CONTACT.passPower`): by form, less
+   * from a platform down at the floor (met at `y`), plus some of the ball's own speed. Faster than
+   * that, it goes the same way, slower.
+   */
+  private passPower(a: Athlete, form: PassForm, y: number, incoming: number, out: V3): void {
+    const P = CONTACT.passPower;
+    const base = form === 'dive' ? P.dive : form === 'side' ? P.side : form === 'hands' ? P.hands : P.platform;
+    // (0 with the ball at the floor, 1 at a standing platform's height)
+    const stand = this.platformPoint(a, this._q).y - a.pos.y;
+    const legs = form === 'dive' ? 1 : lerp(P.low, 1, clamp01((y - CONTACT.diveLow) / (stand - CONTACT.diveLow)));
+    const most = base * legs + P.rebound * incoming;
+    const sp = Math.hypot(out.x, out.y, out.z);
+    if (sp <= most) return;
+    const k = most / sp;
+    out.x *= k;
+    out.y *= k;
+    out.z *= k;
   }
 
   /**

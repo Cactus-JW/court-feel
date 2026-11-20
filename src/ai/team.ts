@@ -456,8 +456,9 @@ export class TeamPlayer implements Brain {
         const v0 = Math.max(PLAYER.diveSpeed, a.speed);
         const ts = Math.min(T, v0 / PLAYER.diveDecel);
         const reach = v0 * ts - 0.5 * PLAYER.diveDecel * ts * ts + lerp(0.45, PLAYER.diveArm, smooth01(T / PLAYER.diveDown));
-        // (one just beyond the hands: dived for at the last moment the arms still get all the way out)
-        const short = T <= PLAYER.diveDown ? AI.dive.stretch : AI.dive.fit;
+        // (one just beyond the hands: dived for at the last moment the arms still get all the way
+        // out; one arm reaches further still, `CONTACT.diveOut.reach`, a scrape that barely keeps it up)
+        const short = (T <= PLAYER.diveDown ? AI.dive.stretch : AI.dive.fit) + CONTACT.diveOut.reach;
         if (T <= PLAYER.diveDown + 0.1 && reach - dl < AI.dive.fit && dl - reach < short) {
           a.dive(yawFromDir(dx, dz));
           a.startAction('pass', now);
@@ -1195,7 +1196,7 @@ export class TeamAI {
       const vy = a.vel.y;
       t += (vy + Math.sqrt(Math.max(0, vy * vy + 2 * BALL.gravity * a.pos.y))) / BALL.gravity + PLAYER.landRecover;
     } else if (a.state === 'land') t += Math.max(0, PLAYER.landRecover - a.stateT);
-    else if (a.state === 'dive') t += Math.max(0, PLAYER.diveTime - a.stateT) + PLAYER.landRecover;
+    else if (a.state === 'dive') t += Math.max(0, a.diveUpT - a.stateT) + PLAYER.landRecover;
     else if (a.state === 'load') t += 0.7;
     return t;
   }

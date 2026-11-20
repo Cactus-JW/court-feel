@@ -649,6 +649,30 @@ describe('running a ball down (Mini Rally)', () => {
     // far beyond `anywayFar` nobody throws themselves at it
     expect(dives(1, 8.4)).toBe(false);
   });
+
+  it('a ball only one arm reaches at full stretch is dived for, not left: a scrape still keeps it alive (CONTACT.diveOut.reach)', () => {
+    // 4 m in front of the libero, dropping from 2 m: past both arms at the end of the dive, within one
+    const t = homeTeam();
+    const L = t.team.players.get('L')!;
+    const b = t.brain('L');
+    L.place(0, 8.5, 0);
+    t.put({ x: 0, y: 2.0, z: 8.5 - 4 }, { x: 0, y: 0, z: 0 }, t.theirs, 'spike', -1);
+    t.ball.lastTouch!.t -= 1;
+    b.job = 'receive';
+    const keep = AI.dive.anyway;
+    // (no throwing themselves at a hopeless one: this one is reached)
+    AI.dive.anyway = 0;
+    let dived = false;
+    for (let k = 0; k < 0.9 * SIM.hz && !dived; k++) {
+      t.g.simTime += DT;
+      stepBall(t.ball.state, DT, t.g.env, []);
+      b.step(DT, t.g as unknown as AiHost);
+      L.step(DT, t.g.simTime);
+      dived = L.state === 'dive';
+    }
+    AI.dive.anyway = keep;
+    expect(dived).toBe(true);
+  });
 });
 
 describe('blocking from the net (Mini Rally)', () => {

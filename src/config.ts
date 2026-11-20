@@ -295,16 +295,21 @@ export const PLAYER = {
    * A dive (AI defenders, at a ball the platform can't reach on foot): the body goes hands-first
    * along the floor at `diveSpeed` m/s or the run's speed, sliding to a stop at `diveDecel` m/s²; the
    * hands are at full stretch, `diveArm` m past the feet and `CONTACT.diveLow` m off the floor,
-   * `diveDown` s after it starts, and the player is up again after `diveTime` s, the last
-   * `diveGetUp` s of it pushing up off the floor (then `landRecover` s more to be moving). With a
-   * run-up that is a ball about 2-2.5 m away dug off the floor (a sprawl or a pancake).
+   * `diveDown` s after it starts, and the player is up again after `diveTime` s, or `diveGetUp` s
+   * after a longer slide stops (`Athlete.diveUpT`), the last `diveGetUp` s of it pushing up off the
+   * floor (then `landRecover` s more to be moving). With a run-up that is a ball about 2.5-3 m away
+   * dug off the floor (a sprawl or a pancake). The slide is a body on its chest and thighs on a
+   * hardwood court: a friction coefficient of about 0.4, so about 4 m/s² of braking, and a dive from
+   * a 5 m/s sprint slides about 3 m (an estimate from that, not a measurement; MatusGib,
+   * 2026-11-20: a diver "should slide on the floor more and travel a larger distance on the ground
+   * not just fall over"; it was 6 m/s², 2 m from a sprint).
    * From hitting the floor to standing takes a player about a second: the push up from the chest
    * alone is 0.5-0.7 s. 1.5 s for the whole dive (it was 1.1 s, with 0.4 s to get up: back on the
    * feet almost as they landed) is an estimate from that, not a measured figure: no study of
    * get-up times after a volleyball dive was found (MatusGib, 2026-11-15: a bit longer).
    */
   diveSpeed: 3.5,
-  diveDecel: 6,
+  diveDecel: 4,
   diveArm: 1.0,
   diveDown: 0.3,
   diveTime: 1.5,
@@ -655,6 +660,38 @@ export const CONTACT = {
   sideErr: 1.4,
   diveLow: 0.25,
   diveErr: 2.2,
+  /**
+   * What a dive does with the ball. Its reach is the platform's (`passRadius`) and `reach` m more: one
+   * arm out, the hand flat on the floor (a pancake). How much of the ball the diver controls falls
+   * with the square of how far out on the arms it is met (0 in the middle, 1 at the fingertips):
+   * controlled, it goes where it was aimed; at full stretch it goes up only `barely` m (between the
+   * two, at random) and along the floor the way the dive and the ball were going, `body` of the
+   * diver's own speed and `rebound` of the ball's coming back off the arm, turned up to `turn` rad
+   * at random. A real dive at the edge of the reach is a scrape: up, but nobody chose where
+   * (MatusGib, 2026-11-20: "very inaccurate when diving at close to max reach you should only be
+   * able to barely get it up and the direction to be a bit random ... adjusted for the path of
+   * travel"). The numbers are our own judgement, not a measurement.
+   */
+  diveOut: { reach: 0.3, barely: [0.4, 1.0] as [number, number], body: 0.6, rebound: 0.3, turn: 1.2 },
+  /**
+   * How hard a pass can send the ball (m/s): the platform standing `platform`, swung out to the side
+   * `side`, the hands `hands`, from a dive `dive`; a platform down at the floor only `low` of it (no
+   * legs under it), and `rebound` of the ball's own speed on top (a hard ball comes off the arms
+   * hard). Faster than that, the contact sends it the same way, slower: a ball dug off the floor in
+   * the back court, or from a dive, does not reach the other side. A free ball over from the back
+   * court needs about 11-12 m/s; a pass to the setter about 9-11. Our own estimates (a strong
+   * forearm free ball is 12-15 m/s; a pancake pops the ball up a metre or two).
+   */
+  passPower: { platform: 15, side: 11, hands: 14, dive: 6, low: 0.7, rebound: 0.3 },
+  /**
+   * A third ball sent over that comes in faster than `easy` m/s is harder to redirect: by `hard` m/s
+   * `loss` of it comes off the arms the way it bounces (the part of it into the platform comes back at
+   * `rebound` of its speed, the part across it goes on at `slide`), not where it was aimed. A hard
+   * deflection flying across the court goes on across it, not over the net (MatusGib, 2026-11-20:
+   * on three, a ball "travelling quickly at them they might not always be able to get"). Our own
+   * estimates.
+   */
+  overControl: { easy: 10, hard: 20, loss: 0.8, rebound: 0.5, slide: 0.7 },
   handsErr: 0.7,
   handsMaxSpeed: 15,
   /**
@@ -1966,9 +2003,11 @@ export const AI = {
    * The dive starts when the hands would land within `fit` m of where the ball comes down low, or
    * up to `stretch` m short of it: a last-ditch dive at a ball just beyond the hands, which the
    * contact system grades by how close it really got (at the edge of the platform: a scrape, up and
-   * not much more). A ball further out than that (up to `anywayFar` m beyond the hands), run at
-   * flat out, is dived for anyway `anyway` of the time: they don't get it, but nobody watches a
-   * ball drop (MatusGib, 2026-11-14). Nobody dives backwards at a serve or a spike: a dive that
+   * not much more), and one arm reaches `CONTACT.diveOut.reach` m further than that. A ball further
+   * out than that (up to `anywayFar` m beyond the hands), run at flat out, is dived for anyway
+   * `anyway` of the time: they mostly don't get it, but nobody watches a ball drop (MatusGib,
+   * 2026-11-14; 2026-11-20: they "should still try to dive and fully run and get balls they might
+   * not be able to get", so it went from half the time to three in four). Nobody dives backwards at a serve or a spike: a dive that
    * would go more than `back` (the share of it pointing away from the net: 0.3 is about 17 degrees
    * behind straight sideways) backwards isn't made, and the ball is played on the feet or not at
    * all. Forwards and sideways only; a ball going over them is run down like any other
@@ -1976,7 +2015,7 @@ export const AI = {
    * of it, or beyond it, is not dived for or run at through the net (MatusGib, 2026-11-15: a
    * setter diving into the net after a pass that went over).
    */
-  dive: { late: 0.9, minDist: 1.0, fit: 0.35, stretch: 0.6, anyway: 0.5, anywayFar: 2.5, back: 0.3, net: 0.6 },
+  dive: { late: 0.9, minDist: 1.0, fit: 0.35, stretch: 0.6, anyway: 0.75, anywayFar: 2.5, back: 0.3, net: 0.6 },
   /** a platform put out for a ball the player is no longer sent to is dropped after this long (s) */
   passDrop: 0.35,
   /**
