@@ -7,6 +7,7 @@ import { Simulation } from '../src/game/simulation';
 import type { V3 } from '../src/physics/ball';
 import { solveApex, solveFixedTime } from '../src/physics/solve';
 import { BlockerBrain, wingSpot } from '../src/ai/blocker';
+import { Scout } from '../src/ai/scout';
 import { NO_HOOKS } from './simHooks';
 
 const DT = 1 / SIM.hz;
@@ -29,11 +30,13 @@ function net(seed = 1, midX: number | null = null) {
   const mid = new Athlete('MB', 1);
   mid.place(midX ?? 0, midX === null ? 3 : 0.45, 0);
   const reads = new Map<Athlete, number>();
+  // our team's scouting report: the team watches every spike of theirs (as TeamAI does), the wings read it
+  const scout = new Scout();
   let by: Athlete | null = null;
   const wing = (x: number) => {
     const a = new Athlete(x > 0 ? 'OPP' : 'OH', 1);
     a.place(x, 0.45, 0);
-    const brain = Object.assign(new BlockerBrain(a, x), { wing: true, mate: () => mid, setTo: () => by, reads });
+    const brain = Object.assign(new BlockerBrain(a, x), { wing: true, mate: () => mid, setTo: () => by, reads, scout });
     const presses: number[] = [];
     /**
      * how far it turned from facing the net while moving along it, its speed along the net as it
@@ -130,18 +133,51 @@ function net(seed = 1, midX: number | null = null) {
       }
     }
   };
-  return { sim, wings, set, rest, pin, reads, right: wings[0], left: wings[1] };
+  /**
+   * their hitter `h` hits the set they met at `to`: down the line, or angled in across our court; or
+   * to land at `landX` (a `tip` lands it short)
+   */
+  const spike = (h: Athlete, to: { x: number; off: number }, cross: boolean, landX?: number, kind: 'spike' | 'tip' = 'spike') => {
+    const from = { x: to.x, y: MEET, z: to.off * THEM };
+    const land = { x: landX ?? (cross ? -Math.sign(to.x) * 2.5 : to.x), z: kind === 'tip' ? 2 : 7 };
+    const flat = Math.hypot(land.x - from.x, land.z - from.z);
+    const t = flat / 20;
+    const v = { x: (land.x - from.x) / t, y: (0.5 * BALL.gravity * t * t - MEET) / t, z: (land.z - from.z) / t };
+    sim.ball.launch(from, v, NO_SPIN, 0, sim.simTime);
+    sim.ball.lastTouch = { athlete: h, kind, t: sim.simTime, side: THEM };
+    for (let i = 0; i < 3; i++) {
+      sim.simTime += DT;
+      sim.ball.step(DT, sim.env);
+      scout.watch(sim, 1);
+      for (const w of wings) w.brain.step(DT, sim);
+    }
+  };
+  return { sim, wings, set, rest, pin, spike, reads, scout, crossReads: scout.cross, right: wings[0], left: wings[1] };
 }
 
 describe('where a pin blocker goes up (Mini Rally, AI.wing)', () => {
-  it('on its hitter wherever it hits from, inside or out, taking the line, out to the antenna at most', () => {
-    expect(wingSpot(4.0, 0.9, 1)).toBeCloseTo(4.0 + AI.defence.shade, 9);
-    expect(wingSpot(-4.0, 0.9, -1)).toBeCloseTo(-4.0 - AI.defence.shade, 9);
+  it('on its hitter wherever it hits from, inside or out: square on the ball against a hitter it does not know, out to the antenna at most', () => {
+    expect(wingSpot(4.0, 0.9, 1)).toBeCloseTo(4.0, 9);
+    expect(wingSpot(-4.0, 0.9, -1)).toBeCloseTo(-4.0, 9);
     // a hitter 1.2 m inside the pin's base spot: the pin goes in with it
-    expect(wingSpot(1.8, 0.9, 1)).toBeCloseTo(1.8 + AI.defence.shade, 9);
+    expect(wingSpot(1.8, 0.9, 1)).toBeCloseTo(1.8, 9);
     // a set wide of the antenna: the ball has to come back inside it
     expect(wingSpot(5.2, 0.9, 1)).toBeCloseTo(AI.wing.outMax, 9);
     expect(AI.wing.outMax).toBeLessThan(COURT.halfWidth);
+  });
+
+  it('against a hitter who hits line it takes the line, against one who hits cross it takes the cross; the ball always on its hands', () => {
+    // their outside on our right, their opposite on our left
+    expect(wingSpot(4.0, 0.9, 1, null, 0)).toBeCloseTo(4.0 + AI.defence.shade, 9);
+    expect(wingSpot(4.0, 0.9, 1, null, 1)).toBeCloseTo(4.0 - AI.defence.shade, 9);
+    expect(wingSpot(-4.0, 0.9, -1, null, 0)).toBeCloseTo(-4.0 - AI.defence.shade, 9);
+    expect(wingSpot(-4.0, 0.9, -1, null, 1)).toBeCloseTo(-4.0 + AI.defence.shade, 9);
+    // a hitter who mixes them: in between
+    expect(wingSpot(4.0, 0.9, 1, null, 0.25)).toBeCloseTo(4.0 + AI.defence.shade / 2, 9);
+    // however far it shades, the ball is inside its hands
+    expect(AI.defence.shade).toBeLessThan(AI.defence.handHalf);
+    // and never past the antenna
+    expect(wingSpot(4.2, 0.9, 1, null, 0)).toBeCloseTo(AI.wing.outMax, 9);
   });
 
   it('an inside ball on its half: beside the middle, a double block', () => {
@@ -157,8 +193,9 @@ describe('where a pin blocker goes up (Mini Rally, AI.wing)', () => {
   it('beside the middle it closes on our middle where it is at the net, hands to hands, not on the ball', () => {
     expect(wingSpot(LANES.L.x, LANES.L.z, 1, 0.3)).toBeCloseTo(0.3 + AI.middle.closeGap, 9);
     expect(wingSpot(1.0, 0.8, 1, 0.7)).toBeCloseTo(0.7 + AI.middle.closeGap, 9);
-    // its own hitter's pin set: on the hitter, wherever the middle is
-    expect(wingSpot(4.0, 0.9, 1, 0.3)).toBeCloseTo(4.0 + AI.defence.shade, 9);
+    // its own hitter's pin set: on the hitter, wherever the middle is (never closing the gap to it)
+    expect(wingSpot(4.0, 0.9, 1, 0.3)).toBeCloseTo(4.0, 9);
+    expect(wingSpot(4.0, 0.9, 1, 3.4, 0)).toBeCloseTo(4.0 + AI.defence.shade, 9);
   });
 
   it('an attack on the other half of the net is not its block (the other wing, or the middle alone)', () => {
@@ -396,5 +433,134 @@ describe('our pin blockers on their pin hitter going inside, and closing in (Min
         expect(r.at.get(w.a)!.reach * inward).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('our pin blockers block their hitter, and scout where they hit (Mini Rally, AI.wing.scout)', () => {
+  const OUT = { x: 4.0, off: 0.9 };
+  const HIGH = { apexAbove: 1.65 };
+
+  it('on a pin set it blocks the hitter: square on a hitter it does not know, its hands on the ball at the hit, never reaching in to the middle', () => {
+    // a blocker that reads the set well (skill 1): where its hands are at the hit is where it means
+    // to block, not what is left of a poor read (a poor blocker's read: its own fact, below)
+    let off = 0;
+    let n = 0;
+    for (let seed = 1; seed <= 8; seed++)
+      for (const x of [OUT.x, -OUT.x]) {
+        const s = net(seed, x > 0 ? 3.4 : -3.4);
+        for (const w of s.wings) w.brain.skill = 1;
+        const r = s.set({ x, off: OUT.off, by: s.pin(x > 0 ? 4.3 : -4.3) }, HIGH, (onTime) => [onTime]);
+        const at = r.at.get((x > 0 ? s.right : s.left).a)!;
+        expect(at.state).toBe('air');
+        // towards the middle of the net is in (> 0): its hands are not on their way to its middle
+        const inward = -Math.sign(x) * (at.hands - x);
+        expect(inward).toBeLessThan(AI.defence.handHalf / 2);
+        off += Math.abs(at.hands - x);
+        n++;
+      }
+    // on the ball, give or take its read
+    expect(off / n).toBeLessThan(0.12);
+  });
+
+  it('it scouts their hitter: after a run of line shots it takes the line, after a run of cross shots the cross, its hands with it at the hit', () => {
+    let line = 0;
+    let cross = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const s = net(seed);
+      const h = s.pin(4.3);
+      // one line shot: the read goes `scout` of the way to line, from not knowing
+      s.set({ ...OUT, by: h }, HIGH);
+      s.spike(h, OUT, false);
+      s.rest();
+      expect(s.crossReads.get(h)).toBeCloseTo(AI.wing.scoutStart * (1 - AI.wing.scout), 9);
+      for (let i = 0; i < 4; i++) {
+        s.set({ ...OUT, by: h }, HIGH);
+        s.spike(h, OUT, false);
+        s.rest();
+      }
+      expect(s.crossReads.get(h)!).toBeLessThan(0.1);
+      line += (s.set({ ...OUT, by: h }, HIGH).at.get(s.right.a)!.hands - OUT.x) / 6;
+      s.rest();
+      for (let i = 0; i < 6; i++) {
+        s.set({ ...OUT, by: h }, HIGH);
+        s.spike(h, OUT, true);
+        s.rest();
+      }
+      expect(s.crossReads.get(h)!).toBeGreaterThan(0.9);
+      cross += (s.set({ ...OUT, by: h }, HIGH).at.get(s.right.a)!.hands - OUT.x) / 6;
+      // the other wing never went up: the set was not in front of it
+      expect(s.left.presses.length).toBe(0);
+    }
+    // outside the ball (line) against the line hitter, inside it (cross) against the cross hitter
+    expect(line).toBeGreaterThan(AI.defence.shade * 0.7);
+    expect(cross).toBeLessThan(-AI.defence.shade * 0.7);
+  });
+
+  it('the team scouts each pin spike of theirs once, whoever of ours is at the net: you blocking there too', () => {
+    const s = net(1);
+    // you are at the net on both sides: no wing brain of ours watches the ball
+    for (const w of s.wings) w.brain.enabled = false;
+    const theirOpp = s.pin(-4.3);
+    s.set({ x: -OUT.x, off: OUT.off, by: theirOpp }, HIGH);
+    s.spike(theirOpp, { x: -OUT.x, off: OUT.off }, true);
+    // watched on every step after it, it is still one shot: one write
+    for (let i = 0; i < 5; i++) s.scout.watch(s.sim, 1);
+    s.rest();
+    expect(s.crossReads.get(theirOpp)).toBeCloseTo(AI.wing.scoutStart + AI.wing.scout * (1 - AI.wing.scoutStart), 9);
+    expect(s.scout.crossOf(theirOpp)).toBe(s.crossReads.get(theirOpp));
+  });
+
+  it("a shot is line when it would land in our line digger's lane, angled in or not, and cross anywhere inside it", () => {
+    const W = COURT.halfWidth;
+    const lane = W - AI.defence.lineLane;
+    // their outside, met at x = 4 on our right: angled in a little, still landing in the lane
+    const s = net(1);
+    const h = s.pin(4.3);
+    s.spike(h, OUT, false, lane + 0.3);
+    expect(s.crossReads.get(h)).toBeCloseTo(AI.wing.scoutStart * (1 - AI.wing.scout), 9);
+    // out wide of the sideline: down the line too
+    const wide = s.pin(4.3);
+    s.spike(wide, OUT, false, W + 0.5);
+    expect(s.crossReads.get(wide)).toBeLessThan(AI.wing.scoutStart);
+    // just inside the lane, in the seam (zone 6): a coach calls that cross
+    const seam = s.pin(4.3);
+    s.spike(seam, OUT, false, lane - 0.3);
+    expect(s.crossReads.get(seam)).toBeGreaterThan(AI.wing.scoutStart);
+  });
+
+  it('a tip or a middle attack is not a pin shot to read', () => {
+    const s = net(1);
+    const theirOH = s.pin(4.3);
+    s.spike(theirOH, OUT, false, OUT.x, 'tip');
+    expect(s.crossReads.has(theirOH)).toBe(false);
+    const theirMid = s.pin(0.3);
+    s.set({ x: 0.3, off: 0.7, by: theirMid }, { apexAbove: 0.3 });
+    s.spike(theirMid, { x: 0.3, off: 0.7 }, true);
+    s.rest();
+    expect(s.crossReads.has(theirMid)).toBe(false);
+  });
+
+  it("a poor pin blocker's hands are further off the ball at the hit than a good one's", () => {
+    // a high set to either pin, 60 seeds: how far its hands are from its line-up on the ball at the hit
+    const off = (skill: number) => {
+      let sum = 0;
+      let n = 0;
+      for (let seed = 1; seed <= 60; seed++) {
+        const x = seed % 2 ? OUT.x : -OUT.x;
+        const s = net(seed, x > 0 ? 3.4 : -3.4);
+        for (const w of s.wings) w.brain.skill = skill;
+        const r = s.set({ x, off: OUT.off, by: s.pin(x > 0 ? 4.3 : -4.3) }, HIGH, (onTime) => [onTime]);
+        const at = r.at.get((x > 0 ? s.right : s.left).a)!;
+        sum += Math.abs(at.hands - wingSpot(x, OUT.off, Math.sign(x))!);
+        n++;
+      }
+      return sum / n;
+    };
+    const poor = off(0);
+    const good = off(1);
+    // the good one is on the ball; the poor one about a hand-width off on average
+    expect(good).toBeLessThan(0.05);
+    expect(poor).toBeGreaterThan(AI.defence.handHalf * 0.75);
+    expect(poor).toBeGreaterThan(good * 5);
   });
 });

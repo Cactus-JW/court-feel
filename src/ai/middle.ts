@@ -7,8 +7,10 @@ import { laneFor, quickSpot, SETTER_SPOT } from '../game/plays';
 import type { V3 } from '../physics/ball';
 import { predictJump } from '../game/approach';
 import { atNet, moveTo, netYaw, stop } from './brain';
+import { pinShade } from './defence';
 import { decoyFor, dumpHeld, greenFools } from './greenBite';
 import { BallRead } from './read';
+import { Scout } from './scout';
 
 /** what a middle expects before the set: nothing in particular (read it), the quick, or one of their pins */
 export type Guess = 'read' | 'quick' | 'outside' | 'opposite';
@@ -66,6 +68,10 @@ export class MiddleBlocker implements Brain {
   /** the user's green set fooled it (null: it reads the set) */
   private fooled: Fooled | null = null;
   private readonly b: V3 = { x: 0, y: 0, z: 0 };
+  /** who their set is for, as our wings see the hitter go for it (null: it cannot tell) */
+  setTo: () => Athlete | null = () => null;
+  /** our team's scouting of their hitters, line or cross (`AI.wing.scout`; the team keeps it, the middle only reads it) */
+  scout = new Scout();
 
   constructor(
     public athlete: Athlete,
@@ -231,10 +237,11 @@ export class MiddleBlocker implements Brain {
     const M = AI.middle;
     if (Math.abs(bx) <= M.pinX) return bx;
     // close on our pin blocker, hands to hands: on the wing itself when it is at the net on that
-    // side (wherever it read the set to), else where a pin blocker shading the line would be
+    // side (wherever it read the set to), else where our pin blocker would line up on that hitter,
+    // as our team has scouted them (the whole block plays the same report)
     const r = Math.sign(bx);
     const wing = this.ourWings().find((w) => Math.sign(w.pos.x) === r && Math.abs(w.pos.z) < 1.5);
-    return (wing ? wing.pos.x : bx + r * AI.defence.shade) - r * M.closeGap;
+    return (wing ? wing.pos.x : bx + r * pinShade(this.scout.crossOf(this.setTo()))) - r * M.closeGap;
   }
 
   /**

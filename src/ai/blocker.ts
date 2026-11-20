@@ -1,26 +1,34 @@
 import { AI, BALL, COURT, PLAYER } from '../config';
-import { clamp, wrapAngle, yawFromDir } from '../core/mathx';
+import { clamp, clamp01, wrapAngle, yawFromDir } from '../core/mathx';
 import type { Athlete } from '../game/athlete';
 import type { AiHost, Brain } from '../game/brains';
 import type { V3 } from '../physics/ball';
 import { atNet, moveTo, netYaw, stop } from './brain';
-import { attackKind } from './defence';
+import { attackKind, pinShade } from './defence';
 import { greenFools } from './greenBite';
+import { Scout } from './scout';
 
 /**
  * Where a Mini Rally pin blocker on our right (`r` = 1, world +x) or left (-1) goes up for an attack
  * met `x` along the net, `off` m off it (AI.wing): a pin set on its half, inside or out, on the
- * hitting shoulder taking the line, out to the antenna at most (`outMax`); an inside ball on its
- * half beside the middle; a back-row attack beside the middle, whichever half (all three block the
- * pipe). Beside the middle it closes on our middle itself when it is at the net, at `mateX` (hands
- * to hands, as the middle closes on a pin blocker); else on the attack. Null: not its block (the
- * other half: the other wing's, or the middle's alone).
+ * ball, shaded to the side the hitter hits (`pinShade` of `cross`, how often they hit cross), out
+ * to the antenna at most (`outMax`); an inside ball on its half beside the middle; a back-row
+ * attack beside the middle, whichever half (all three block the pipe). Beside the middle it closes
+ * on our middle itself when it is at the net, at `mateX` (hands to hands, as the middle closes on a
+ * pin blocker); else on the attack. Null: not its block (the other half: the other wing's, or the
+ * middle's alone).
  */
-export function wingSpot(x: number, off: number, r: number, mateX: number | null = null): number | null {
+export function wingSpot(
+  x: number,
+  off: number,
+  r: number,
+  mateX: number | null = null,
+  cross: number = AI.wing.scoutStart,
+): number | null {
   const kind = attackKind(x, off);
   if (kind !== 'back' && Math.sign(x) !== r) return null;
   if (kind !== 'pin') return (mateX ?? x) + r * AI.middle.closeGap;
-  return r * Math.min(r * x + AI.defence.shade, AI.wing.outMax);
+  return r * Math.min(r * x + pinShade(cross), AI.wing.outMax);
 }
 
 /**
@@ -72,6 +80,12 @@ export class BlockerBrain implements Brain {
   setTo: () => Athlete | null = () => null;
   /** a wing: how often each of their pin hitters has gone inside (`AI.wing.learn`; shared by our wings) */
   reads = new Map<Athlete, number>();
+  /** a wing: our team's scouting of their hitters, line or cross (`AI.wing.scout`; the team keeps it, this one only reads it) */
+  scout = new Scout();
+  /** a wing: its read of this set's hitter, line (0) or cross (1) */
+  private cross = AI.wing.scoutStart;
+  /** a wing: this set is a pin set it blocks, so its hands stay on its line-up */
+  private onPin = false;
   /** a wing: this set is its own pin hitter's, inside (it follows them in), and what that costs its reaction */
   private ownInside = false;
   private surprise = 0;
@@ -94,6 +108,7 @@ export class BlockerBrain implements Brain {
     this.jumped = false;
     this.tJump = -1;
     this.handsTo = null;
+    this.onPin = false;
   }
 
   step(dt: number, g: AiHost): void {
@@ -131,15 +146,17 @@ export class BlockerBrain implements Brain {
       if (this.wing) this.readHitter(g);
     }
     // a wing's hands in the air keep going for where it wanted them (late, a side block, as the
-    // middle's), never away from the ball: if that is the other way (it drifted past the ball, or
-    // misread it), for the ball itself
+    // middle's). On a pin set that is its line-up as it reads it, shaded to the side it takes (read
+    // well, the ball on its hands; a poor blocker's read leaves them off it); elsewhere never away
+    // from the ball: if that is the other way (it drifted past the ball, or misread it), for the ball
+    // itself
     if (this.wing) {
       const mid = this.mate();
       if (mid?.state === 'load' && this.midWas !== 'load') this.midPressT = now;
       this.midWas = mid?.state ?? '';
       const toBall = this.b.x - a.pos.x;
       const to = this.handsTo === null ? 0 : this.handsTo - a.pos.x;
-      const aim = Math.sign(to) === Math.sign(toBall) ? to : toBall;
+      const aim = this.onPin || Math.sign(to) === Math.sign(toBall) ? to : toBall;
       const want =
         a.state === 'air' && a.action?.kind === 'block' && this.handsTo !== null ? clamp(aim, -AI.middle.reach, AI.middle.reach) : 0;
       a.reachX += (want - a.reachX) * Math.min(1, dt / AI.middle.reachTime);
@@ -232,6 +249,7 @@ export class BlockerBrain implements Brain {
     this.ownInside = false;
     this.surprise = 0;
     const h = this.setTo();
+    this.cross = this.scout.crossOf(h);
     if (!h || Math.sign(h.pos.x) !== Math.sign(this.homeX) || Math.abs(h.pos.x) <= AI.defence.pinX) return;
     if (this.attackAt(g).tc <= 0 || Math.abs(this.b.z) > AI.defence.backOff) return;
     const seen = this.reads.get(h) ?? 0;
@@ -262,8 +280,13 @@ export class BlockerBrain implements Brain {
         ? null
         : this.ownInside && kind !== 'pin'
           ? (mateX ?? this.b.x) + r * AI.middle.closeGap
-          : wingSpot(this.b.x, off, r, mateX);
-    const misread = kind === 'pin' || mateX === null ? this.readErr : 0;
+          : wingSpot(this.b.x, off, r, mateX, this.cross);
+    // on a pin set it watches its hitter and the ball: its read sharpens as the ball comes, down to
+    // what its skill leaves it (AI.wing.readFloor)
+    const flight = tc - this.setT;
+    const left = flight > 0 ? clamp01((tc - now) / flight) : 0;
+    const floor = AI.wing.readFloor * (1 - this.skill);
+    const misread = kind === 'pin' ? this.readErr * Math.max(left * left, floor) : mateX === null ? this.readErr : 0;
     const want = spot === null ? null : clamp(spot + misread, -AI.wing.outMax, AI.wing.outMax);
     this.tJump = this.jumpTime(tc, quick);
     // an inside ball (a quick) is the middle's, unless this wing gets near enough to go up with it
@@ -277,10 +300,13 @@ export class BlockerBrain implements Brain {
     }
     if (want === null || !this.helps) {
       this.handsTo = null;
+      this.onPin = false;
       return false;
     }
+    this.onPin = kind === 'pin';
     this.targetX = want;
-    // its hands: on the spot it went for (out at the line, or beside our middle's hands); closing
+    // its hands: on a pin set, its line-up on the ball as it reads it now (the last adjust to the
+    // set, what is left of its misread with it); beside our middle, on the spot it went for; closing
     // in with no middle on the ball, for the ball itself
     const inward = kind !== 'pin' || this.ownInside;
     this.handsTo = kind !== 'pin' && mateX === null ? this.b.x : want;

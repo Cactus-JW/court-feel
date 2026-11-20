@@ -25,10 +25,11 @@ import {
 } from '../game/plays';
 import { BlockerBrain } from './blocker';
 import { moveTo, netYaw, stop } from './brain';
-import { attackKind, readSpots, seamSpot } from './defence';
+import { attackKind, pinShade, readSpots, seamSpot } from './defence';
 import { giveWay, shoulderToShoulder, type Mate } from './giveWay';
 import { HitterBrain } from './hitter';
 import { MiddleBlocker } from './middle';
+import { Scout } from './scout';
 import { situationOf, type Situation } from './situation';
 import { BallRead } from './read';
 import { ServerBrain } from './server';
@@ -197,17 +198,21 @@ export class TeamPlayer implements Brain {
     }
     this.blocker =
       slot === 'MB'
-        ? new MiddleBlocker(
-            athlete,
-            FORM.defense.MB.x * s,
-            () => team.opponents?.players.get('MB') ?? null,
-            () => team.frontRow().filter((w) => w !== athlete),
+        ? Object.assign(
+            new MiddleBlocker(
+              athlete,
+              FORM.defense.MB.x * s,
+              () => team.opponents?.players.get('MB') ?? null,
+              () => team.frontRow().filter((w) => w !== athlete),
+            ),
+            { setTo: () => team.theirSetFor(), scout: team.scout },
           )
         : Object.assign(new BlockerBrain(athlete, FORM.defense[slot].x * s), {
             wing: true,
             mate: () => team.players.get('MB') ?? null,
             setTo: () => team.theirSetFor(),
             reads: team.pinReads,
+            scout: team.scout,
           });
     this.server = new ServerBrain(athlete);
   }
@@ -529,6 +534,8 @@ export class TeamAI {
   opponents: TeamAI | null = null;
   /** how often each of their pin hitters has gone inside, as our wings read it (`AI.wing.learn`) */
   readonly pinReads = new Map<Athlete, number>();
+  /** how often each of their hitters hits cross rather than line off a pin attack, as our whole team scouts it (`AI.wing.scout`): whoever is at the net */
+  readonly scout = new Scout();
   /** who should take the incoming first ball (sticky per incoming ball) */
   receiver: Athlete | null = null;
   private receiverFor: unknown = null;
@@ -1149,6 +1156,8 @@ export class TeamAI {
     const lt = this.g.ball.lastTouch;
     if (!lt || lt === this.lastTouchRef) return;
     this.lastTouchRef = lt;
+    // every spike of theirs is scouted once, whoever of ours is at the net (the user too)
+    this.scout.watch(this.g, this.side);
     // the serving team may not play its own serve: only the other side can
     if (lt.kind === 'serve') this.ourServe = lt.side === this.side;
     else if (lt.kind !== 'feed') {
@@ -1691,6 +1700,9 @@ export class TeamAI {
     }
     const atk = this.attack;
     const s = this.side;
+    // our pin blocker lines up shaded to the side their hitter hits: the defence plays around that block
+    const h = this.theirSetFor();
+    const shade = pinShade(this.scout.crossOf(h));
     for (const slot of ['S', 'L', 'OH2', 'OH1', 'OPP'] as const) {
       const a = this.players.get(slot);
       const b = a ? this.brains.get(a) : null;
@@ -1699,7 +1711,7 @@ export class TeamAI {
       if (!b.setRead.seen(now)) continue;
       const x = b.setRead.x(atk.x, now, atk.t) * s;
       const off = Math.abs(atk.z);
-      const spot = readSpots({ x, off, kind: attackKind(x, off) })[slot];
+      const spot = readSpots({ x, off, kind: attackKind(x, off), shade })[slot];
       const back = slot === 'S' || slot === 'L' || slot === 'OH2';
       if (spot) {
         b.readSpot = { x: spot.x * s, z: spot.z * s };

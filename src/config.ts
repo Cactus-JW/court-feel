@@ -1730,6 +1730,14 @@ export const AI = {
     /** line digger: this far inside the sideline, this deep */
     lineIn: 1.0,
     digDepth: 5.75,
+    /**
+     * The line digger's lane: from its sideline this far in (m). It stands in the middle of it
+     * (`lineIn`), so a ball landing there is one it plays without a run; one landing further in is
+     * the cross digger's or the middle back's (the seam, zone 6), and a coach calls it cross. Our
+     * scouting reads line or cross by it (`AI.wing.scout`), so the block's read and the digger's lane
+     * agree. Our own geometry (twice `lineIn`), not a measurement.
+     */
+    lineLane: 2.0,
     /** cross digger: this far outside the inside blocker's shadow, and at least `sideIn` inside the sideline */
     crossOutside: 0.5,
     sideIn: 1.0,
@@ -1748,7 +1756,11 @@ export const AI = {
     /** off-blocker: this far off the net, this far in from its sideline */
     offOff: 3.0,
     offIn: 3.0,
-    /** our blockers on a pin set: the pin blocker shades this far outside the attack (the middle closes `AI.middle.closeGap` inside it); a blocker's hands reach this far either side */
+    /**
+     * our blockers on a pin set: the pin blocker lines up on the attack, shaded at most this far off it
+     * (`pinShade`: outside against a hitter who hits line, inside against one who hits cross; the middle
+     * closes `AI.middle.closeGap` inside it); a blocker's hands reach this far either side
+     */
     shade: 0.25,
     handHalf: 0.325,
     /** against the quick: the middle back cheats up a little, to this depth */
@@ -1995,6 +2007,30 @@ export const AI = {
    * (a drift block: "one side step and then jump with their hands into the middle"). Late, it still
    * steps into it: it plants once the jump's drift carries it the rest of the way, or at the last
    * moment that has its hands out at the hit. Out at the line it gets there and goes straight up.
+   *
+   * On a pin set it blocks the hitter (MatusGib, 2026-11-20: "when setting to the pin the pin
+   * blocker should primarily try to block you"), never sliding in to close the gap to the middle (a
+   * seam is the middle being late): it lines up on the ball, shaded `AI.defence.shade` at most to
+   * the side that hitter hits ("if you hit line a lot he should block line, if you hit cross a lot
+   * he should block cross"), and its hands stay on that line-up in the air. Our whole team scouts
+   * their hitters (`Scout`, `TeamAI.scout`), whoever of ours is at the net, the user too, and both
+   * wings, the middle and the perimeter defence play the same report: every pin spike of theirs
+   * moves its read of that hitter `scout` of the way to line (0: it would land in our line digger's
+   * lane, `AI.defence.lineLane`, or out wide of it) or cross (1: anywhere inside that), from
+   * `scoutStart` (square on the ball: a hitter it has not seen). `scout` and `scoutStart` are a
+   * choice for the top level, not a measurement: a top side adjusting to a hitter within a set,
+   * which is what the report asked for (three line shots and it is taking the line). At lower levels
+   * a block scouts slower or not at all (issue #137: Rec and Club never do), so `scout` becomes a
+   * level number with the levels of play (issue #60).
+   *
+   * Its line-up on the set sharpens as the ball comes (its misread shrinks with the square of the
+   * flight left, as `BallRead`): a pin blocker fronting its hitter sees where they will meet it. It
+   * never sharpens past what its skill leaves it: down to `readFloor` × (1 − skill) of the misread
+   * it started with, and its hands carry what is left. So a pin block's quality comes from the
+   * blocker's skill, for the levels to turn: a good blocker (skill 1) has its hands on the ball at
+   * the hit; a poor one (skill 0) is about a hand-width off on average (`readFloor` is picked for
+   * that: as far off as every blocker's hands were before the read sharpened, 0.35 m mean on a high
+   * pin set, 60 seeds).
    */
   wing: {
     lateReach: 1.2,
@@ -2008,6 +2044,9 @@ export const AI = {
     learn: 0.4,
     crossover: 1.5,
     hips: 0.6,
+    scout: 0.35,
+    scoutStart: 0.5,
+    readFloor: 0.6,
   },
   defenderSkill: 0.7,
   setterAccuracy: 0.15,
