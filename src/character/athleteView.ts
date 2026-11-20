@@ -1400,7 +1400,8 @@ export class AthleteView {
   /** 0..1 how far into a dive the body is: down onto the floor, held, then back up */
   private diveP(): number {
     const t = this.athlete.stateT;
-    return smooth01(t / PLAYER.diveDown) * (1 - smooth01((t - (PLAYER.diveTime - PLAYER.diveGetUp)) / PLAYER.diveGetUp));
+    const up = this.athlete.diveUpT;
+    return smooth01(t / PLAYER.diveDown) * (1 - smooth01((t - (up - PLAYER.diveGetUp)) / PLAYER.diveGetUp));
   }
 
   /** how far the ball is to the body's right (+) or left (-), m (0 without a ball) */

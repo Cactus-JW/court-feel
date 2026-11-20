@@ -89,6 +89,8 @@ export class Athlete {
   ryaw = 0;
   state: AState = 'ground';
   stateT = 0;
+  /** in a dive: how long (s) into it the player is back up (`PLAYER.diveTime`, or the slide to a stop and the get-up) */
+  diveUpT: number = PLAYER.diveTime;
   stats: PositionStats;
   role: PositionId;
   /** court side: +1 (user team, +z) or -1 */
@@ -421,7 +423,7 @@ export class Athlete {
       const k = sp > 1e-5 ? Math.max(0, sp - PLAYER.diveDecel * dt) / sp : 0;
       this.vel.x *= k;
       this.vel.z *= k;
-      if (this.stateT >= PLAYER.diveTime) {
+      if (this.stateT >= this.diveUpT) {
         this.state = 'land';
         this.stateT = 0;
       }
@@ -492,7 +494,8 @@ export class Athlete {
 
   /**
    * Throw the body at a ball out of reach (AI defenders): hands-first along `yaw`, at
-   * `PLAYER.diveSpeed` at least, sliding on the floor; up again `PLAYER.diveTime` later.
+   * `PLAYER.diveSpeed` at least, sliding on the floor; up again `PLAYER.diveTime` later, or once
+   * a long slide has stopped and the get-up (`PLAYER.diveGetUp`) is done.
    */
   dive(yaw: number): void {
     if (this.state !== 'ground' && this.state !== 'land') return;
@@ -503,6 +506,7 @@ export class Athlete {
     const along = Math.max(PLAYER.diveSpeed, this.vel.x * d.x + this.vel.z * d.z);
     this.vel.x = d.x * along;
     this.vel.z = d.z * along;
+    this.diveUpT = Math.max(PLAYER.diveTime, along / PLAYER.diveDecel + PLAYER.diveGetUp);
   }
 
   /** begin an action (animation + contact bookkeeping read it) */

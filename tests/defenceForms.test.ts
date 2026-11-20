@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { AI, CONTACT, COURT, PLAYER, SIM, TIMING } from '../src/config';
+import { AI, BALL, CONTACT, COURT, PLAYER, SIM, TIMING } from '../src/config';
 import { Athlete, type PassForm } from '../src/game/athlete';
 import { ContactSystem, type ContactEvent, type ContactHost } from '../src/game/contact';
 import { Rng, yawFromDir } from '../src/core/mathx';
@@ -29,6 +29,13 @@ function play(opts: {
   /** the block it came off handed it back softly (a recycled ball) */
   recycle?: boolean;
   rand?: () => number;
+  /** where the contact aims it (default: the setter's hands) */
+  target?: { x: number; y: number; z: number; apex: number };
+  /** the dive goes this way (default: at `to`), from a run at this speed along it */
+  diveAt?: { x: number; z: number };
+  run?: number;
+  /** this is our third ball (the contact may only try to get it over) */
+  third?: boolean;
 }) {
   const state = makeBall();
   const predictor = new BallPredictor(DT, SIM.predictHorizon);
@@ -67,18 +74,24 @@ function play(opts: {
     aimTargetFor: (_a: Athlete, out: THREE.Vector3) => out.set(1, 0.105, -6),
     emitContact: (e: ContactEvent) => events.push(e),
     rand: opts.rand ?? (() => 0.5),
-    passTarget: () => TARGET,
+    passTarget: () => opts.target ?? TARGET,
     setOptions: () => [],
     canServe: () => true,
   } satisfies ContactHost;
   const cs = new ContactSystem(host);
   const a = new Athlete('L', 1);
   a.place(0, 6, 0);
+  if (opts.third) ball.lastTouch = { athlete: new Athlete('OH', 1), kind: 'set', t: -1, side: 1 };
   solveFixedTime(opts.from, opts.to, opts.T, { x: 0, y: 0, z: 0 }, state.v);
   Object.assign(state.p, opts.from);
   version++;
   if (opts.dive) {
-    a.dive(yawFromDir(opts.to.x - a.pos.x, opts.to.z - a.pos.z));
+    const at = opts.diveAt ?? opts.to;
+    const dx = at.x - a.pos.x;
+    const dz = at.z - a.pos.z;
+    const d = Math.hypot(dx, dz);
+    a.vel.set((dx / d) * (opts.run ?? 0), 0, (dz / d) * (opts.run ?? 0));
+    a.dive(yawFromDir(dx, dz));
     a.startAction('pass', 0);
   }
   let act = a.action;
@@ -93,7 +106,22 @@ function play(opts: {
     stepBall(state, DT, host.env);
   }
   const e = events[0];
-  return { e, off: e ? Math.hypot(e.target.x - TARGET.x, e.target.z - TARGET.z) : NaN, vy: state.v.y, v: { ...state.v } };
+  const v = { ...state.v };
+  const at = { ...state.p };
+  // where it goes from there: how high above the contact it peaks, and whether it clears the net
+  let top = state.p.y;
+  let over = false;
+  for (let i = 0; i < SIM.hz * 4 && e && !state.rest; i++) {
+    const z0 = state.p.z;
+    stepBall(state, DT, host.env);
+    top = Math.max(top, state.p.y);
+    if (z0 > 0 && state.p.z <= 0) {
+      over = state.p.y > COURT.netHeightMen + BALL.radius && Math.abs(state.p.x) < COURT.halfWidth;
+      break;
+    }
+    if (state.p.y <= BALL.radius + 0.01) break;
+  }
+  return { e, off: e ? Math.hypot(e.target.x - TARGET.x, e.target.z - TARGET.z) : NaN, vy: v.y, v, up: top - at.y, over };
 }
 
 /** a spike from their outside at 20 m/s, met by our defender's platform `side` m to their right */
@@ -139,6 +167,188 @@ describe('how a defender plays the first ball', () => {
     expect(hands.e.note).toBe('Overhand');
     expect(platform.e?.form).toBe('platform');
     expect(hands.off).toBeLessThan(platform.off);
+  });
+});
+
+/** where a diver's hands are `T` s into a dive along unit (dx, dz) from (0, 6), launched from a run at `run` m/s (PLAYER.dive*) */
+function handsAt(T: number, dx: number, dz: number, run = 0): V3 {
+  const v0 = Math.max(PLAYER.diveSpeed, run);
+  const ts = Math.min(T, v0 / PLAYER.diveDecel);
+  const p = Math.min(1, T / PLAYER.diveDown);
+  const k = p * p * (3 - 2 * p);
+  const along = v0 * ts - 0.5 * PLAYER.diveDecel * ts * ts + 0.45 + (PLAYER.diveArm - 0.45) * k;
+  return { x: dx * along, y: H * 0.34 + (CONTACT.diveLow - H * 0.34) * k, z: 6 + dz * along };
+}
+
+const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+const spread = (xs: number[]) => Math.sqrt(mean(xs.map((x) => (x - mean(xs)) ** 2)));
+/** a free ball over on our third contact: deep into their court */
+const OVER = { x: 0, y: 0.5, z: -6.5, apex: 5.2 };
+
+describe('a dive (PLAYER.dive*, CONTACT.diveOut)', () => {
+  it('slides along the floor: from a sprint about 3 m on the chest, and the diver is up only once the slide has stopped', () => {
+    const slide = (run: number) => {
+      const a = new Athlete('L', 1);
+      a.place(0, 6, 0);
+      a.vel.set(0, 0, -run);
+      a.dive(yawFromDir(0, -1));
+      let t = 0;
+      let stopped = -1;
+      while (a.state === 'dive' && t < 5) {
+        t += DT;
+        a.step(DT, t);
+        if (stopped < 0 && a.speed < 1e-3) stopped = t;
+      }
+      return { d: 6 - a.pos.z, down: t, stopped };
+    };
+    const sprint = slide(5);
+    // a body sliding on a hardwood floor brakes at about 0.4 g
+    expect(sprint.d).toBeGreaterThan(2.8);
+    expect(sprint.d).toBeLessThan(3.6);
+    expect(sprint.down).toBeGreaterThanOrEqual(sprint.stopped + PLAYER.diveGetUp - DT);
+    // a longer slide keeps them down longer than a dive from a standstill
+    const still = slide(0);
+    expect(still.d).toBeGreaterThan(1.2);
+    expect(sprint.down).toBeGreaterThan(still.down);
+  });
+
+  it('a ball on the middle of the arms goes up for a team-mate; one at full stretch barely gets up, and goes on the way the diver and the ball were going', () => {
+    // a dive sideways (to our left, -x) at a roll shot coming down off the net
+    const T = PLAYER.diveDown * 1.5;
+    const hands = handsAt(T, -1, 0);
+    const r = CONTACT.passRadius + CONTACT.diveOut.reach;
+    const touch = (edge: number, seed: number) => {
+      const rng = new Rng(seed);
+      const to = { x: hands.x, y: hands.y, z: hands.z + edge * r };
+      return play({
+        from: { x: to.x + 0.5, y: 2.6, z: to.z - 2.5 },
+        to,
+        T,
+        lead: 0,
+        dive: true,
+        diveAt: { x: -3, z: 6 },
+        rand: () => rng.next(),
+      });
+    };
+    const mid = Array.from({ length: 30 }, (_, i) => touch(0, i + 1));
+    const rim = Array.from({ length: 30 }, (_, i) => touch(0.85, i + 1));
+    for (const x of [...mid, ...rim]) expect(x.e?.form).toBe('dive');
+    // (at full stretch is one arm out: past where both arms reach)
+    expect(0.85 * r).toBeGreaterThan(CONTACT.passRadius);
+    // in the middle of the arms: up high enough for a team-mate to get under it
+    expect(mean(mid.map((x) => x.up))).toBeGreaterThan(1.5);
+    // at full stretch: up, but barely
+    for (const x of rim) expect(x.up).toBeGreaterThan(0.2);
+    expect(mean(rim.map((x) => x.up))).toBeLessThan(1.2);
+    // where it goes is the diver's run and the ball's bounce, not the aim (the setter is the other way, +x)
+    expect(mean(rim.map((x) => x.v.x))).toBeLessThan(0);
+    expect(mean(rim.map((x) => x.v.x))).toBeLessThan(mean(mid.map((x) => x.v.x)));
+    // and no two go the same way
+    const dir = (x: { v: V3 }) => Math.atan2(x.v.x, x.v.z);
+    expect(spread(rim.map(dir))).toBeGreaterThan(spread(mid.map(dir)));
+  });
+
+  /** a sideways dive (to our left) meeting a roll shot `edge` of the way out on the arms, aimed at `target` */
+  const diveAt = (edge: number, target?: { x: number; y: number; z: number; apex: number }) => {
+    const T = PLAYER.diveDown * 1.5;
+    const hands = handsAt(T, -1, 0);
+    const to = { x: hands.x, y: hands.y, z: hands.z + edge * (CONTACT.passRadius + CONTACT.diveOut.reach) };
+    return play({ from: { x: to.x + 0.5, y: 2.6, z: to.z - 2.5 }, to, T, lead: 0, dive: true, diveAt: { x: -3, z: 6 }, target });
+  };
+
+  it('reads Good only when the ball is mostly under control; a scrape that went where it went reads Late', () => {
+    expect(diveAt(0).e.grade).toBe('Good');
+    // (0.4 of the way out keeps about a third of it under control)
+    expect(diveAt(0.4).e.grade).toBe('Late');
+    expect(diveAt(0.85).e.grade).toBe('Late');
+  });
+
+  it('an AI dive is aimed no higher than a dive can send it: a clean one goes up as high as it was aimed (AI.diveUp, CONTACT.passPower.dive)', () => {
+    const hands = handsAt(PLAYER.diveDown * 1.5, -1, 0);
+    const high = AI.diveUp.apex[1];
+    const x = diveAt(0, { x: hands.x + 1.5, y: 0.9, z: hands.z - 1.5, apex: hands.y + high });
+    expect(x.up).toBeGreaterThan(high - 0.1);
+  });
+});
+
+describe('getting it over on three (CONTACT.passPower, CONTACT.overControl)', () => {
+  const tries = <R extends { over: boolean; e?: ContactEvent }>(f: (rand: () => number) => R) =>
+    Array.from({ length: 20 }, (_, i) => {
+      const rng = new Rng(i + 1);
+      return f(() => rng.next());
+    });
+  const rate = (xs: { over: boolean; e?: ContactEvent }[]) => {
+    for (const x of xs) expect(x.e).toBeDefined();
+    return xs.filter((x) => x.over).length / xs.length;
+  };
+
+  it('a free ball on the platform from the back court goes over; dug from a dive there it does not', () => {
+    const to = { x: 0, y: H * 0.34, z: 6 - 0.45 };
+    const standing = tries((rand) =>
+      play({ from: { x: 1, y: 3.6, z: 2 }, to, T: 1.0, lead: TIMING.passLead, target: OVER, third: true, rand }),
+    );
+    expect(rate(standing)).toBeGreaterThan(0.8);
+    // a roll shot 6 m off the net dived for, off the floor: a dive can't put enough into it
+    const T = PLAYER.diveDown * 1.5;
+    const low = handsAt(T, -1, 0);
+    const dived = tries((rand) =>
+      play({
+        from: { x: low.x + 0.5, y: 2.6, z: low.z - 2.5 },
+        to: low,
+        T,
+        lead: 0,
+        dive: true,
+        diveAt: { x: -3, z: 6 },
+        target: OVER,
+        third: true,
+        rand,
+      }),
+    );
+    expect(rate(dived)).toBeLessThan(0.2);
+  });
+
+  it('a third ball coming in fast is hard to send over: it comes off the arms the way it bounces', () => {
+    const to = { x: 0, y: H * 0.34, z: 6 - 0.45 };
+    // a slow ball and a hard deflection flying across the court at the platform
+    const slow = tries((rand) =>
+      play({ from: { x: 1, y: 3.6, z: 2 }, to, T: 1.0, lead: TIMING.passLead, target: OVER, third: true, rand }),
+    );
+    const fast = tries((rand) =>
+      play({ from: { x: 5, y: 1.4, z: 6.2 }, to, T: 0.27, lead: TIMING.digLead, target: OVER, third: true, rand }),
+    );
+    expect(rate(fast)).toBeLessThan(rate(slow) - 0.3);
+  });
+
+  it('a fast third ball already going toward the net (a team-mate shanked it on from behind) goes on up and toward the net, not into the floor', () => {
+    // (about 20 m/s, nearly flat, from 4.5 m behind the defender)
+    const to = { x: 0, y: H * 0.34, z: 6 - 0.45 };
+    const behind = tries((rand) =>
+      play({ from: { x: 0.3, y: 1.3, z: 10.5 }, to, T: 0.24, lead: TIMING.digLead, target: OVER, third: true, rand }),
+    );
+    // (a shank goes wherever it goes)
+    const played = behind.filter((x) => x.e && x.e.note !== 'Shanked');
+    expect(played.length).toBeGreaterThan(behind.length / 2);
+    for (const x of played) {
+      expect(x.v.y, 'up').toBeGreaterThan(0);
+      expect(x.v.z, 'toward the net').toBeLessThan(0);
+    }
+  });
+
+  it('a high ball coming down fast is no harder to send over: its speed is from its height, not a hard hit', () => {
+    // a team-mate chased a shank far behind our end line and bumped it back high: it comes down
+    // 6 m off the net from 10 m above the platform, still drifting toward the net
+    const to = { x: 0, y: H * 0.34, z: 6 - 0.45 };
+    const from = { x: 0.4, y: to.y + 10, z: to.z + 12 };
+    const T = 1.54;
+    const high = tries((rand) => play({ from, to, T, lead: TIMING.passLead, target: OVER, third: true, rand }));
+    // (it comes down faster than `overControl.easy`, mostly falling)
+    const b = makeBall();
+    Object.assign(b.p, from);
+    solveFixedTime(from, to, T, { x: 0, y: 0, z: 0 }, b.v);
+    for (let t = 0; t < T - DT / 2; t += DT) stepBall(b, DT, { netTop: COURT.netHeightMen });
+    expect(Math.hypot(b.v.x, b.v.y, b.v.z)).toBeGreaterThan(CONTACT.overControl.easy + 3);
+    expect(-b.v.y).toBeGreaterThan(Math.hypot(b.v.x, b.v.z));
+    expect(rate(high)).toBeGreaterThan(0.8);
   });
 });
 
