@@ -1659,10 +1659,10 @@ describe('a dive is a reaction, and backwards only at the end of a chase (Mini R
   });
 
   it('a ball going over them is run down, and dived for at the end of the run: turned, running flat out the way they dive', () => {
-    // a ball dropping from 4 m, 5-7 m behind them (a dig flying deep, off the court): a chase
+    // a ball dropping from 4 m, 5-7 m behind them (our own dig flying deep, off the court): a chase
     let dived = 0;
     for (const behind of [5, 6, 7]) {
-      const d = dive('dig', -1, { x: 0.3, y: 4.0, z: 6 + behind }, { x: 0, y: 0, z: 0 }, 1);
+      const d = dive('dig', 1, { x: 0.3, y: 4.0, z: 6 + behind }, { x: 0, y: 0, z: 0 }, 1);
       if (!d || d.back <= AI.dive.back) continue;
       dived++;
       expect(d.run, `${behind} m behind`).toBeGreaterThan(d.shuffle);

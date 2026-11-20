@@ -333,6 +333,23 @@ describe('getting it over on three (CONTACT.passPower, CONTACT.overControl)', ()
       expect(x.v.z, 'toward the net').toBeLessThan(0);
     }
   });
+
+  it('a high ball coming down fast is no harder to send over: its speed is from its height, not a hard hit', () => {
+    // a team-mate chased a shank far behind our end line and bumped it back high: it comes down
+    // 6 m off the net from 10 m above the platform, still drifting toward the net
+    const to = { x: 0, y: H * 0.34, z: 6 - 0.45 };
+    const from = { x: 0.4, y: to.y + 10, z: to.z + 12 };
+    const T = 1.54;
+    const high = tries((rand) => play({ from, to, T, lead: TIMING.passLead, target: OVER, third: true, rand }));
+    // (it comes down faster than `overControl.easy`, mostly falling)
+    const b = makeBall();
+    Object.assign(b.p, from);
+    solveFixedTime(from, to, T, { x: 0, y: 0, z: 0 }, b.v);
+    for (let t = 0; t < T - DT / 2; t += DT) stepBall(b, DT, { netTop: COURT.netHeightMen });
+    expect(Math.hypot(b.v.x, b.v.y, b.v.z)).toBeGreaterThan(CONTACT.overControl.easy + 3);
+    expect(-b.v.y).toBeGreaterThan(Math.hypot(b.v.x, b.v.z));
+    expect(rate(high)).toBeGreaterThan(0.8);
+  });
 });
 
 /**

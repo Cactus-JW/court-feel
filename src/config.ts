@@ -687,13 +687,13 @@ export const CONTACT = {
   passPower: { platform: 15, side: 11, hands: 14, dive: 6, low: 0.7, rebound: 0.3 },
   /**
    * A ball sent over the net (in Mini Rally only ever the third) that comes in faster than `easy`
-   * m/s is harder to redirect: by `hard` m/s
-   * `loss` of it comes off the arms the way it bounces (the part of it into the platform comes back at
-   * `rebound` of its speed, the part across it goes on at `slide`, and a part already going the
-   * aim's way carries on), not where it was aimed. A hard
-   * deflection flying across the court goes on across it, not over the net (MatusGib, 2026-11-20:
-   * on three, a ball "travelling quickly at them they might not always be able to get"). Our own
-   * estimates.
+   * m/s across the floor is harder to redirect: by `hard` m/s `loss` of it comes off the arms the way
+   * it bounces (the part of it into the platform comes back at `rebound` of its speed, the part
+   * across it goes on at `slide`, and a part already going the aim's way carries on), not where it
+   * was aimed. A hard deflection flying across the court goes on across it, not over the net
+   * (MatusGib, 2026-11-20: on three, a ball "travelling quickly at them they might not always be
+   * able to get"). Only the speed across the floor counts: a high ball comes down at 10-13 m/s from
+   * its height alone, and it is the easiest one to get under. Our own estimates.
    */
   overControl: { easy: 10, hard: 20, loss: 0.8, rebound: 0.5, slide: 0.7 },
   handsErr: 0.7,

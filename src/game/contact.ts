@@ -920,7 +920,7 @@ export class ContactSystem {
     // a fast ball sent over (in Mini Rally, a third ball) goes partly the way it bounces, and no pass is
     // harder than the body can make it
     if (form === 'dive') this.diveOut(a, ball.vel, dBest / r, out);
-    else if (T.z * a.side < 0) this.overControl(ball.vel, incoming, out);
+    else if (T.z * a.side < 0) this.overControl(ball.vel, out);
     this.passPower(a, form, bp.y, incoming, out);
     ball.hit(out, { x: (h.rand() - 0.5) * 6, y: 0, z: (h.rand() - 0.5) * 6 }, 0, t);
     ball.lastTouch = { athlete: a, kind: dig ? 'dig' : 'pass', t, side: a.side };
@@ -971,14 +971,17 @@ export class ContactSystem {
 
   /**
    * A ball sent over the net coming in fast (`CONTACT.overControl`; in Mini Rally only ever the
-   * third): part of it comes off the arms the
-   * way it bounces off a platform turned to the aim `out` (the part into it back at `rebound`, the
-   * part across it on at `slide`), not where it was aimed. A ball already going the aim's way (a
-   * team-mate's shank on from behind, toward the net) has nothing to bounce off: that part carries on.
+   * third): part of it comes off the arms the way it bounces off a platform turned to the aim `out`
+   * (the part into it back at `rebound`, the part across it on at `slide`), not where it was aimed.
+   * A ball already going the aim's way (a team-mate's shank on from behind, toward the net) has
+   * nothing to bounce off: that part carries on. How fast is its speed across the floor: a ball
+   * falling fast fell from high, the one a passer has the most time to get under and angle the
+   * platform to.
    */
-  private overControl(vin: V3, incoming: number, out: V3): void {
+  private overControl(vin: V3, out: V3): void {
     const O = CONTACT.overControl;
-    const loss = O.loss * clamp01((incoming - O.easy) / (O.hard - O.easy));
+    const across = Math.hypot(vin.x, vin.z);
+    const loss = O.loss * clamp01((across - O.easy) / (O.hard - O.easy));
     const n = Math.hypot(out.x, out.y, out.z);
     if (loss <= 0 || n <= 0) return;
     const nx = out.x / n;
