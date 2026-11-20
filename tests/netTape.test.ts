@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { COURT, SIM } from '../src/config';
-import { makeBall, stepBall, type BallState, type CollisionEvent } from '../src/physics/ball';
+import { BALL, COURT, SIM } from '../src/config';
+import { makeBall, R, stepBall, type BallState, type CollisionEvent } from '../src/physics/ball';
 
 // The top of the net (BALL.tape; the antennae are in antenna.test.ts). The tape is a band hanging from a
 // cable, and the net it belongs to moves: a ball that meets it is not bounced off a post. What it does
@@ -92,5 +92,39 @@ describe('the top of the net', () => {
     expect(Math.max(...lands) - Math.min(...lands)).toBeGreaterThan(8);
     expect(lands[0]).toBeGreaterThan(0);
     expect(lands[4]).toBeLessThan(lands[2]);
+  });
+
+  it('a ball resting or rolling on the tape never gains speed: the band only ever holds it back', () => {
+    // laid on top of the cable, rolling along it
+    const laid = makeBall();
+    laid.p = { x: 0.5, y: top + R, z: 0 };
+    laid.v = { x: 0.5, y: 0, z: 0 };
+    for (let i = 0; i < 1.5 * SIM.hz && laid.p.y > top; i++) {
+      stepBall(laid, DT, env);
+      expect(Math.abs(laid.v.x)).toBeLessThanOrEqual(0.5);
+    }
+    // dropped dead on it from a metre, drifting along it: it never comes back up to where it fell from
+    const dropped = makeBall();
+    dropped.p = { x: 0.5, y: top + 1, z: 0 };
+    dropped.v = { x: 0.3, y: 0, z: 0 };
+    const fall = Math.sqrt(2 * BALL.gravity * 1);
+    for (let i = 0; i < 3 * SIM.hz; i++) {
+      stepBall(dropped, DT, env);
+      if (i > SIM.hz / 2) expect(dropped.p.y).toBeLessThan(top + 0.5);
+      expect(Math.hypot(dropped.v.x, dropped.v.y, dropped.v.z)).toBeLessThan(fall + 0.5);
+    }
+  });
+
+  it('a ball dropped on the tape is heard once as it lands, not as a buzz while it sits there', () => {
+    for (const z of [0.005, 0.02, 0.05]) {
+      const b = makeBall();
+      b.p = { x: 0.5, y: top + 1, z };
+      const r = fly(b);
+      const tape = r.events.filter((e) => e.kind === 'tape');
+      expect(tape.length).toBeGreaterThanOrEqual(1);
+      expect(tape[0].impact).toBeGreaterThan(3);
+      // the landing, and at most the little bounce it makes after
+      expect(tape.length).toBeLessThanOrEqual(3);
+    }
   });
 });

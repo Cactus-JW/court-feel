@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { COURT, SIM } from '../src/config';
-import { antennaShape, makeBall, makeRodPoints, R, stepBall, type BallState, type CollisionEvent } from '../src/physics/ball';
+import { BALL, COURT, SIM } from '../src/config';
+import { antennaShape, makeBall, makeRodPoints, R, stepBall, stillNet, type BallState, type CollisionEvent } from '../src/physics/ball';
 
 // The antennae (BALL.antenna): 10 mm fibreglass rods strapped to the net's sides, 0.8 m free above
 // it. The rod bends out of the ball's way and shakes, the net's side moves with it, and the ball is
@@ -155,5 +155,61 @@ describe('the antennae', () => {
   it('a ball that only brushes the rod is still called, once', () => {
     const b = atRod(80, 0.5, R + COURT.antennaRadius - 0.004);
     expect(run(b, 0.25).filter((e) => e.kind === 'antenna')).toHaveLength(1);
+  });
+
+  it('an antenna never gives a ball more than it brought: the rod only gives back what the ball put into it', () => {
+    for (const kmh of [30, 60, 100])
+      for (const above of [0.1, 0.3, 0.45, 0.6, 0.78])
+        for (const off of [-0.01, -0.005, 0, 0.005, 0.01]) {
+          const b = atRod(kmh, above, off);
+          const energy = () => 0.5 * (b.v.x ** 2 + b.v.y ** 2 + b.v.z ** 2) + BALL.gravity * b.p.y;
+          const brought = energy();
+          for (let t = 0; t < 0.3; t += DT) {
+            stepBall(b, DT, env);
+            expect(energy()).toBeLessThanOrEqual(brought * 1.001);
+          }
+        }
+  });
+
+  it('a hard spike met dead on is not thrown straight up by the rod: the rod is light up and down as well as across', () => {
+    // the rod keeps its length, so bent far it comes down: pushed up or down there it bends, it is not a
+    // ramp as heavy as the floor (that threw a 100 km/h spike up at 23 m/s)
+    for (const kmh of [100, 120])
+      for (const above of [0.25, 0.4, 0.45, 0.5])
+        for (const off of [-0.002, -0.001, 0, 0.001, 0.002]) {
+          const b = atRod(kmh, above, off);
+          let rise = 0;
+          for (let t = 0; t < 0.3; t += DT) {
+            stepBall(b, DT, env);
+            rise = Math.max(rise, b.v.y);
+          }
+          expect(rise).toBeLessThan(0.5 * kmh * KMH);
+        }
+  });
+
+  it('the rod and the net settle on their own, whatever the ball does: they do not freeze bent when it lies still', () => {
+    const b = atRod(60, 0.3, 0.03);
+    run(b, 0.1);
+    expect(b.ant.some((v) => v !== 0)).toBe(true);
+    // the ball has come to rest somewhere
+    b.rest = true;
+    run(b, 10);
+    expect(b.ant.every((v) => v === 0)).toBe(true);
+  });
+
+  it('a planner that flies one shot after another meets a still net each time, not the shake of the shot before', () => {
+    const fresh = atRod(60, 0.3, 0.06);
+    run(fresh, 0.3);
+    // the same ball flown first into the rod, then reused for the same shot
+    const reused = atRod(100, 0.4, 0);
+    run(reused, 0.05);
+    const again = atRod(60, 0.3, 0.06);
+    Object.assign(reused.p, again.p);
+    Object.assign(reused.v, again.v);
+    Object.assign(reused.w, again.w);
+    stillNet(reused);
+    run(reused, 0.3);
+    expect(reused.p).toEqual(fresh.p);
+    expect(reused.v).toEqual(fresh.v);
   });
 });

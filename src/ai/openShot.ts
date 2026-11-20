@@ -1,5 +1,5 @@
 import { AI, CONTACT, COURT } from '../config';
-import { makeBall, R, stepBall, type BallEnv, type V3 } from '../physics/ball';
+import { makeBall, R, stepBall, stillNet, type BallEnv, type V3 } from '../physics/ball';
 import { shotFan, solveSpeedToFloor, type ShotFan } from '../physics/solve';
 
 /** a player on the other side who could dig it: where they are, when they can start to move, how fast they run */
@@ -139,6 +139,8 @@ function exactMargin(
   Object.assign(s.v, _out);
   Object.assign(s.w, _w);
   s.rest = false;
+  // each shot meets a net at rest, not one still shaking from the shot tried before it
+  stillNet(s);
   const dt = 1 / 240;
   let t = 0;
   const st = { crossed: false, margin: Infinity };

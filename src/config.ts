@@ -124,6 +124,12 @@ export const BALL = {
    * on low down) and the rest keep 0.7 of their speed, turned 15 degrees on average; at 30 km/h 30%
    * come back. The rigid rod this replaced sent 56% back, whatever the speed. The facts are in
    * tests/antenna.test.ts.
+   *
+   * Known edge: the bends are a straight rod's, so a hard ball met within about a centimetre of
+   * dead on can fold the rod flat ahead of it, and the rod springing back can throw it up. Keeping
+   * the rod's vertical motion in its bends (it comes down as it bends, so a push up or down on it
+   * bends it) cut the worst of that from 23 to 12 m/s at 100 km/h. What is left needs a rod that
+   * stiffens as it bends far, which these straight-rod bends cannot do.
    */
   antenna: {
     modulus: 40e9,
