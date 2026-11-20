@@ -308,6 +308,61 @@ describe('who takes the ball (Mini Rally)', () => {
     expect(q.team.receiver).toBe(deep);
   });
 
+  describe('the libero calls the ball it takes ("MINE!")', () => {
+    /** their free ball (a bump over) or their tip comes down at `to`; the libero placed at `L` */
+    const over = (kind: TouchKind, to: { x: number; z: number }, L: { x: number; z: number }) => {
+      const t = homeTeam();
+      t.team.place('defense');
+      t.team.players.get('L')!.place(L.x, L.z, 0);
+      t.touch(kind, -1, { x: 0, y: 1.0, z: -5 }, { x: to.x, y: 0.75, z: to.z }, 5.5);
+      t.run(0.05);
+      return { t, L: t.team.players.get('L')! };
+    };
+
+    it('a free ball it takes, even one in its own lap', () => {
+      const { t, L } = over('pass', { x: -2.6, z: 6.0 }, { x: -2.9, z: 6.2 });
+      expect(t.team.receiver).toBe(L);
+      expect(t.team.liberoCall).toBe(t.ball.lastTouch);
+    });
+
+    it('a ball it takes from a team-mate who would get there first', () => {
+      // their tip drops 1 m in front of the deep defender, 2.7 m from the libero: the libero gets there in time
+      const { t, L } = over('tip', { x: -0.5, z: 7.6 }, { x: -2.9, z: 6.2 });
+      const p = { x: -0.5, y: 0.75, z: 7.6 };
+      expect(t.team.reachTime(t.team.players.get('OH2')!, p)).toBeLessThan(t.team.reachTime(L, p));
+      expect(t.team.receiver).toBe(L);
+      expect(t.team.liberoCall).toBe(t.ball.lastTouch);
+    });
+
+    it('not a ball of theirs that comes to it first: nobody else was going', () => {
+      const { t, L } = over('tip', { x: -2.6, z: 6.0 }, { x: -2.9, z: 6.2 });
+      expect(t.team.receiver).toBe(L);
+      expect(t.team.liberoCall).toBeNull();
+    });
+
+    it('not a hard-driven ball: one down too soon to call is dug by whoever it comes at, the libero beside them or not', () => {
+      const t = homeTeam();
+      t.team.place('defense');
+      const deep = t.team.players.get('OH2')!;
+      deep.place(-1.4, 6.6, 0);
+      // the libero 1.5 m from it: its arms would get there, its feet would not
+      t.team.players.get('L')!.place(-2.9, 6.6, 0);
+      t.spike({ x: -4.0, y: 3.25, z: -0.9 }, { x: -1.4, y: 0.75, z: 6.6 }, 22);
+      t.run(0.02);
+      expect(t.team.receiver).toBe(deep);
+      expect(t.team.liberoCall).toBeNull();
+    });
+
+    it('never when you are the libero', () => {
+      const t = homeTeam();
+      t.team.place('defense');
+      t.team.players.get('L')!.isUser = true;
+      t.touch('pass', -1, { x: 0, y: 1.0, z: -5 }, { x: -2.6, y: 0.75, z: 6.0 }, 5.5);
+      t.run(0.05);
+      expect(t.team.liberoCall).toBeNull();
+    });
+  });
+
   it('serve receive goes by lanes whoever the libero is: a serve in front of the passer beside it is theirs', () => {
     const t = ballAt({ x: 0.6, z: 6.4 }, null);
     expect(t.team.receiver).toBe(t.team.players.get('OH2'));
