@@ -30,13 +30,18 @@ export interface BallState {
   seed: number;
   /** ball resting / dead (no integration) */
   rest: boolean;
-  /** the antenna (-1, +1) the ball is pushing aside right now, 0 for none (`BALL.antenna`) */
+  /** the antenna (-1, +1) the ball is touching right now, 0 for none (`BALL.antenna`) */
   rod: number;
   /** the net's top, as this ball has moved it: how far down (y) and along z (m), and how fast (m/s) (`BALL.tape`) */
   tapeY: number;
   tapeZ: number;
   tapeVy: number;
   tapeVz: number;
+  /**
+   * The antennae and the net's sides they are strapped to, as they move (`BALL.antenna`): each rod's
+   * bends and the side's swing. Carried with the ball so a prediction meets them where they will be.
+   */
+  ant: Float64Array;
 }
 
 export interface BallEnv {
@@ -86,6 +91,7 @@ export function makeBall(): BallState {
     tapeZ: 0,
     tapeVy: 0,
     tapeVz: 0,
+    ant: new Float64Array(ANT_LEN),
   };
 }
 
@@ -108,6 +114,7 @@ export function copyBall(src: BallState, dst: BallState): BallState {
   dst.tapeZ = src.tapeZ;
   dst.tapeVy = src.tapeVy;
   dst.tapeVz = src.tapeVz;
+  dst.ant.set(src.ant);
   return dst;
 }
 
@@ -240,15 +247,31 @@ function subStep(s: BallState, h: number, env: BallEnv, events?: CollisionEvent[
   const { p, v } = s;
   const prevZ = p.z;
   aeroAccel(s, _a);
-  // semi-implicit Euler
-  v.x += _a.x * h;
-  v.y += _a.y * h;
-  v.z += _a.z * h;
-  p.x += v.x * h;
-  p.y += v.y * h;
-  p.z += v.z * h;
+  if (nearAntenna(s, h, env)) {
+    // at an antenna the ball and the rod push on each other in short steps
+    const k = Math.ceil(h / ANT.step);
+    const hc = h / k;
+    for (let i = 0; i < k; i++) {
+      v.x += _a.x * hc;
+      v.y += _a.y * hc;
+      v.z += _a.z * hc;
+      touchAntennae(s, hc, env, events);
+      p.x += v.x * hc;
+      p.y += v.y * hc;
+      p.z += v.z * hc;
+    }
+  } else {
+    // semi-implicit Euler
+    v.x += _a.x * h;
+    v.y += _a.y * h;
+    v.z += _a.z * h;
+    p.x += v.x * h;
+    p.y += v.y * h;
+    p.z += v.z * h;
+    s.rod = 0;
+    swingAntennae(s, h);
+  }
   collideNet(s, prevZ, h, env, events);
-  collideAntennae(s, env, events);
   collidePosts(s, events);
   collideFloor(s, h, events);
   collideBounds(s, env, events);
@@ -406,21 +429,6 @@ function collideCable(s: BallState, cy: number, h: number, events?: CollisionEve
   w.z += ny * fx * kw;
   return true;
 }
-/**
- * The share of the ball's push an antenna gives back at height `y`: all of it below the net's top
- * (held against the band), less and less up the free rod, which bends out of the way
- * (`BALL.antenna`). It is M / (m + M) for the mass M of rod the ball meets there.
- */
-export function antennaShare(y: number, netTop: number): number {
-  const s = y - netTop;
-  if (s <= 0) return 1;
-  const L = COURT.antennaAboveNet;
-  const at = Math.min(s, L);
-  const shape = (2 * L * L * L) / (at * at * (L + L + L - at));
-  const M = BALL.antenna.tipMass * shape * shape;
-  return M / (BALL.mass + M);
-}
-
 function collideVerticalCylinder(
   s: BallState,
   cx: number,
@@ -431,16 +439,9 @@ function collideVerticalCylinder(
   e: number,
   kind: CollisionKind,
   events?: CollisionEvent[],
-  env?: BallEnv,
 ): boolean {
   const { p, v } = s;
   if (p.y < y0 - R || p.y > y1 + R) return false;
-  // an antenna's rod (`env` given) the ball is pushing aside: it goes on through where the rod stood
-  const rod = Math.sign(cx);
-  if (env && s.rod === rod) {
-    if (Math.hypot(p.x - cx, p.z - cz) < R + rad) return true;
-    s.rod = 0;
-  }
   const dx = p.x - cx;
   const dz = p.z - cz;
   let nx: number, ny: number, nz: number, dist: number, minD: number;
@@ -461,48 +462,346 @@ function collideVerticalCylinder(
       ny = 1;
       nz = 0;
     }
+    p.x += nx * (minD - dist);
+    p.y += ny * (minD - dist);
+    p.z += nz * (minD - dist);
   } else {
     dist = Math.hypot(dx, dz);
     minD = R + rad;
     if (dist >= minD) return false;
-    // an antenna is met where the ball first reached it, back along its path: a ball sliding past
-    // the 1 cm rod is often only seen beside it, where it no longer moves towards it
-    const vv = v.x * v.x + v.z * v.z;
-    const back = env && vv > 0 ? (dx * v.x + dz * v.z + Math.sqrt((dx * v.x + dz * v.z) ** 2 - vv * (dist * dist - minD * minD))) / vv : 0;
-    const ex = dx - back * v.x;
-    const ez = dz - back * v.z;
-    const ed = Math.hypot(ex, ez);
-    nx = ed > 1e-6 ? ex / ed : 1;
-    nz = ed > 1e-6 ? ez / ed : 0;
+    nx = dist > 1e-6 ? dx / dist : 1;
+    nz = dist > 1e-6 ? dz / dist : 0;
     ny = 0;
+    p.x = cx + nx * minD;
+    p.z = cz + nz * minD;
   }
   const vn = v.x * nx + v.y * ny + v.z * nz;
-  // the rod gives back only its share of the push: up the free rod it bends away and the ball goes on
-  const dv = vn < 0 ? -(1 + e) * vn * (env ? antennaShare(p.y, env.netTop) : 1) : 0;
-  v.x += dv * nx;
-  v.y += dv * ny;
-  v.z += dv * nz;
-  // any overlap with an antenna is a touch, a glancing one too (seen as the ball slides past it)
-  if (vn < 0 || env) emit(events, kind, p, Math.max(0, -vn));
-  if (env && (vn >= 0 || vn + dv <= 0)) {
-    s.rod = rod;
-    return true;
+  if (vn < 0) {
+    v.x -= (1 + e) * vn * nx;
+    v.y -= (1 + e) * vn * ny;
+    v.z -= (1 + e) * vn * nz;
+    emit(events, kind, p, -vn);
   }
-  p.x += nx * (minD - dist);
-  p.y += ny * (minD - dist);
-  p.z += nz * (minD - dist);
   return true;
 }
 
-function collideAntennae(s: BallState, env: BallEnv, events?: CollisionEvent[]): void {
-  if (Math.abs(s.p.z) > 0.3) return;
-  const y0 = env.netTop - COURT.netDepth;
-  const y1 = env.netTop + COURT.antennaAboveNet;
-  for (const sx of [-1, 1]) {
-    collideVerticalCylinder(s, sx * COURT.antennaX, 0, COURT.antennaRadius, y0, y1, BALL.antenna.restitution, 'antenna', events, env);
+// The antennae (`BALL.antenna`). Each is a 10 mm fibreglass rod strapped along the side of the net,
+// with 0.8 m standing free above it. The free rod bends: its motion is the sum of a clamped rod's
+// first bends (`modes`), each a shape along the rod with its own mass, spring and damping. The rod is
+// strapped to the net's side, which swings along z on the net's tension (`net`), so the net moves
+// with it and the rod is carried along. The ball is soft against a 1 cm rod: it wraps around it
+// (`contactTime`, `restitution`) and slides on it (`friction`), and it is pushed along the line from
+// the rod to its centre: a ball off the rod's middle is turned aside, and the rod is driven away from
+// the ball wherever it is touched. The rod cannot stretch: bent far, its tip comes down, and the ball
+// can slide off over it. Where it is touched, how hard and at what angle decide how much of
+// the rod and the net it moves, and so how much the ball is turned and slowed.
+
+const ANT = BALL.antenna;
+const NM = ANT.modes;
+const ROD_R = COURT.antennaRadius;
+const ROD_L = COURT.antennaAboveNet;
+const ROD_AREA = Math.PI * ROD_R * ROD_R;
+/** bending stiffness (N m^2): a solid round rod, I = area r^2 / 4 */
+const ROD_EI = ANT.modulus * ROD_AREA * ROD_R * ROD_R * 0.5 * 0.5;
+/** mass per metre (kg/m) */
+const ROD_MU = ANT.density * ROD_AREA;
+/** the ball's skin, pulled tight by the air in it: its tension (N/m) is the pressure times half the radius */
+const SKIN = (ANT.pressure * R) / 2;
+/** of the push the ball took going in, what it gives back coming out: restitution squared of the energy */
+const GIVE_BACK = ANT.restitution * ANT.restitution;
+/** the ball's centre is on the rod's line at this overlap */
+const TOUCH_D = R + ROD_R;
+/** the net's side, where the rod is strapped: the net's tension holds it, from the near post and the far one */
+const SIDE_K = ANT.net.tension * (1 / (COURT.postX - COURT.antennaX) + 1 / (COURT.postX + COURT.antennaX));
+const SIDE_C = 2 * ANT.net.damping * Math.sqrt(SIDE_K * ANT.net.mass);
+
+/** the roots of cos x cosh x = -1, a clamped rod's bends (Newton's method from (n + 1/2) pi) */
+const ROOTS = Array.from({ length: NM }, (_, n) => {
+  let x = (n + 0.5) * Math.PI;
+  for (;;) {
+    const dx = (Math.cos(x) * Math.cosh(x) + 1) / (Math.cos(x) * Math.sinh(x) - Math.sin(x) * Math.cosh(x));
+    x -= dx;
+    if (Math.abs(dx) <= x * Math.sqrt(Number.EPSILON)) return x;
+  }
+});
+const BEND = ROOTS.map((root) => {
+  const beta = root / ROD_L;
+  const sigma = (Math.cosh(root) + Math.cos(root)) / (Math.sinh(root) + Math.sin(root));
+  const shape = (s: number) => Math.cosh(beta * s) - Math.cos(beta * s) - sigma * (Math.sinh(beta * s) - Math.sin(beta * s));
+  // the shape's square adds up to the rod's length along it, so each bend's mass is the whole rod's
+  const mass = ROD_MU * ROD_L;
+  const w = beta * beta * Math.sqrt(ROD_EI / ROD_MU);
+  return {
+    mass,
+    k: w * w * mass,
+    c: 2 * ANT.damping * w * mass,
+    /** how much of the rod's mass this bend carries when the net's side moves: mu times the shape's sum along the rod */
+    carry: (ROD_MU * 2 * sigma) / beta,
+    /** the shape at `samples` + 1 heights from the net's top to the tip */
+    at: Array.from({ length: ANT.samples + 1 }, (_, i) => shape((ROD_L * i) / ANT.samples)),
+  };
+});
+/** the rod left to itself is stepped no coarser than a radian of its fastest bend */
+const ROD_DT = Math.sqrt(BEND[NM - 1].mass / BEND[NM - 1].k);
+/** what moves with the net's side: its own mass and the free rod's, less what the bends carry */
+const SIDE_MASS = ANT.net.mass + ROD_MU * ROD_L - BEND.reduce((m, b) => m + (b.carry * b.carry) / b.mass, 0);
+
+/** where an antenna's numbers are in `BallState.ant`: its bends along x and z and their speeds, then the net side's z and speed */
+const QX = 0;
+const QZ = NM;
+const VX = NM + NM;
+const VZ = VX + NM;
+const ZB = VZ + NM;
+const VB = ZB + 1;
+const ANT_STRIDE = VB + 1;
+const ANT_LEN = ANT_STRIDE + ANT_STRIDE;
+
+/** a bend's shape at height `at` (m above the net's top, 0 to the tip), read between the samples */
+function shapeAt(b: (typeof BEND)[number], at: number): number {
+  const f = Math.min(Math.max(at / ROD_L, 0), 1) * ANT.samples;
+  const i = Math.min(Math.floor(f), ANT.samples - 1);
+  return b.at[i] + (b.at[i + 1] - b.at[i]) * (f - i);
+}
+
+/** how far the antenna at `side` (-1, +1) is pushed at height `at` above the net's top (m), along x and z, the net's side included */
+export function antennaBend(s: BallState, side: number, at: number, out: { x: number; z: number }): void {
+  const a = s.ant;
+  const o = side > 0 ? ANT_STRIDE : 0;
+  out.x = 0;
+  out.z = a[o + ZB];
+  if (at <= 0) return;
+  for (let n = 0; n < NM; n++) {
+    const phi = shapeAt(BEND[n], at);
+    out.x += a[o + QX + n] * phi;
+    out.z += a[o + QZ + n] * phi;
   }
 }
 
+/**
+ * The antenna at `side` (-1, +1) as it stands: its free rod as `samples` + 1 points from the net's
+ * top to the tip, into `out`. Each piece keeps its length: bent far, the rod comes down.
+ */
+export function antennaShape(s: BallState, side: number, netTop: number, out: RodPoints): void {
+  const seg = ROD_L / ANT.samples;
+  let x = side * COURT.antennaX;
+  let y = netTop;
+  let z = s.ant[(side > 0 ? ANT_STRIDE : 0) + ZB];
+  let bx = 0;
+  let bz = z;
+  out.x[0] = x;
+  out.y[0] = y;
+  out.z[0] = z;
+  for (let i = 1; i <= ANT.samples; i++) {
+    antennaBend(s, side, seg * i, _rod);
+    let ex = _rod.x - bx;
+    let ez = _rod.z - bz;
+    bx = _rod.x;
+    bz = _rod.z;
+    const flat = Math.hypot(ex, ez);
+    if (flat > seg) {
+      ex *= seg / flat;
+      ez *= seg / flat;
+    }
+    x += ex;
+    z += ez;
+    y += Math.sqrt(Math.max(0, seg * seg - ex * ex - ez * ez));
+    out.x[i] = x;
+    out.y[i] = y;
+    out.z[i] = z;
+  }
+}
+
+/** the ball's push on each bend along x and z (N) */
+const _qx = new Float64Array(NM);
+const _qz = new Float64Array(NM);
+const _rod = { x: 0, z: 0 };
+/** points along a rod */
+export interface RodPoints {
+  x: Float64Array;
+  y: Float64Array;
+  z: Float64Array;
+}
+export function makeRodPoints(): RodPoints {
+  return { x: new Float64Array(ANT.samples + 1), y: new Float64Array(ANT.samples + 1), z: new Float64Array(ANT.samples + 1) };
+}
+const _pts = makeRodPoints();
+
+/**
+ * Step one antenna over `h` under the ball's push on its bends (`_qx`, `_qz`), on the free rod along
+ * z (`fz`) and on the strapped part (`fzLow`). Along z the net's side moves too, so it and the bends
+ * are solved together: the side carries the rod, and the rod's push and pull move the side.
+ */
+function stepRod(a: Float64Array, o: number, fz: number, fzLow: number, h: number): void {
+  let carried = 0;
+  for (let n = 0; n < NM; n++) {
+    const b = BEND[n];
+    a[o + VX + n] += ((_qx[n] - b.k * a[o + QX + n] - b.c * a[o + VX + n]) / b.mass) * h;
+    carried += b.carry * ((_qz[n] - b.k * a[o + QZ + n] - b.c * a[o + VZ + n]) / b.mass);
+  }
+  const side = (-SIDE_K * a[o + ZB] - SIDE_C * a[o + VB] + fz + fzLow - carried) / SIDE_MASS;
+  for (let n = 0; n < NM; n++) {
+    const b = BEND[n];
+    a[o + VZ + n] += ((_qz[n] - b.k * a[o + QZ + n] - b.c * a[o + VZ + n]) / b.mass - (b.carry / b.mass) * side) * h;
+    a[o + QX + n] += a[o + VX + n] * h;
+    a[o + QZ + n] += a[o + VZ + n] * h;
+  }
+  a[o + VB] += side * h;
+  a[o + ZB] += a[o + VB] * h;
+}
+
+/** nothing of this antenna moves more than `still` */
+function rodStill(a: Float64Array, o: number): boolean {
+  for (let i = o; i < o + ANT_STRIDE; i++) if (Math.abs(a[i]) > ANT.still) return false;
+  return true;
+}
+
+/** the antennae and the net's sides swing on with nothing touching them */
+function swingAntennae(s: BallState, h: number): void {
+  const a = s.ant;
+  _qx.fill(0);
+  _qz.fill(0);
+  for (let o = 0; o < ANT_LEN; o += ANT_STRIDE) {
+    if (rodStill(a, o)) {
+      a.fill(0, o, o + ANT_STRIDE);
+      continue;
+    }
+    const k = Math.ceil(h / ROD_DT);
+    for (let i = 0; i < k; i++) stepRod(a, o, 0, 0, h / k);
+  }
+}
+
+/** the ball is near enough an antenna to touch it within `h` */
+function nearAntenna(s: BallState, h: number, env: BallEnv): boolean {
+  const { p, v } = s;
+  if (p.y < env.netTop - COURT.netDepth - R || p.y > env.netTop + ROD_L + R) return false;
+  const reach = TOUCH_D + Math.hypot(v.x, v.z) * h;
+  for (let o = 0; o < ANT_LEN; o += ANT_STRIDE) {
+    const sx = o > 0 ? 1 : -1;
+    // the farthest the rod can be from its line: each bend's shape is at most 2, at the tip
+    let bent = Math.abs(s.ant[o + ZB]);
+    for (let n = 0; n < NM; n++) bent += (Math.abs(s.ant[o + QX + n]) + Math.abs(s.ant[o + QZ + n])) * 2;
+    if (Math.hypot(p.x - sx * COURT.antennaX, p.z) < reach + bent) return true;
+  }
+  return false;
+}
+
+/**
+ * The ball against the antennae over `h`: the push between them where they overlap, and the rods and
+ * the net's sides moved by it. The ball's speed and spin change here, not where it is.
+ */
+function touchAntennae(s: BallState, h: number, env: BallEnv, events?: CollisionEvent[]): void {
+  const { p, v, w } = s;
+  const a = s.ant;
+  const top = env.netTop;
+  for (let o = 0; o < ANT_LEN; o += ANT_STRIDE) {
+    const sx = o > 0 ? 1 : -1;
+    const ax = sx * COURT.antennaX;
+    _qx.fill(0);
+    _qz.fill(0);
+    // the rod's nearest point: on its strapped part (straight, moving with the net's side) or on the
+    // free rod, a line through its points
+    let y = Math.min(Math.max(p.y, top - COURT.netDepth), top);
+    let best = (p.x - ax) ** 2 + (p.y - y) ** 2 + (p.z - a[o + ZB]) ** 2;
+    let at = y - top;
+    let cx = ax;
+    let cy = y;
+    let cz = a[o + ZB];
+    antennaShape(s, sx, top, _pts);
+    const seg = ROD_L / ANT.samples;
+    for (let i = 1; i <= ANT.samples; i++) {
+      const x0 = _pts.x[i - 1];
+      const y0 = _pts.y[i - 1];
+      const z0 = _pts.z[i - 1];
+      const ex = _pts.x[i] - x0;
+      const ey = _pts.y[i] - y0;
+      const ez = _pts.z[i] - z0;
+      const t = Math.min(Math.max(((p.x - x0) * ex + (p.y - y0) * ey + (p.z - z0) * ez) / (ex * ex + ey * ey + ez * ez), 0), 1);
+      const qx = x0 + ex * t;
+      const qz = z0 + ez * t;
+      y = y0 + ey * t;
+      const d2 = (p.x - qx) ** 2 + (p.y - y) ** 2 + (p.z - qz) ** 2;
+      if (d2 < best) {
+        best = d2;
+        // along the rod, where its bends are read
+        at = seg * (i - 1 + t);
+        cx = qx;
+        cy = y;
+        cz = qz;
+      }
+    }
+    const dist = Math.sqrt(best);
+    const overlap = TOUCH_D - dist;
+    if (overlap <= 0) {
+      if (!rodStill(a, o)) stepRod(a, o, 0, 0, h);
+      continue;
+    }
+    // the push is along the line from the rod to the ball's centre
+    let nx = dist > 0 ? (p.x - cx) / dist : -v.x;
+    let ny = dist > 0 ? (p.y - cy) / dist : 0;
+    let nz = dist > 0 ? (p.z - cz) / dist : -v.z;
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    nx /= nl;
+    ny /= nl;
+    nz /= nl;
+    // how fast the rod moves there (the strapped part only with the net's side)
+    let rvx = 0;
+    let rvz = a[o + VB];
+    if (at > 0)
+      for (let n = 0; n < NM; n++) {
+        const phi = shapeAt(BEND[n], at);
+        rvx += a[o + VX + n] * phi;
+        rvz += a[o + VZ + n] * phi;
+      }
+    const rx = v.x - rvx;
+    const ry = v.y;
+    const rz = v.z - rvz;
+    const vn = rx * nx + ry * ny + rz * nz;
+    if (s.rod !== sx) {
+      // every touch is called, however light
+      emit(events, 'antenna', p, Math.max(0, -vn));
+      s.rod = sx;
+    }
+    // the ball wraps round the rod: its skin pulls on both sides of the rod along all it touches, a
+    // push that soon stops growing (a thin rod sinks deep into a ball), until the rod nears its centre
+    // and the air in it is squeezed; coming out it gives back only part of what it took
+    const u = Math.min(overlap / TOUCH_D, ANT.wrapMax);
+    const touching = 2 * Math.sqrt(Math.max(0, overlap * (R + R - overlap)));
+    const fn = ((2 * SKIN * touching) / (1 - u)) * (vn < 0 ? 1 : GIVE_BACK);
+    // the cover slides on the rod: friction against the slip of its surface, never more than stops it
+    const slx = rx - R * (w.y * nz - w.z * ny);
+    const sly = ry - R * (w.z * nx - w.x * nz);
+    const slz = rz - R * (w.x * ny - w.y * nx);
+    const sn = slx * nx + sly * ny + slz * nz;
+    const tx = slx - sn * nx;
+    const ty = sly - sn * ny;
+    const tz = slz - sn * nz;
+    const slip = Math.hypot(tx, ty, tz);
+    const ft = slip > 0 ? Math.min(ANT.friction * fn, (slip * BALL.mass) / (h * (1 + INV_I_TERM))) / slip : 0;
+    const fx = fn * nx - ft * tx;
+    const fy = fn * ny - ft * ty;
+    const fzb = fn * nz - ft * tz;
+    v.x += (fx / BALL.mass) * h;
+    v.y += (fy / BALL.mass) * h;
+    v.z += (fzb / BALL.mass) * h;
+    // the friction turns the ball: dw = (r x f) h / I, r = -R n
+    const kw = INV_I_TERM / R;
+    const gx = (-ft * tx * h) / BALL.mass;
+    const gy = (-ft * ty * h) / BALL.mass;
+    const gz = (-ft * tz * h) / BALL.mass;
+    w.x -= (ny * gz - nz * gy) * kw;
+    w.y -= (nz * gx - nx * gz) * kw;
+    w.z -= (nx * gy - ny * gx) * kw;
+    // the rod takes the opposite push: the free rod in its bends, the strapped part with the net
+    if (at > 0) {
+      for (let n = 0; n < NM; n++) {
+        const phi = shapeAt(BEND[n], at);
+        _qx[n] = -fx * phi;
+        _qz[n] = -fzb * phi;
+      }
+      stepRod(a, o, -fzb, 0, h);
+    } else stepRod(a, o, 0, -fzb, h);
+  }
+}
 function collidePosts(s: BallState, events?: CollisionEvent[]): void {
   if (Math.abs(s.p.z) > 0.5 || Math.abs(s.p.x) < COURT.postX - 0.5) return;
   for (const sx of [-1, 1]) {

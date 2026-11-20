@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { COURT, SIM } from '../src/config';
-import { antennaShare, makeBall, R, stepBall, type BallState, type CollisionEvent } from '../src/physics/ball';
+import { makeBall, stepBall, type BallState, type CollisionEvent } from '../src/physics/ball';
 
-// The top of the net and the antennae (BALL.tape, BALL.antenna). The tape is a band hanging from a
+// The top of the net (BALL.tape; the antennae are in antenna.test.ts). The tape is a band hanging from a
 // cable, and the net it belongs to moves: a ball that meets it is not bounced off a post. What it does
 // depends on how it comes in: how high on the tape, how fast, at what angle and with what spin.
 
@@ -92,39 +92,5 @@ describe('the top of the net', () => {
     expect(Math.max(...lands) - Math.min(...lands)).toBeGreaterThan(8);
     expect(lands[0]).toBeGreaterThan(0);
     expect(lands[4]).toBeLessThan(lands[2]);
-  });
-});
-
-describe('the antennae', () => {
-  it('a ball that brushes an antenna near its tip pushes it aside and carries on, a little deflected', () => {
-    const b = makeBall();
-    // its edge catches the rod 0.7 m above the net
-    b.p = { x: COURT.antennaX - R, y: top + 0.7, z: 2 };
-    b.v = { x: 0, y: 0, z: -15 };
-    const events: CollisionEvent[] = [];
-    for (let i = 0; i < 40; i++) stepBall(b, DT, env, events);
-    expect(events.some((e) => e.kind === 'antenna')).toBe(true);
-    expect(b.p.z).toBeLessThan(-2);
-    const turned = Math.atan2(Math.abs(b.v.x), -b.v.z);
-    expect(turned).toBeGreaterThan(0.01);
-    expect(turned).toBeLessThan(0.35);
-  });
-
-  it('the rod gives more the higher up it is hit: held at the tape, light at its tip', () => {
-    expect(antennaShare(top - 0.2, top)).toBe(1);
-    expect(antennaShare(top + 0.1, top)).toBeGreaterThan(0.95);
-    expect(antennaShare(top + 0.4, top)).toBeLessThan(antennaShare(top + 0.2, top));
-    expect(antennaShare(top + 0.75, top)).toBeLessThan(0.2);
-  });
-
-  it('every antenna call is a real touch: a ball passing a few millimetres clear of the rod is not touched', () => {
-    for (const y of [top - 0.3, top + 0.2, top + 0.7]) {
-      const b = makeBall();
-      b.p = { x: COURT.antennaX - R - COURT.antennaRadius - 0.003, y, z: 2 };
-      b.v = { x: 0, y: 0, z: -18 };
-      const events: CollisionEvent[] = [];
-      for (let i = 0; i < 30; i++) stepBall(b, DT, env, events);
-      expect(events.some((e) => e.kind === 'antenna')).toBe(false);
-    }
   });
 });

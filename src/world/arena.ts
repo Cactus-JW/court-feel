@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { ARENA, COURT } from '../config';
+import { ARENA, BALL, COURT } from '../config';
+import { antennaShape, makeRodPoints, type BallState } from '../physics/ball';
 import { FloorReflection, REFLECT_LAYER } from './floorReflection';
 import { mergeGeometries } from './geo';
 import { netPress } from './netPress';
@@ -45,12 +46,13 @@ export class Arena {
   private pressed = false;
   private press = { x: 0, y: 0, push: 0 };
   private netHitNext = 0;
-  /** the net's top and the antennae after the ball hits them (`ARENA.netTop`, `ARENA.antenna`) */
+  /** the net's top after the ball hits it and as the antennae move its sides (`ARENA.netTop`) */
   private shake = new NetShake();
   /** how far the net's top is pushed along z at each of `ARENA.netTop.samples` points from post to post */
   private netTopZ = { value: new Array<number>(ARENA.netTop.samples).fill(0) };
-  /** the tip of each antenna (-x, +x): how far it is bent along x and z */
-  private antTips = [{ value: new THREE.Vector2() }, { value: new THREE.Vector2() }];
+  /** each antenna (-x, +x) as the physics has it: how far each of its points from the net's top to the tip is moved */
+  private antPts = [-1, 1].map(() => ({ value: Array.from({ length: BALL.antenna.samples + 1 }, () => new THREE.Vector3()) }));
+  private antShape = makeRodPoints();
   /** the floor and what is painted on it: not part of its own mirror image */
   private unmirrored: THREE.Object3D[] = [];
   private skyTex: THREE.Texture | null = null;
@@ -306,23 +308,30 @@ export class Arena {
     antTex.wrapT = THREE.RepeatWrapping;
     antTex.repeat.set(1, antLen / 0.8);
     for (const s of [-1, 1]) {
-      // each rod bends above the tape like the physics' cantilever: x^2 (3L - x) / 2L^3 of its tip
+      // each rod is drawn as the physics bends it: its strapped part with the net's side, its free
+      // part through the physics' points (`BALL.antenna`)
       const antMat = new THREE.MeshStandardMaterial({ map: antTex, roughness: 0.35 });
-      const L = COURT.antennaAboveNet;
+      const n = BALL.antenna.samples;
       antMat.onBeforeCompile = (shader) => {
-        shader.uniforms.uAntTip = this.antTips[s > 0 ? 1 : 0];
-        shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nuniform vec2 uAntTip;').replace(
-          '#include <begin_vertex>',
-          /* glsl */ `#include <begin_vertex>
+        shader.uniforms.uAnt = this.antPts[s > 0 ? 1 : 0];
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nuniform vec3 uAnt[ ' + (n + 1) + ' ];')
+          .replace(
+            '#include <begin_vertex>',
+            /* glsl */ `#include <begin_vertex>
             {
-              float h = max( 0.0, position.y + ${(antLen / 2 - nd).toFixed(4)} );
-              float k = h * h * ( ${(3 * L).toFixed(4)} - h ) / ${(2 * L ** 3).toFixed(5)};
-              transformed.x += uAntTip.x * k;
-              transformed.z += uAntTip.y * k;
+              float h = position.y + ${(antLen / 2 - nd).toFixed(4)};
+              float f = clamp( h / ${COURT.antennaAboveNet.toFixed(4)}, 0.0, 1.0 ) * ${n.toFixed(1)};
+              int i = min( int( floor( f ) ), ${n - 1} );
+              transformed += h <= 0.0 ? uAnt[ 0 ] : mix( uAnt[ i ], uAnt[ i + 1 ], f - float( i ) );
             }`,
-        );
+          );
       };
-      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, antLen, 8, ARENA.antenna.segments), antMat);
+      // drawn as thick as the physics' rod, so what looks like a touch is one
+      const ant = new THREE.Mesh(
+        new THREE.CylinderGeometry(COURT.antennaRadius, COURT.antennaRadius, antLen, 8, ARENA.antenna.segments),
+        antMat,
+      );
       ant.position.set(s * COURT.antennaX, top - nd + antLen / 2, 0);
       ant.castShadow = true;
       this.netGroup.add(ant);
@@ -601,9 +610,21 @@ export class Arena {
     b.z = 0;
   }
 
-  /** a ball event: one into the net's top or an antenna shakes it (`ARENA.netTop`, `ARENA.antenna`) */
+  /** a ball event: one into the net's top shakes it (`ARENA.netTop`) */
   ballHit(e: ShakeHit): void {
-    this.shake.hit(e, this.netTop);
+    this.shake.hit(e);
+  }
+
+  /** the antennae and the net's sides as the ball's physics has them now (`BALL.antenna`) */
+  antennae(ball: BallState): void {
+    const seg = COURT.antennaAboveNet / BALL.antenna.samples;
+    for (const [k, sx] of [-1, 1].entries()) {
+      antennaShape(ball, sx, this.netTop, this.antShape);
+      const pts = this.antPts[k].value;
+      const a = this.antShape;
+      for (let i = 0; i < pts.length; i++) pts[i].set(a.x[i] - sx * COURT.antennaX, a.y[i] - this.netTop - seg * i, a.z[i]);
+      this.shake.sides[k] = a.z[0];
+    }
   }
 
   /** this material's vertices go with the net top's shake along z */
@@ -628,7 +649,6 @@ export class Arena {
       this.shake.step(dt);
       const n = ARENA.netTop.samples;
       for (let i = 0; i < n; i++) this.netTopZ.value[i] = this.shake.top(COURT.postX * ((2 * i) / (n - 1) - 1));
-      this.shake.tips.forEach((t, i) => this.antTips[i].value.set(t.x, t.z));
     }
     this.excitement *= Math.exp(-dt * 1.3);
     if (this.crowdMat) {

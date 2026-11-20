@@ -903,8 +903,10 @@ jump, the touch on their hands and the block shadow from your contact point.
   drag, Magnus topspin (spikes dip), spin decay, floor friction/spin, a soft
   net the ball sinks into and drops down, a net top
   that gives (firmer pressed down than along the court) and grips the ball, so
-  the angle, speed and spin decide how it comes off, flexible antennae that a
-  ball near the tip pushes aside, posts. 2.43 m or
+  the angle, speed and spin decide how it comes off, antennae that bend like
+  the fibreglass rods they are (a hard ball pushes one aside and goes on, turned;
+  where and how it hits decides how far and which way) and pull the side of the
+  net with them, posts. 2.43 m or
   2.24 m net, 21 cm / 270 g ball.
 
 ## How it looks
@@ -1009,11 +1011,11 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 | `PLAYER` | Acceleration/deceleration, plant carry, jump weighting (approach vs load), apex hang, the set jump (`setJump`: how high the hop is, when the body goes up for it), landing recovery, a dive and how long getting up from it takes (`diveTime`, `diveGetUp`), air turning, where team-mates at the net meet shoulder to shoulder (`shoulder`), the dive (`diveSpeed`, `diveDecel`, `diveArm`, `diveDown`, `diveTime`) |
 | `POSITIONS` | Per-position height, jump, speeds, power, ball control |
 | `BODY` | Slider ranges for the custom height, vert and spike power (Athlete) |
-| `BALL` | Drag, Magnus scale, restitution and friction for the floor; the net's top (`tape`: its mass and spring each way, grip, the band) and the antenna rod (`antenna`: how light it is near the tip); the float (`float`: how hard a no-spin ball breaks, how long it flies true between breaks and how long a break lasts, how often it breaks downward, the critical speed under which it dies, and how old everyone's read of a floating ball is); the soft net (`netGive`, `netStiffness`, `netDampingRatio`, `netReturn`, `netRestitution`, `netGrip`) |
+| `BALL` | Drag, Magnus scale, restitution and friction for the floor; the net's top (`tape`: its mass and spring each way, grip, the band) and the antenna rod (`antenna`: the fibreglass, its bends and how fast they die, how hard the ball's skin presses on it, the grip, the side of the net it is strapped to); the float (`float`: how hard a no-spin ball breaks, how long it flies true between breaks and how long a break lasts, how often it breaks downward, the critical speed under which it dies, and how old everyone's read of a floating ball is); the soft net (`netGive`, `netStiffness`, `netDampingRatio`, `netReturn`, `netRestitution`, `netGrip`) |
 | `CAMERA` | FOV, approach FOV boost, sensitivity, TP distance/height/framing, shake |
 | `FX` | The play wheel (`playWheel`); The set's catch ring, bar (and its pips, and its place in first person), floor spot, first-person dial (`setRadar`) and guide (the hitter marker and the set's arc, `setGuide`), the ring round a float where it breaks (`floatBreak`), hit-stop lengths (and the extra at full power), FOV punch and camera kick, ball squash, shake amounts, spark count, crack life, replay timing, bloom |
 | `CHARACTER` | How athletes are drawn: rim and side fill light, the arm swing of a jump (`jumpSwing`), how early hands go to where the ball will be (`meet`), the passing stance and what the platform does after the touch (`pass`), hand shapes (`hand`: how the fingers curl and spread loose, flat, on the ball and closed), where a palm meets the ball, how far arms, head, knees and toes keep from the net (`netClear`), idle breathing, and what keeps an AI player's body from being rigid (`loose`: the ready stance and bounce with a ball in play, the lean into a push-off or a stop, the chest coming round after the hips) |
-| `ARENA` | The hall: floor mirror (size, strength, blur), the stands (`bowl`: tiers, rows, seats, how brightly the crowd is lit), how the net mesh goes in with a ball that is in it and settles after, how the net's top and the antennae shake when the ball hits them (`netTop`, `antenna`), lights, the final grade |
+| `ARENA` | The hall: floor mirror (size, strength, blur), the stands (`bowl`: tiers, rows, seats, how brightly the crowd is lit), how the net mesh goes in with a ball that is in it and settles after, how the net's top shakes when the ball hits it (`netTop`) and how finely the antennae are drawn as the physics bends them (`antenna`), lights, the final grade |
 | `VENUES` | The five venues: floor colours and how much the floor mirrors, the sky, the lights, haze, grade, the athletes' rim light, the crowd's light and sound, the boards, and whether the sky is open (`openSky`: no ceiling) |
 | `BALL_LOOK` | How deep the ball's seams look and how much it glows by itself |
 | `PLAYBOOK` | The play designer: how far apart two front-row hitters' sets must be hit, and the longest name |
@@ -1049,7 +1051,10 @@ branch it goes into and fails when the known lists grow
 * `npm test` — the Vitest suite in `tests/`: set apex, spike landing point, topspin dip,
   net/tape/antenna collisions (a clipped serve carries on over, a square hit drops by
   the net, spin decides the roll, a touch near the antenna's tip carries on), the
-  net's top and the antennae shaking, women's net, floor bounce, determinism,
+  antenna (a 100 km/h ball goes on, turned to the side its centre passes and more low
+  down; a slow ball comes back slower; the rod whips, shakes for a second and does not
+  stretch; the side of the net moves away, more for a harder ball; a ball 3 mm clear is
+  not touched; a brush is called once), the net's top shaking, women's net, floor bounce, determinism,
   predictor == simulation, per-position jump heights and hang time, movement
   acceleration, aim mapping, line judge, pin set lanes, quick-set timing (the
   middle leaves the floor on the setter's touch and the set meets the hand at
