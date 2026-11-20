@@ -47,8 +47,8 @@ export class MiniRally extends Mode {
   scoreHome = 0;
   scoreAway = 0;
   private lastReceiverMsg: unknown = null;
-  /** the ball that was called the user's (the libero may call them off it: "MINE!") */
-  private yoursFor: unknown = null;
+  /** the ball our libero last called "MINE!" on (once per ball) */
+  private mineFor: unknown = null;
   /** their jump serve has been called this rally */
   private jumpCalled = false;
   private reason = '';
@@ -456,11 +456,11 @@ export class MiniRally extends Mode {
       this.lastReceiverMsg = g.ball.lastTouch;
       g.hud.message(backup ? 'Your set!' : 'Your ball!', 0.9);
     }
-    // a ball that was called yours and is now the libero's: the libero calls you off it
+    // the libero takes a free ball, or a ball off someone else (you too): it calls it
     const lib = this.home.players.get('L');
-    if (this.home.receiver === g.me) this.yoursFor = g.ball.lastTouch;
-    else if (this.yoursFor === g.ball.lastTouch && lib && this.home.receiver === lib && !g.tutorial.active) {
-      this.yoursFor = null;
+    const call = this.home.liberoCall;
+    if (call && call === g.ball.lastTouch && call !== this.mineFor && lib && this.home.receiver === lib && !g.tutorial.active) {
+      this.mineFor = call;
       g.hud.call(
         'LIBERO',
         'MINE!',

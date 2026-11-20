@@ -1807,10 +1807,25 @@ export const AI = {
    * ball a team-mate is standing next to. The setter is sent only when nobody else gets there
    * within `setter` s of it: a ball at its feet it digs, and someone else sets. A ball off a block,
    * or a second ball the setter can't get to, is the libero's whenever it gets there with `libero` s
-   * to spare: it calls off whoever was sent (a real libero takes every one of those it can). So is
-   * their free ball when an AI libero gets there with `liberoFree` s to spare: the libero takes
-   * most free balls, not the middle or a pin hitter who should be getting ready to attack
-   * (MatusGib, 2026-11-14). And between the user and an AI libero, any first ball the libero gets
+   * to spare: it calls off whoever was sent (a real libero takes every one of those it can). In
+   * defence (their attack, a tip, a free ball) every ball an AI libero gets to in time, with
+   * `liberoDig` s to spare (its platform there, `AI.digReach` from its feet, not its feet under the
+   * ball), is the libero's and it calls off whoever was sent ("the libero should
+   * always take the ball if he can": MatusGib, 2026-11-20; before, it needed 0.3 s to spare on a
+   * free ball and claimed nothing of their attack, and 8 of 30 free balls it could reach went to a
+   * pin hitter getting ready to attack). A ball off a block it takes on the same terms (with its
+   * feet under the ball, a soft block beside a hitter landing at the net went to the hitter: "the
+   * libero does not always take the ball even though they are in time", MatusGib, 2026-11-20; 9 of
+   * 200 block balls coming down in our court in 16 x 600 s of all-AI rally went to the outside, 0
+   * after). It calls "MINE!" on a free ball it takes and on a ball it takes from a team-mate who gets
+   * there first. Only a ball down `mine` s or more after the libero is sent is called off an AI
+   * team-mate, or reached for with its arms past one: a hard-driven ball goes to the libero only when
+   * its feet get there in time (it takes the seam), otherwise to whoever it comes at, with no time to
+   * shout (a word and a team-mate backing off: our own judgement; a 100 km/h spike to the back court
+   * is down in 0.4 s, a roll shot, a tip, a free ball or a soft block in 1 s or more). A ball first
+   * called the user's that the libero takes is always called, however soon it is down: never taken
+   * off the user without a word. Serve
+   * receive still goes by lanes. And between the user and an AI libero, any first ball the libero gets
    * to (with `libero` s to spare) is the libero's ("if the libero can take it, it takes it":
    * MatusGib, 2026-11-14); a serve only in the seam (the libero there within `seam` s of the
    * user, lanes counted as below): a serve in the user's lane is theirs (MatusGib, 2026-11-18;
@@ -1824,7 +1839,7 @@ export const AI = {
    * and not the passer's two metres to the side of it (MatusGib, 2026-11-15: "it is right in front
    * of them").
    */
-  pick: { seam: 0.15, setter: 0.2, shuffle: 1.5, libero: 0.1, liberoFree: 0.3, call: 0.4, dive: 0.5, lane: 0.3 },
+  pick: { seam: 0.15, setter: 0.2, shuffle: 1.5, libero: 0.1, liberoDig: 0, mine: 0.8, call: 0.4, dive: 0.5, lane: 0.3 },
   /**
    * An AI free ball over (a third ball nobody can attack) goes where it is hard to play: deep to a
    * back corner (`deep` m off the net, `side` m off the middle) or short, just over the net (`short`
@@ -2221,7 +2236,8 @@ export const AI = {
    * hands (with `openShotBlockGap` m to spare, wherever they reach: `blockReachBand` m either side of
    * the net), where nobody gets a platform under it in time. A defender digs a ball within
    * `digReach` m of their feet (they turn to it: the platform 0.45 m in front, CONTACT.passRadius
-   * and CONTACT.digLunge at a hard-driven ball) once it is below `digTop` m. In system an AI hitter
+   * and CONTACT.digLunge at a hard-driven ball) once it is below `digTop` m (the libero's claim on a
+   * ball in defence, `pick.liberoDig`, counts the same reach). In system an AI hitter
    * looks for the spot every time, out of system `openShotOut` of the time (a high ball from off
    * the net: less of the court in view); their defence moves `AI.defence.hitReact` after the hit.
    */

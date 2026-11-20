@@ -538,6 +538,11 @@ export class TeamAI {
   readonly scout = new Scout();
   /** who should take the incoming first ball (sticky per incoming ball) */
   receiver: Athlete | null = null;
+  /**
+   * The ball (its last touch) our AI libero has called "MINE!" on: a free ball it takes, or a ball
+   * it takes from a team-mate (you too) who would have been there first
+   */
+  liberoCall: unknown = null;
   private receiverFor: unknown = null;
   /** where the ball was expected when the receiver was picked (re-pick if it strays, e.g. off the tape) */
   private receiverAt: Spot = { x: 0, z: 0 };
@@ -1185,11 +1190,12 @@ export class TeamAI {
   /**
    * How long until `a` can have a platform under a ball dropping at p (feet, landing and a run).
    * `lane` < 1 (serve receive: `AI.pick.lane`): a run forward, to a ball in front of them, counts
-   * that much of its length when choosing who takes it.
+   * that much of its length when choosing who takes it. `reach` (m): the platform gets to a ball
+   * this far from where the feet stop (the libero's claim: `AI.digReach`).
    */
-  reachTime(a: Athlete, p: V3, lane = 1): number {
+  reachTime(a: Athlete, p: V3, lane = 1, reach = 0): number {
     const dz = a.pos.z - (p.z - this.side * 0.4);
-    const d = Math.hypot(a.pos.x - p.x, dz * this.side > 0 ? dz * lane : dz);
+    const d = Math.max(0, Math.hypot(a.pos.x - p.x, dz * this.side > 0 ? dz * lane : dz) - reach);
     // the first steps are shuffled, the rest of a long way is run (never quicker from further away)
     const sh = AI.pick.shuffle;
     let t = Math.min(d, sh) / (a.stats.shuffleSpeed * 0.9) + Math.max(0, d - sh) / (a.stats.approachSpeed * 0.8) + AI.reactionTime;
@@ -1209,7 +1215,8 @@ export class TeamAI {
    * only when nobody else is close). Someone is always sent (a desperate dig beats
    * watching it drop) unless `exclude` was the only option. Given the time until the ball is
    * down (`budget`: given for a ball off a block and a second ball), a ball the libero gets to with
-   * `AI.pick.libero` s to spare is the libero's, whoever else is near. Given `down` (s until it is
+   * `margin` s to spare (its platform `reach` m from its feet) is the libero's, whoever else is
+   * near. Given `down` (s until it is
    * down), the user's seam preference is only for a ball they get to: one they don't goes to
    * whoever is least late, never across the court to the user over the players beside it. (On a
    * serve the times are scaled by `AI.pick.lane`, so they are not real seconds and that check is
@@ -1223,8 +1230,9 @@ export class TeamAI {
     budget?: number,
     margin = AI.pick.libero,
     down?: number,
+    reach = 0,
   ): Athlete | null {
-    if (budget !== undefined && this.liberoGets(p, budget, exclude, exclude2, margin)) return this.players.get('L') ?? null;
+    if (budget !== undefined && this.liberoGets(p, budget, exclude, exclude2, margin, reach)) return this.players.get('L') ?? null;
     let best: Athlete | null = null;
     let bestT = 1e9;
     for (const [slot, a] of this.players) {
@@ -1250,16 +1258,34 @@ export class TeamAI {
     return false;
   }
 
-  /** the libero (not excluded) gets to a ball dropping at p within `budget` s, with `margin` s to spare */
+  /** the libero (not excluded) gets to a ball dropping at p within `budget` s, with `margin` s to spare (its platform `reach` m from its feet) */
   private liberoGets(
     p: V3,
     budget: number,
     exclude: Athlete | null = null,
     exclude2: Athlete | null = null,
     margin = AI.pick.libero,
+    reach = 0,
   ): boolean {
     const L = this.players.get('L');
-    return !!L && L !== exclude && L !== exclude2 && this.reachTime(L, p) + margin <= budget;
+    return !!L && L !== exclude && L !== exclude2 && this.reachTime(L, p, 1, reach) + margin <= budget;
+  }
+
+  /**
+   * The libero taking a ball dropping at p calls it ("MINE!") when it is a free ball, or when a
+   * team-mate (not `exclude`; on a serve, a passer) gets there before it: it is taking it from them
+   */
+  private liberoCalls(p: V3, serve: boolean, free: boolean, exclude: Athlete | null): boolean {
+    const L = this.players.get('L');
+    if (!L || L.isUser) return false;
+    if (free) return true;
+    const lane = serve ? AI.pick.lane : 1;
+    const mine = this.reachTime(L, p, lane);
+    for (const [slot, a] of this.players) {
+      if (a === L || a === exclude || (serve && (slot === 'S' || slot === 'MB' || slot === 'OPP'))) continue;
+      if (this.reachTime(a, p, lane) < mine) return true;
+    }
+    return false;
   }
 
   /**
@@ -1423,7 +1449,8 @@ export class TeamAI {
       const opp = this.opponents;
       if (theirBall && comingToUs && !onOurSide && opp) {
         const first = lt.kind === 'pass' || lt.kind === 'dig' || lt.kind === 'free';
-        if ((first && opp.touches === 1 && !opp.overpass(g)) || (lt.kind === 'set' && !!opp.setFor)) comingToUs = false;
+        // (their touches as we count them: theirs may not have counted this one yet, as we step first)
+        if ((first && this.theirTouches === 1 && !opp.overpass(g)) || (lt.kind === 'set' && !!opp.setFor)) comingToUs = false;
       }
       const ourBlock = lt && lt.side === this.side && lt.kind === 'block';
       // what we are in the middle of, and where the ball comes down (the play the others move with)
@@ -1450,14 +1477,24 @@ export class TeamAI {
       const strayed = comingToUs && tDown > 0 && Math.hypot(p.x - this.receiverAt.x, p.z - this.receiverAt.z) > 1.5;
       // (`mustPlay`: a ball off our own block is ours wherever it lands: out, it is their point)
       const receive = (serve: boolean, exclude: Athlete | null, mustPlay = false) => {
-        // a ball off a block is the libero's whenever it gets there (coming in from the cover to a
-        // ball someone else was sent to, it calls it and takes it)
-        // (so is their free ball, when an AI libero gets to it comfortably: `AI.pick.liberoFree`)
+        // a ball off a block is the libero's whenever it gets there in time (coming in from the cover
+        // to a ball someone else was sent to, it calls it and takes it); so is every ball of theirs
+        // in defence (their attack, a tip, a free ball) an AI libero gets to (`AI.pick.liberoDig`).
+        // In time is its platform there, `AI.digReach` from its feet, not its feet under the ball:
+        // a defender digs what it gets its arms to (MatusGib, 2026-11-20: off a soft block "the
+        // libero does not always take the ball even though they are in time", and you had to);
+        // not on a ball down sooner than `AI.pick.mine` (a hard-driven one: no reaching past whoever
+        // it comes at, so the libero takes it only when its feet get there in time, as on the
+        // court it takes the seam). Serve receive goes by lanes
         const offBlock = lt?.kind === 'block';
         const L = this.players.get('L');
-        const freeIn = !serve && !offBlock && !!lt && lt.side !== this.side && FREE_KINDS.has(lt.kind) && !!L && !L.isUser;
-        const claim = offBlock || freeIn;
-        const margin = freeIn ? AI.pick.liberoFree : AI.pick.libero;
+        const defence = !serve && !offBlock && !!lt && lt.side !== this.side && !!L && !L.isUser;
+        const claim = offBlock || defence;
+        const margin = claim ? AI.pick.liberoDig : AI.pick.libero;
+        // (a ball down too soon to call: the libero's feet must get there, its arms do not reach past anyone)
+        const time = comingToUs && tDown > 0 ? tDown - now : 0;
+        const reach = claim && time >= AI.pick.mine ? AI.digReach : 0;
+        const free = !serve && !!lt && lt.side !== this.side && FREE_KINDS.has(lt.kind);
         // between the user and an AI libero, any ball the libero gets to is the libero's: called
         // early, never taken off the user late
         // (a serve only in the seam: serve receive goes by lanes, and a serve in the user's lane is theirs)
@@ -1472,12 +1509,25 @@ export class TeamAI {
           this.receiver !== L &&
           comingToUs &&
           tDown > 0 &&
-          this.liberoGets(p, tDown - now, exclude, null, margin);
+          this.liberoGets(p, tDown - now, exclude, null, margin, reach);
         if (this.receiver && this.receiverFor === lt && !strayed && !takeOver) {
           setJob(this.receiver, 'receive');
         } else if (comingToUs && tDown > 0 && (inBounds || mustPlay)) {
-          let r = this.pickReceiver(p, serve, exclude, null, claim ? tDown - now : undefined, margin, tDown - now);
-          if (r?.isUser && L && !L.isUser && seam(r) && this.liberoGets(p, tDown - now, exclude, null, margin)) r = L;
+          const was = this.receiverFor === lt ? this.receiver : null;
+          let r = this.pickReceiver(p, serve, exclude, null, claim ? tDown - now : undefined, margin, tDown - now, reach);
+          if (r?.isUser && L && !L.isUser && seam(r) && this.liberoGets(p, tDown - now, exclude, null, margin, reach)) r = L;
+          // the libero calls it: a free ball, a ball it takes off whoever was sent, or one a team-mate gets to first.
+          // A ball down sooner than `AI.pick.mine` is not called off an AI team-mate (no time to
+          // shout), but one you were told was yours always is: never taken off you without a word
+          if (
+            r &&
+            r === L &&
+            !L.isUser &&
+            (time >= AI.pick.mine || !!was?.isUser) &&
+            this.liberoCall !== lt &&
+            ((!!was && was !== L) || this.liberoCalls(p, serve, free, exclude))
+          )
+            this.liberoCall = lt;
           this.receiver = r;
           this.receiverFor = lt;
           this.receiverAt = { x: p.x, z: p.z };
