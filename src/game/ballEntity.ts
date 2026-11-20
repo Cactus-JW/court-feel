@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BALL, SIM } from '../config';
 import { lerp } from '../core/mathx';
-import { copyBall, floatBreaking, makeBall, stepBall, type BallEnv, type BallState, type CollisionEvent } from '../physics/ball';
+import { copyBall, floatBreaking, makeBall, stepBall, stepNet, type BallEnv, type BallState, type CollisionEvent } from '../physics/ball';
 import { FloatRead } from '../physics/floatRead';
 import { BallPredictor } from '../physics/predict';
 import type { Athlete } from './athlete';
@@ -84,6 +84,10 @@ export class BallEntity {
     s.seed = seed;
     s.kt = 0;
     s.rest = false;
+    // the ball is touching nothing now. The net and the antennae are the world's: they keep
+    // swinging as they were (`BallState.tapeY`), so a rod still shaking does not snap straight
+    s.rod = 0;
+    s.onTape = false;
     this.floatRead.reset();
     this.breaking = 0;
     copyBall(s, this.prev);
@@ -147,7 +151,11 @@ export class BallEntity {
     copyBall(this.state, this.prev);
     this.prevQ.copy(this.q);
     this.events.length = 0;
-    if (!this.active) return;
+    if (!this.active) {
+      // out of play the net and the antennae still settle
+      stepNet(this.state, dt);
+      return;
+    }
     if (this.floating) {
       // remember where it was heading, and look again now and then
       this.floatRead.keep(this.state);

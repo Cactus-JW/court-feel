@@ -249,6 +249,8 @@ export class Game implements AiHost {
     this.post = new Post(this.renderer, this.scene, this.rig.camera);
     this.applyVenue();
     this.post.preRender = () => this.arena.reflection.render(this.rig.camera);
+    // the net's top shakes when the ball hits it
+    this.events.on('ballEvent', (e) => this.arena.ballHit(e));
     this.input = new Input(this.renderer.domElement);
     this.debug = new DebugOverlay(container);
     this.hud = new Hud(container);
@@ -1102,6 +1104,7 @@ export class Game implements AiHost {
     this.ballView.sync();
     // the net's mesh goes with a ball that is in it
     this.arena.netPress(this.ball.active ? this.ball.rpos : null);
+    this.arena.antennae(this.ball.state);
     const step = 1 / SIM.hz;
     const tr = this.simTime - step * (1 - alpha);
     const animDt = Math.max(0, tr - this.lastRenderSimT);
