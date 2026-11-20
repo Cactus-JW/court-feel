@@ -518,11 +518,13 @@ screen show them. Only your player uses them; AI players keep the defaults.
    middle blocks the same way.
 
    **Their pin blockers follow the hitter.** A pin blocker blocks every attack on its
-   half of the net: out at the pin it lines up on you, the ball on its hands, and it
-   doesn't slide in to close the gap to its middle (that is the middle's job). It
-   scouts you: hit line a few times and it takes the line, hit cross a few times and
-   it takes the cross, so whichever shot you lean on, it takes it away. Its read of the
-   set sharpens as the ball comes. When you come inside it (a set short of the pin, an
+   half of the net: out at the pin it lines up on you, and it doesn't slide in to close
+   the gap to its middle (that is the middle's job). Their whole team scouts you: hit
+   line a few times (into their line digger's lane) and it takes the line, hit cross a
+   few times and it takes the cross, so whichever shot you lean on, it takes it away.
+   Its read of the set sharpens as the ball comes, as far as its skill lets it: a good
+   blocker has the ball on its hands, a poor one is sometimes a hand-width off. When
+   you come inside it (a set short of the pin, an
    inside ball) it goes in with you, along the whole net.
    It moves facing the net, in side steps or a crossover, never turning to run; closing
    in, it steps into its jump and drifts the rest of the way, hands reaching into the

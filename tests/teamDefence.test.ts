@@ -120,7 +120,7 @@ function homeTeam() {
  */
 function lineHitter(t: ReturnType<typeof homeTeam>) {
   t.team.theirSetFor = () => t.theirs;
-  t.team.crossReads.set(t.theirs, 0);
+  t.team.scout.cross.set(t.theirs, 0);
 }
 
 /** their setter sets their outside high (our right) */
