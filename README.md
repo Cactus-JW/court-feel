@@ -1048,7 +1048,8 @@ branch it goes into and fails when the known lists grow
 * `npm test` — the Vitest suite in `tests/`: set apex, spike landing point, topspin dip,
   net/tape/antenna collisions, women's net, floor bounce, determinism,
   predictor == simulation, per-position jump heights and hang time, movement
-  acceleration, aim mapping, line judge, pin set lanes, quick-set timing (the
+  acceleration, aim mapping, line judge (a ball out wide of the antenna stays in play until it
+  lands, is played by the other team or comes back between the antennae), pin set lanes, quick-set timing (the
   middle leaves the floor on the setter's touch and the set meets the hand at
   the top of the jump), the setter's call on the pass (in / out of system,
   made once, early, and the set follows it), the serve (not one of the serving team's touches,
