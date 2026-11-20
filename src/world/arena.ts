@@ -3,6 +3,7 @@ import { ARENA, COURT } from '../config';
 import { FloorReflection, REFLECT_LAYER } from './floorReflection';
 import { mergeGeometries } from './geo';
 import { netPress } from './netPress';
+import { NetShake, type ShakeHit } from './netShake';
 import { VENUE } from './venue';
 import { makeSkyDome, makeSkyTexture, makeStars } from './sky';
 import { buildVenue } from './venues';
@@ -13,6 +14,17 @@ import { makeAntennaTexture, makeBoardTexture, makeNetTexture, makePaintTextures
  * Everything here is visual; collision shapes live in physics/ball.ts and use
  * the same COURT constants.
  */
+/**
+ * GLSL: how far the net's top is pushed along z at x (m), read between the samples the arena fills
+ * in from post to post each frame (`uNetTop`, from `NetShake.top`)
+ */
+const NET_TOP_GLSL = /* glsl */ `uniform float uNetTop[ ${ARENA.netTop.samples} ];
+float netTopAt( float x ) {
+  float f = clamp( ( x + ${COURT.postX.toFixed(4)} ) / ${(2 * COURT.postX).toFixed(4)}, 0.0, 1.0 ) * ${(ARENA.netTop.samples - 1).toFixed(1)};
+  int i = int( floor( f ) );
+  return mix( uNetTop[ i ], uNetTop[ min( i + 1, ${ARENA.netTop.samples - 1} ) ], fract( f ) );
+}`;
+
 export class Arena {
   readonly group = new THREE.Group();
   netTop: number = COURT.netHeightMen;
@@ -33,6 +45,12 @@ export class Arena {
   private pressed = false;
   private press = { x: 0, y: 0, push: 0 };
   private netHitNext = 0;
+  /** the net's top and the antennae after the ball hits them (`ARENA.netTop`, `ARENA.antenna`) */
+  private shake = new NetShake();
+  /** how far the net's top is pushed along z at each of `ARENA.netTop.samples` points from post to post */
+  private netTopZ = { value: new Array<number>(ARENA.netTop.samples).fill(0) };
+  /** the tip of each antenna (-x, +x): how far it is bent along x and z */
+  private antTips = [{ value: new THREE.Vector2() }, { value: new THREE.Vector2() }];
   /** the floor and what is painted on it: not part of its own mirror image */
   private unmirrored: THREE.Object3D[] = [];
   private skyTex: THREE.Texture | null = null;
@@ -219,15 +237,20 @@ export class Arena {
       depthWrite: false,
     });
     // the mesh gives with the ball: it is pushed as far as the ball has sunk into it, and once the
-    // ball lets go it swings back and settles (the tapes stay put)
+    // ball lets go it swings back and settles (the bottom tape stays put; the top shakes with
+    // `NetShake`)
     netMat.onBeforeCompile = (shader) => {
       shader.uniforms.uNetHits = this.netHits;
       shader.uniforms.uNetTime = this.netTime;
       shader.uniforms.uNetBall = this.netBall;
+      shader.uniforms.uNetTop = this.netTopZ;
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
-          '#include <common>\nuniform vec4 uNetHits[ ' + ARENA.net.hits + ' ];\nuniform float uNetTime;\nuniform vec3 uNetBall;',
+          '#include <common>\nuniform vec4 uNetHits[ ' +
+            ARENA.net.hits +
+            ' ];\nuniform float uNetTime;\nuniform vec3 uNetBall;\n' +
+            NET_TOP_GLSL,
         )
         .replace(
           '#include <begin_vertex>',
@@ -246,6 +269,8 @@ export class Arena {
               float near = exp( - dot( d, d ) / ${(ARENA.net.spread ** 2).toFixed(4)} );
               transformed.z += hit.z * near * held * exp( - age * ${ARENA.net.damping.toFixed(2)} ) * cos( age * ${ARENA.net.swing.toFixed(2)} );
             }
+            // the mesh hangs from the top: it goes with the top's shake, less further down
+            transformed.z += netTopAt( position.x ) * uv.y * uv.y;
           }`,
         );
     };
@@ -254,7 +279,8 @@ export class Arena {
     this.netGroup.add(net);
     // white top band (7cm) and bottom band (5cm)
     const bandMat = new THREE.MeshStandardMaterial({ color: 0xf4f4f0, roughness: 0.6 });
-    const topBand = new THREE.Mesh(new THREE.BoxGeometry(len, 0.07, 0.012), bandMat);
+    const topBandMat = this.shakesWithTop(new THREE.MeshStandardMaterial({ color: 0xf4f4f0, roughness: 0.6 }));
+    const topBand = new THREE.Mesh(new THREE.BoxGeometry(len, 0.07, 0.012, ARENA.netTop.samples - 1), topBandMat);
     topBand.position.set(0, top - 0.035, 0);
     topBand.castShadow = true;
     this.netGroup.add(topBand);
@@ -268,9 +294,10 @@ export class Arena {
       this.netGroup.add(sb);
     }
     // cable to posts
-    const cableMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.6 });
-    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, COURT.postX * 2, 6), cableMat);
-    cable.rotation.z = Math.PI / 2;
+    const cableMat = this.shakesWithTop(new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.6 }));
+    // laid along x in the geometry itself, so the shake reads x from it
+    const cableGeo = new THREE.CylinderGeometry(0.006, 0.006, COURT.postX * 2, 6, ARENA.netTop.samples - 1).rotateZ(Math.PI / 2);
+    const cable = new THREE.Mesh(cableGeo, cableMat);
     cable.position.set(0, top, 0);
     this.netGroup.add(cable);
     // antennae: 1.8m red/white fibreglass rods
@@ -278,9 +305,24 @@ export class Arena {
     const antLen = nd + COURT.antennaAboveNet;
     antTex.wrapT = THREE.RepeatWrapping;
     antTex.repeat.set(1, antLen / 0.8);
-    const antMat = new THREE.MeshStandardMaterial({ map: antTex, roughness: 0.35 });
     for (const s of [-1, 1]) {
-      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, antLen, 8), antMat);
+      // each rod bends above the tape like the physics' cantilever: x^2 (3L - x) / 2L^3 of its tip
+      const antMat = new THREE.MeshStandardMaterial({ map: antTex, roughness: 0.35 });
+      const L = COURT.antennaAboveNet;
+      antMat.onBeforeCompile = (shader) => {
+        shader.uniforms.uAntTip = this.antTips[s > 0 ? 1 : 0];
+        shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nuniform vec2 uAntTip;').replace(
+          '#include <begin_vertex>',
+          /* glsl */ `#include <begin_vertex>
+            {
+              float h = max( 0.0, position.y + ${(antLen / 2 - nd).toFixed(4)} );
+              float k = h * h * ( ${(3 * L).toFixed(4)} - h ) / ${(2 * L ** 3).toFixed(5)};
+              transformed.x += uAntTip.x * k;
+              transformed.z += uAntTip.y * k;
+            }`,
+        );
+      };
+      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, antLen, 8, ARENA.antenna.segments), antMat);
       ant.position.set(s * COURT.antennaX, top - nd + antLen / 2, 0);
       ant.castShadow = true;
       this.netGroup.add(ant);
@@ -559,6 +601,22 @@ export class Arena {
     b.z = 0;
   }
 
+  /** a ball event: one into the net's top or an antenna shakes it (`ARENA.netTop`, `ARENA.antenna`) */
+  ballHit(e: ShakeHit): void {
+    this.shake.hit(e, this.netTop);
+  }
+
+  /** this material's vertices go with the net top's shake along z */
+  private shakesWithTop<M extends THREE.Material>(mat: M): M {
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uNetTop = this.netTopZ;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\n' + NET_TOP_GLSL)
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.z += netTopAt( position.x );');
+    };
+    return mat;
+  }
+
   excite(amount: number): void {
     this.excitement = Math.min(1.5, this.excitement + amount);
   }
@@ -566,6 +624,12 @@ export class Arena {
   update(dt: number): void {
     this.time += dt;
     this.netTime.value = this.time;
+    if (this.shake.moving || this.netTopZ.value.some((z) => z !== 0)) {
+      this.shake.step(dt);
+      const n = ARENA.netTop.samples;
+      for (let i = 0; i < n; i++) this.netTopZ.value[i] = this.shake.top(COURT.postX * ((2 * i) / (n - 1) - 1));
+      this.shake.tips.forEach((t, i) => this.antTips[i].value.set(t.x, t.z));
+    }
     this.excitement *= Math.exp(-dt * 1.3);
     if (this.crowdMat) {
       this.crowdMat.uniforms.uTime.value = this.time;

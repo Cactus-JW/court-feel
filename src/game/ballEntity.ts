@@ -84,6 +84,11 @@ export class BallEntity {
     s.seed = seed;
     s.kt = 0;
     s.rest = false;
+    s.rod = 0;
+    s.tapeY = 0;
+    s.tapeZ = 0;
+    s.tapeVy = 0;
+    s.tapeVz = 0;
     this.floatRead.reset();
     this.breaking = 0;
     copyBall(s, this.prev);

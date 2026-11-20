@@ -246,6 +246,8 @@ export class Game implements AiHost {
     this.post = new Post(this.renderer, this.scene, this.rig.camera);
     this.applyVenue();
     this.post.preRender = () => this.arena.reflection.render(this.rig.camera);
+    // the net's top and the antennae shake when the ball hits them
+    this.events.on('ballEvent', (e) => this.arena.ballHit(e));
     this.input = new Input(this.renderer.domElement);
     this.debug = new DebugOverlay(container);
     this.hud = new Hud(container);

@@ -30,6 +30,13 @@ export interface BallState {
   seed: number;
   /** ball resting / dead (no integration) */
   rest: boolean;
+  /** the antenna (-1, +1) the ball is pushing aside right now, 0 for none (`BALL.antenna`) */
+  rod: number;
+  /** the net's top, as this ball has moved it: how far down (y) and along z (m), and how fast (m/s) (`BALL.tape`) */
+  tapeY: number;
+  tapeZ: number;
+  tapeVy: number;
+  tapeVz: number;
 }
 
 export interface BallEnv {
@@ -66,7 +73,20 @@ const PAD_H = 1.9;
 const POST_H = 2.6;
 
 export function makeBall(): BallState {
-  return { p: { x: 0, y: 1, z: 0 }, v: { x: 0, y: 0, z: 0 }, w: { x: 0, y: 0, z: 0 }, knuckle: 0, kt: 0, seed: 0, rest: false };
+  return {
+    p: { x: 0, y: 1, z: 0 },
+    v: { x: 0, y: 0, z: 0 },
+    w: { x: 0, y: 0, z: 0 },
+    knuckle: 0,
+    kt: 0,
+    seed: 0,
+    rest: false,
+    rod: 0,
+    tapeY: 0,
+    tapeZ: 0,
+    tapeVy: 0,
+    tapeVz: 0,
+  };
 }
 
 export function copyBall(src: BallState, dst: BallState): BallState {
@@ -83,6 +103,11 @@ export function copyBall(src: BallState, dst: BallState): BallState {
   dst.kt = src.kt;
   dst.seed = src.seed;
   dst.rest = src.rest;
+  dst.rod = src.rod;
+  dst.tapeY = src.tapeY;
+  dst.tapeZ = src.tapeZ;
+  dst.tapeVy = src.tapeVy;
+  dst.tapeVz = src.tapeVz;
   return dst;
 }
 
@@ -283,34 +308,9 @@ function collideNet(s: BallState, prevZ: number, h: number, env: BallEnv, events
   const bottom = top - COURT.netDepth;
   const hx = COURT.netHalfLength;
   if (Math.abs(p.x) > hx + R) return;
-  // ---- top tape: cylinder along x at y = top - tapeR, z = 0
-  const tr = BALL.tapeRadius;
-  const cy = top - tr;
-  const dy = p.y - cy;
-  const dz = p.z;
-  const d = Math.hypot(dy, dz);
-  if (d < R + tr && Math.abs(p.x) <= hx && (p.y > cy || Math.abs(dz) < R + tr)) {
-    if (p.y >= cy - 0.01) {
-      // contact with the tape: push out radially in the y-z plane
-      const ny = d > 1e-6 ? dy / d : 1;
-      const nz = d > 1e-6 ? dz / d : Math.sign(prevZ) || 1;
-      const vn = v.y * ny + v.z * nz;
-      if (vn < 0) {
-        // the cable is taut from above, but hit from the side the whole net swings back with it
-        const e = BALL.netRestitution + (BALL.tapeRestitution - BALL.netRestitution) * ny * ny;
-        v.y -= (1 + e) * vn * ny;
-        v.z -= (1 + e) * vn * nz;
-        v.x *= 0.85;
-        // tape grabs the ball a little
-        v.y *= 0.92;
-        v.z *= 0.92;
-        emit(events, 'tape', p, -vn);
-      }
-      p.y = cy + ny * (R + tr);
-      p.z = nz * (R + tr);
-      return;
-    }
-  }
+  // ---- the cable in the top band's hem (`BALL.tape`): a ball whose centre is above it rides on it
+  const cy = top - BALL.tape.cable;
+  if (Math.abs(p.x) <= hx && collideCable(s, cy, h, events)) return;
   // ---- soft net body: a mesh the ball sinks into (up to netGive), held by an overdamped spring
   // and gripped by the mesh, so it dies there and drops down the net. The centre never crosses
   // the net plane (the judge reads a crossing as the ball going over or under).
@@ -339,6 +339,88 @@ function collideNet(s: BallState, prevZ: number, h: number, env: BallEnv, events
   }
 }
 
+/**
+ * The net's top (`BALL.tape`): the cable in the band's hem, at `cy`, moved by the ball. Its swing
+ * (`s.tapeY`, `s.tapeZ` and their speeds) runs on whether or not the ball is on it. A ball whose
+ * centre is over the cable meets it as one body meets another: the share of the net's top that moves
+ * with it (`massUp` pressed down, `mass` along z), which the net then pulls back to its line. So a
+ * ball driven into it moves the net and keeps some of its way instead of climbing a post, and how
+ * much goes where depends on the angle, the speed and the spin. The lower part of a ball that sits
+ * low on the cable is in the band, which grips it like the mesh does (`band`). False when the ball
+ * is not on it.
+ */
+function collideCable(s: BallState, cy: number, h: number, events?: CollisionEvent[]): boolean {
+  const { p, v, w } = s;
+  const T = BALL.tape;
+  // the net's top swings back to its line
+  if (s.tapeY !== 0 || s.tapeVy !== 0 || s.tapeZ !== 0 || s.tapeVz !== 0) {
+    s.tapeVy -= (T.swingUp * T.swingUp * s.tapeY + 2 * T.damping * T.swingUp * s.tapeVy) * h;
+    s.tapeY += s.tapeVy * h;
+    s.tapeVz -= (T.swing * T.swing * s.tapeZ + 2 * T.damping * T.swing * s.tapeVz) * h;
+    s.tapeZ += s.tapeVz * h;
+  }
+  const reach = R + T.cable;
+  const ry = p.y - (cy + s.tapeY);
+  const rz = p.z - s.tapeZ;
+  const r = Math.hypot(ry, rz);
+  if (ry < 0 || r >= reach) return false;
+  const ny = r > 0 ? ry / r : 1;
+  const nz = r > 0 ? rz / r : 0;
+  p.y = cy + s.tapeY + ny * reach;
+  p.z = s.tapeZ + nz * reach;
+  const vn = (v.y - s.tapeVy) * ny + (v.z - s.tapeVz) * nz;
+  // the band: the lower part of the ball presses it and it grips, more the lower the ball sits
+  const g = Math.exp(-BALL.netGrip * T.band * (1 - ry / R) * h);
+  v.x *= g;
+  v.z = s.tapeVz + (v.z - s.tapeVz) * g;
+  if (v.y > 0) v.y *= g;
+  if (vn >= 0) return true;
+  // the push: ball against the net's top
+  const J = (-(1 + T.restitution) * vn) / (1 / BALL.mass + (ny * ny) / T.massUp + (nz * nz) / T.mass);
+  const dn = J / BALL.mass;
+  v.y += dn * ny;
+  v.z += dn * nz;
+  s.tapeVy -= (J * ny) / T.massUp;
+  s.tapeVz -= (J * nz) / T.mass;
+  emit(events, 'tape', p, -vn);
+  // grip: the cover slides on the cable (contact point r = -R n) until friction stops it
+  const sx = v.x + R * (w.z * ny - w.y * nz);
+  const sy = v.y - s.tapeVy + R * w.x * nz;
+  const sz = v.z - s.tapeVz - R * w.x * ny;
+  const sn = sy * ny + sz * nz;
+  const ty = sy - sn * ny;
+  const tz = sz - sn * nz;
+  const slip = Math.hypot(sx, ty, tz);
+  if (slip <= 0) return true;
+  const j = Math.min(T.grip * dn, slip / (1 + INV_I_TERM));
+  const fx = (-sx / slip) * j;
+  const fy = (-ty / slip) * j;
+  const fz = (-tz / slip) * j;
+  v.x += fx;
+  v.y += fy;
+  v.z += fz;
+  // the spin it gives: dw = (r x f) / (I/m), r = -R n
+  const kw = INV_I_TERM / R;
+  w.x -= (ny * fz - nz * fy) * kw;
+  w.y -= nz * fx * kw;
+  w.z += ny * fx * kw;
+  return true;
+}
+/**
+ * The share of the ball's push an antenna gives back at height `y`: all of it below the net's top
+ * (held against the band), less and less up the free rod, which bends out of the way
+ * (`BALL.antenna`). It is M / (m + M) for the mass M of rod the ball meets there.
+ */
+export function antennaShare(y: number, netTop: number): number {
+  const s = y - netTop;
+  if (s <= 0) return 1;
+  const L = COURT.antennaAboveNet;
+  const at = Math.min(s, L);
+  const shape = (2 * L * L * L) / (at * at * (L + L + L - at));
+  const M = BALL.antenna.tipMass * shape * shape;
+  return M / (BALL.mass + M);
+}
+
 function collideVerticalCylinder(
   s: BallState,
   cx: number,
@@ -349,9 +431,16 @@ function collideVerticalCylinder(
   e: number,
   kind: CollisionKind,
   events?: CollisionEvent[],
+  env?: BallEnv,
 ): boolean {
   const { p, v } = s;
   if (p.y < y0 - R || p.y > y1 + R) return false;
+  // an antenna's rod (`env` given) the ball is pushing aside: it goes on through where the rod stood
+  const rod = Math.sign(cx);
+  if (env && s.rod === rod) {
+    if (Math.hypot(p.x - cx, p.z - cz) < R + rad) return true;
+    s.rod = 0;
+  }
   const dx = p.x - cx;
   const dz = p.z - cz;
   let nx: number, ny: number, nz: number, dist: number, minD: number;
@@ -372,26 +461,36 @@ function collideVerticalCylinder(
       ny = 1;
       nz = 0;
     }
-    p.x += nx * (minD - dist);
-    p.y += ny * (minD - dist);
-    p.z += nz * (minD - dist);
   } else {
     dist = Math.hypot(dx, dz);
     minD = R + rad;
     if (dist >= minD) return false;
-    nx = dist > 1e-6 ? dx / dist : 1;
-    nz = dist > 1e-6 ? dz / dist : 0;
+    // an antenna is met where the ball first reached it, back along its path: a ball sliding past
+    // the 1 cm rod is often only seen beside it, where it no longer moves towards it
+    const vv = v.x * v.x + v.z * v.z;
+    const back = env && vv > 0 ? (dx * v.x + dz * v.z + Math.sqrt((dx * v.x + dz * v.z) ** 2 - vv * (dist * dist - minD * minD))) / vv : 0;
+    const ex = dx - back * v.x;
+    const ez = dz - back * v.z;
+    const ed = Math.hypot(ex, ez);
+    nx = ed > 1e-6 ? ex / ed : 1;
+    nz = ed > 1e-6 ? ez / ed : 0;
     ny = 0;
-    p.x = cx + nx * minD;
-    p.z = cz + nz * minD;
   }
   const vn = v.x * nx + v.y * ny + v.z * nz;
-  if (vn < 0) {
-    v.x -= (1 + e) * vn * nx;
-    v.y -= (1 + e) * vn * ny;
-    v.z -= (1 + e) * vn * nz;
-    emit(events, kind, p, -vn);
+  // the rod gives back only its share of the push: up the free rod it bends away and the ball goes on
+  const dv = vn < 0 ? -(1 + e) * vn * (env ? antennaShare(p.y, env.netTop) : 1) : 0;
+  v.x += dv * nx;
+  v.y += dv * ny;
+  v.z += dv * nz;
+  // any overlap with an antenna is a touch, a glancing one too (seen as the ball slides past it)
+  if (vn < 0 || env) emit(events, kind, p, Math.max(0, -vn));
+  if (env && (vn >= 0 || vn + dv <= 0)) {
+    s.rod = rod;
+    return true;
   }
+  p.x += nx * (minD - dist);
+  p.y += ny * (minD - dist);
+  p.z += nz * (minD - dist);
   return true;
 }
 
@@ -400,7 +499,7 @@ function collideAntennae(s: BallState, env: BallEnv, events?: CollisionEvent[]):
   const y0 = env.netTop - COURT.netDepth;
   const y1 = env.netTop + COURT.antennaAboveNet;
   for (const sx of [-1, 1]) {
-    collideVerticalCylinder(s, sx * COURT.antennaX, 0, COURT.antennaRadius, y0, y1, BALL.antennaRestitution, 'antenna', events);
+    collideVerticalCylinder(s, sx * COURT.antennaX, 0, COURT.antennaRadius, y0, y1, BALL.antenna.restitution, 'antenna', events, env);
   }
 }
 

@@ -34,7 +34,7 @@
     "src/game/simulation.ts": 6,
     "src/game/tutorial.ts": 16,
     "src/game/userActions.ts": 3,
-    "src/physics/ball.ts": 44,
+    "src/physics/ball.ts": 38,
     "src/physics/predict.ts": 30,
     "src/physics/solve.ts": 22
   }

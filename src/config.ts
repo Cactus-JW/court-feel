@@ -62,11 +62,45 @@ export const BALL = {
   netRestitution: 0.1,
   /** the mesh grips the ball: its sideways and upward speed die at this rate (1/s) while it is in */
   netGrip: 18,
-  /** the top cable/tape is stiff from above (a ball can roll over it); hit from the side the net
-   * swings back with it, so its bounce blends down to `netRestitution` */
-  tapeRestitution: 0.38,
-  tapeRadius: 0.035,
-  antennaRestitution: 0.55,
+  /**
+   * The top of the net: a 7 cm band (FIVB 2.3) hanging from a cable in its top hem. A ball whose
+   * centre is above the cable meets the net's top, which is not a fixed rod: the ball pushes a mass
+   * (the cable with the net hanging on it) that springs back, so how much of its speed it keeps
+   * depends on how squarely it meets it and how hard. The top is light and soft along the court
+   * (the whole net swings back with the ball) and heavier and firmer pressed down (the net's height
+   * is held by its tension), and it grips the ball's cover, so the way in, the speed and the spin
+   * decide what happens: a serve that clips it carries on over, slowed, and the thinner the clip the
+   * further it goes; one that meets it square dies and drops close to the net; a ball dropped on it
+   * hardly bounces and rolls off the way it was going; topspin carries it on over, backspin checks
+   * it. A ball sitting low on the cable has its lower part in the band, which grips it like the mesh
+   * (`netGrip`, `band` times over with its centre level with the cable); one whose centre is under
+   * the cable is in the band and the mesh (`netGive`) and drops on its own side.
+   *
+   * - `cable`: radius of the cable in its hem (m); its centre is this far under the net's top
+   * - `mass`, `swing`: the top's mass (kg) and spring (rad/s) along the court; `massUp`, `swingUp`:
+   *   pressed down; `damping`: its damping ratio both ways
+   * - `restitution`: what is left of the speed into it after the push (between the ball and the top)
+   * - `grip`: friction on the ball's cover (of the push); `band`: how much harder than the mesh the
+   *   band grips a ball sitting low on the cable
+   *
+   * Bent, and why: no measurement of a net's top was found, so these are set by what a ball does on a
+   * real net (tests/netTape.test.ts): a ball dropped on the tape from a metre bounces about 10 cm; an
+   * 80 km/h serve that clips it 2 cm over the cable lands about 3.5 m in (4 cm: about 7 m) and goes
+   * no higher than 2 m over it; one that meets it square drops within a metre; a spike into the top
+   * of it goes on down into their court. The rigid 7 cm rod this replaced sent the clipped serve up
+   * 7 m and sent every ball off the same way up.
+   */
+  tape: { cable: 0.01, mass: 0.5, swing: 40, massUp: 1.0, swingUp: 60, damping: 0.4, restitution: 0.33, grip: 0.3, band: 3 },
+  /**
+   * The antennae: 10 mm fibreglass rods (FIVB 2.5), clamped to the side bands; above the net,
+   * 0.8 m of rod stands free. Below the net's top it is held against the band and the ball comes
+   * off it as off a post (`restitution`). Above, it bends: the mass the ball meets at height s over
+   * the clamp is `tipMass` x (shape(L) / shape(s))^2, shape(s) = s^2 (3L - s) (a cantilever's
+   * first bend), so near its tip the rod is pushed aside and the ball carries on, a little
+   * deflected, and low down the ball bounces off it. `tipMass`: 0.24 of the free rod, a solid
+   * 10 mm rod of 1.9 g/cm^3 being 0.12 kg over 0.8 m (a hollow rod would be lighter still).
+   */
+  antenna: { restitution: 0.55, tipMass: 0.029 },
   postRestitution: 0.5,
   wallRestitution: 0.4,
   /**
@@ -977,6 +1011,23 @@ export const ARENA = {
    * ball is still beside it, dropping down the net. Shown for `life` (s); `hits` can settle at once.
    */
   net: { spread: 0.25, pin: 3, swing: 12, damping: 6, life: 1.2, hits: 4 },
+  /**
+   * The net's top shakes when the ball hits it: pushed away from the ball by `perImpact` m per m/s of the
+   * hit (at most `max`; a hit lower in the mesh moves it `body` of that), most within `spread` m of
+   * the hit, held at the posts. It swings back at `swing` (rad/s, about 4 Hz) and dies away at
+   * `damping` (1/s). Shown for `life` s; `hits` can shake it at once; it is drawn through
+   * `samples` points along it. By eye, from match video (no measurement found): a hard ball into the
+   * tape moves it a hand's width and it settles within a second.
+   */
+  netTop: { perImpact: 0.008, max: 0.1, body: 0.4, spread: 1.5, swing: 26, damping: 3.5, life: 1.5, hits: 6, samples: 45 },
+  /**
+   * An antenna whips when the ball hits it, the way a referee sees a touch. Its free 0.8 m bends at
+   * `hz` (a 10 mm fibreglass rod, E 40 GPa, 1.9 g/cm^3, clamped at the tape: 10 Hz) and fibreglass
+   * hardly damps it (`damping`, a damping ratio), so it shakes for most of a second. Its tip bends at
+   * most `max` m; under `still` m it is straight again. It is drawn in `segments` along its length.
+   * How hard it is sent comes from the physics' rod (`BALL.antenna`).
+   */
+  antenna: { hz: 10, damping: 0.05, max: 0.3, still: 0.001, segments: 24 },
   /** the finished picture: darker corners (0 = none), an S-curve of contrast (0 = none), saturation (1 = as rendered) */
   grade: { vignette: 0.32, contrast: 0.16, saturation: 1.06 },
   /** how deep the grit of a painted outdoor court reads in a low light (the bump scale; by eye, on the seaside court at golden hour) */

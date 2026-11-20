@@ -151,9 +151,10 @@ describe('net and antennae', () => {
   });
 
   it('a ball driven into the side of the tape drops close to the net instead of bouncing back off it', () => {
-    const b = ballAt({ x: 0, y: env.netTop + 0.08, z: 1 }, { x: 0, y: -1, z: -12 });
+    // its centre in the 7 cm band, under the cable at the net's top
+    const b = ballAt({ x: 0, y: env.netTop - 0.03, z: 1 }, { x: 0, y: -1, z: -12 });
     const r = simulateToFloor(b);
-    expect(r.events.some((e) => e.kind === 'tape')).toBe(true);
+    expect(r.events.some((e) => e.kind === 'net' || e.kind === 'tape')).toBe(true);
     expect(r.land!.z).toBeGreaterThan(0);
     expect(r.land!.z).toBeLessThan(1.5);
   });
@@ -182,8 +183,8 @@ describe('net and antennae', () => {
     expect(r.land!.z).toBeLessThan(0);
   });
 
-  it('a ball hitting an antenna bounces off it', () => {
-    const b = ballAt({ x: COURT.antennaX, y: env.netTop + 0.4, z: 3 }, { x: 0, y: 0, z: -14 });
+  it('a ball hitting an antenna low down, near the tape, bounces off it', () => {
+    const b = ballAt({ x: COURT.antennaX, y: env.netTop + 0.1, z: 3 }, { x: 0, y: 0, z: -14 });
     const events: CollisionEvent[] = [];
     for (let i = 0; i < 120; i++) stepBall(b, DT, env, events);
     expect(events.some((e) => e.kind === 'antenna')).toBe(true);
