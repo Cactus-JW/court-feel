@@ -1256,7 +1256,7 @@ export class Menu {
         GRAPHICS_SETTINGS.map((g) => (g === 'auto' ? 'Auto' : QUALITY.levels[g].label)),
         () => GRAPHICS_SETTINGS.indexOf(s.graphics),
         (i) => (s.graphics = GRAPHICS_SETTINGS[i]),
-        'Higher is sharper, lower runs smoother. Auto draws High while your device keeps up, and less when it cannot.',
+        'Higher is sharper, lower runs smoother. Auto starts at High, goes sharper between rallies while your device keeps up, and draws less when it cannot.',
       ),
       this.sliderRow('Field of view', 'fov', (v) => `${v.toFixed(0)}°`),
       this.sliderRow('Camera shake', 'shake', percent),

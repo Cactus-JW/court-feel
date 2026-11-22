@@ -92,7 +92,7 @@ A minimal run:
 
 ### Time: use the manual clock for anything that plays
 
-Headless Chromium renders with software WebGL, at about 10 to 30 frames a second. On the real clock the game then runs well below real speed (about a quarter when this was written), the speed varies with the machine, and after a few seconds the game lowers its render quality by itself. Menus and settings are fine on the real clock. Anything with a ball is not.
+Headless Chromium renders with software WebGL, at about 10 to 30 frames a second. On the real clock the game then runs well below real speed (about a quarter when this was written), the speed varies with the machine, and after a few seconds the game lowers its render quality by itself (Graphics: Auto). Pick a fixed level under Settings, Camera, Graphics to stop it resizing the canvas during a run. Menus and settings are fine on the real clock. Anything with a ball is not.
 
 On the real clock the page can also fall seconds behind the software GPU, because WebGL does not wait for it. A click or a page load then takes 5 to 15 seconds to answer. That is the renderer, not the game hanging: the helper waits up to 30 seconds for a click, and `open` first lets the GPU finish the old page's frames.
 

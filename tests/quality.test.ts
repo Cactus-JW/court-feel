@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { GRAPHICS_LEVEL_IDS, GRAPHICS_SETTINGS, QUALITY } from '../src/config';
-import { QualityGovernor } from '../src/app/quality';
+import { pixelRatioFor, QualityGovernor } from '../src/app/quality';
 
 // The picture gets cheaper when the machine cannot keep up, so the play never does: a slow frame
 // costs timing, a soft edge does not. And it gets richer again when the machine can: a phone that
 // had one slow moment should not play soft for the rest of the session.
 
 const L = (id: (typeof GRAPHICS_LEVEL_IDS)[number]) => GRAPHICS_LEVEL_IDS.indexOf(id);
-/** where Auto starts, and the richest level it picks */
+/** where Auto starts, and the richest level it climbs to under a frame-rate cap */
 const TOP = L(QUALITY.autoTop);
+/** the richest level Auto climbs to */
+const CEILING = L(QUALITY.autoCeiling);
 
 /** a machine: the frame rate it draws at each level (cheapest first) */
 type Machine = (level: number) => number;
@@ -17,13 +19,16 @@ const steady =
   () =>
     fps;
 
-/** run `seconds` of frames on `machine` and return every level the governor changed to */
-function run(g: QualityGovernor, machine: Machine, seconds: number): number[] {
+/**
+ * run `seconds` of frames on `machine` and return every level the governor changed to. `calm`: the
+ * frames are a menu, the pause or a dead ball (true), or play (false), or a function of the time
+ */
+function run(g: QualityGovernor, machine: Machine, seconds: number, calm: boolean | ((t: number) => boolean) = true): number[] {
   const asked: number[] = [];
   for (let t = 0; t < seconds;) {
     const dt = 1 / machine(g.level);
     t += dt;
-    const next = g.frame(dt);
+    const next = g.frame(dt, typeof calm === 'function' ? calm(t) : calm);
     if (next !== null) asked.push(next);
   }
   return asked;
@@ -33,12 +38,57 @@ function run(g: QualityGovernor, machine: Machine, seconds: number): number[] {
 const windows = (n: number) => QUALITY.window * (Math.ceil(QUALITY.startCooldown / QUALITY.window) + n);
 
 describe('the quality governor (Graphics: Auto)', () => {
-  it('starts at High, the level phones and laptops had before there was a setting, and never climbs past it', () => {
+  it('starts at High, the level phones and laptops had before there was a setting', () => {
     expect(QUALITY.autoTop).toBe('high');
     const g = new QualityGovernor();
     expect(g.level).toBe(L('high'));
-    // Very high (a phone's own pixels) is the player's pick: a climb that turns out slow costs a rally
-    expect(run(g, steady(120), 1200)).toEqual([]);
+  });
+
+  it("a device that keeps up goes on to Very high (a phone's own pixels), and stays", () => {
+    expect(QUALITY.autoCeiling).toBe('veryHigh');
+    const g = new QualityGovernor();
+    expect(run(g, steady(60), windows(QUALITY.upWindows) + 1)).toEqual([CEILING]);
+    expect(run(g, steady(60), 1200)).toEqual([]);
+    // a 120 Hz phone that draws its own pixels at 80 fps keeps them: 80 fps plays as well as 120
+    const fast = new QualityGovernor();
+    expect(run(fast, (l) => (l === CEILING ? 80 : 120), 1200)).toEqual([CEILING]);
+  });
+
+  it('never steps up in the middle of a rally: it waits for a calm moment (a dead ball, a menu, the pause)', () => {
+    const g = new QualityGovernor();
+    expect(run(g, steady(60), 600, false)).toEqual([]);
+    expect(g.level).toBe(TOP);
+    // the ball goes dead: up at once, the run of fast windows was already there
+    expect(run(g, steady(60), 0.1, true)).toEqual([CEILING]);
+    // rallies of 10 s with 3 s dead balls between them: every step up lands in a dead ball
+    const h = new QualityGovernor();
+    const machine: Machine = (l) => (l >= TOP ? 30 : 60);
+    const dead = (t: number) => t % 13 > 10;
+    let t0 = 0;
+    for (let s = 0; s < 900; s++) {
+      const before = h.level;
+      run(h, machine, 1, (t) => dead(t0 + t));
+      t0 += 1;
+      if (h.level > before) expect(dead(t0)).toBe(true);
+    }
+  });
+
+  it('a step up that turns out slow comes back after one window, and waits twice as long to try again', () => {
+    // fast at High, slow at Very high (a laptop drawing a 3x phone screen: 33 fps, measured)
+    const g = new QualityGovernor();
+    const machine: Machine = (l) => (l === CEILING ? 33 : 60);
+    for (let s = 0; g.level !== CEILING && s < 600; s++) run(g, machine, 0.1);
+    expect(g.level).toBe(CEILING);
+    let slowFor = 0;
+    while (g.level === CEILING && slowFor < 60) {
+      run(g, machine, 0.1);
+      slowFor += 0.1;
+    }
+    expect(g.level).toBe(TOP);
+    expect(slowFor).toBeLessThanOrEqual(QUALITY.probeCooldown + 2 * QUALITY.window + 0.2);
+    // the next try waits for twice the run of fast windows
+    expect(run(g, machine, QUALITY.window * QUALITY.upWindows * 1.5)).toEqual([]);
+    expect(run(g, machine, QUALITY.window * QUALITY.upWindows)).toEqual([CEILING, TOP]);
   });
 
   it('climbs back after a long run of fast windows (a phone that had one slow moment)', () => {
@@ -54,7 +104,8 @@ describe('the quality governor (Graphics: Auto)', () => {
     const run40 = QUALITY.window * QUALITY.upWindows;
     expect(back).toBeGreaterThanOrEqual(run40);
     expect(back).toBeLessThanOrEqual(run40 + QUALITY.changeCooldown + 2 * QUALITY.window);
-    expect(run(g, steady(60), 600)).toEqual([]);
+    // and on to Very high after another run, then no further
+    expect(run(g, steady(60), 600)).toEqual([CEILING]);
   });
 
   it('steps down one level after two slow windows in a row', () => {
@@ -93,7 +144,8 @@ describe('the quality governor (Graphics: Auto)', () => {
 
   it('a phone capped at 30 fps (low power mode) keeps its picture: a cheaper one did not help', () => {
     const g = new QualityGovernor();
-    // one step down to find out, then back, and never again
+    // one step down to find out, then back, and never again: not on to Very high either (a capped
+    // phone is saving power or heat, and 4 times the pixels would cost it both)
     expect(run(g, steady(30), 600)).toEqual([L('medium'), TOP]);
     expect(g.cap).toBeCloseTo(30, 0);
     // a real drop under the cap still steps down
@@ -101,12 +153,57 @@ describe('the quality governor (Graphics: Auto)', () => {
     expect(run(g, sinks, 30)).toEqual([L('medium')]);
   });
 
-  it('forgets the cap when the frame rate comes back (low power mode off)', () => {
+  it('forgets the cap when the frame rate comes back in play (low power mode off)', () => {
     const g = new QualityGovernor();
     run(g, steady(30), 60);
     expect(g.cap).not.toBeNull();
-    expect(run(g, steady(60), 10)).toEqual([]);
+    expect(run(g, steady(60), 10, false)).toEqual([]);
     expect(g.cap).toBeNull();
+  });
+
+  it('a menu faster than play does not clear the cap (a phone whose processor is the limit)', () => {
+    const g = new QualityGovernor();
+    // play is held at 45 fps by the processor, whatever the picture
+    run(g, steady(45), 60, false);
+    expect(g.cap).toBeCloseTo(45, 0);
+    // the menu runs at 60: the cap stays, so the next rally does not test a cheaper picture again
+    run(g, steady(60), 20, true);
+    expect(g.cap).toBeCloseTo(45, 0);
+    expect(run(g, steady(45), 600, false)).toEqual([]);
+  });
+
+  it('climbs back under a cap: a phone that stepped down for a reason, then went into low power mode', () => {
+    const g = new QualityGovernor();
+    // a hot phone: High is too much
+    expect(run(g, (l) => (l >= TOP ? 42 : 60), windows(QUALITY.slowWindows))).toEqual([L('medium')]);
+    expect(run(g, steady(60), 10, false)).toEqual([]);
+    // then low power mode: 30 fps on every level. A step down does not help, the cap is found
+    expect(run(g, steady(30), 30, false)).toEqual([L('low'), L('medium')]);
+    expect(g.cap).toBeCloseTo(30, 0);
+    // High holds the same 30 fps: back to High after the run of windows that hold the cap, no further
+    expect(run(g, steady(30), 600)).toEqual([TOP]);
+  });
+
+  it('under a cap, a step up that costs frames goes back (a phone whose processor holds it at 45)', () => {
+    const g = new QualityGovernor();
+    // Medium at 45 (its processor), High at 38: High is a step too far
+    expect(run(g, (l) => (l >= TOP ? 38 : 45), windows(QUALITY.slowWindows) + 30, false)).toEqual([L('medium'), L('low'), L('medium')]);
+    expect(g.cap).toBeCloseTo(45, 0);
+    const asked = run(g, (l) => (l >= TOP ? 38 : 45), 1200);
+    // it tries High now and then, and comes straight back each time
+    expect(asked.filter((l) => l === TOP).length).toBeGreaterThan(0);
+    expect(asked.filter((l) => l === TOP).length).toBeLessThanOrEqual(6);
+    expect(g.level).toBe(L('medium'));
+  });
+
+  it('after a lost graphics context above High, Auto stays at High', () => {
+    const g = new QualityGovernor();
+    g.lostContext();
+    expect(run(g, steady(60), 1200)).toEqual([]);
+    expect(g.level).toBe(TOP);
+    // picking Auto again does not forget it
+    g.start();
+    expect(run(g, steady(60), 1200)).toEqual([]);
   });
 
   it('a constant frame rate between slow and fast never moves it', () => {
@@ -117,7 +214,7 @@ describe('the quality governor (Graphics: Auto)', () => {
   it('never flickers on the edge between two levels: each failed climb waits twice as long', () => {
     // fast at Medium, slow at High: it tries High, finds it slow, and tries less and less often
     const g = new QualityGovernor();
-    const machine: Machine = (l) => (l === TOP ? 42 : 60);
+    const machine: Machine = (l) => (l >= TOP ? 42 : 60);
     run(g, machine, windows(QUALITY.slowWindows));
     expect(g.level).toBe(TOP - 1);
     const ups: number[] = [];
@@ -146,7 +243,6 @@ describe('the quality governor (Graphics: Auto)', () => {
     // back to Auto: it starts again from High, with nothing learned
     g.start();
     expect(g.level).toBe(TOP);
-
     expect(g.auto).toBe(true);
   });
 });
@@ -187,5 +283,27 @@ describe('the graphics levels', () => {
       expect(q.mirror).toBeGreaterThanOrEqual(0);
       expect(q.mirror).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('how many pixels a level draws', () => {
+  const q = QUALITY.levels;
+
+  it("Very high draws a phone's own pixels (844x390 at 3x is 2532x1170)", () => {
+    expect(pixelRatioFor(q.veryHigh, 3, 844, 390)).toBe(3);
+    expect(pixelRatioFor(q.veryHigh, 3, 932, 430)).toBe(3);
+  });
+
+  it('no level draws more pixels than the screen has', () => {
+    for (const id of GRAPHICS_LEVEL_IDS) expect(pixelRatioFor(q[id], 1, 1280, 720)).toBeLessThanOrEqual(1);
+    expect(pixelRatioFor(q.high, 1.25, 1536, 864)).toBe(1.25);
+  });
+
+  it('no level draws a buffer over a 4K frame (a desktop at 2x with a large window)', () => {
+    const r = pixelRatioFor(q.veryHigh, 2, 2560, 1440);
+    expect(r).toBeLessThan(2);
+    expect(2560 * r * 1440 * r).toBeLessThanOrEqual(QUALITY.maxPixels + 1);
+    // High on a 1080p screen is untouched
+    expect(pixelRatioFor(q.high, 1, 1920, 1080)).toBe(1);
   });
 });

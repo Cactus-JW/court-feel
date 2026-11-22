@@ -1730,7 +1730,6 @@ export interface QualityLevel {
    * MSAA samples on the HDR picture (0: none). Every level keeps 4: without it the 5 cm court lines
    * drop out at a distance (at 844x390, Very low to Medium each lost some of the side, attack and
    * centre lines), and a player has to see the lines. It cost 0.6-1.3 ms a frame on those levels.
-
    */
   msaa: number;
   /** the key light's shadow map (texels a side) */
@@ -1742,25 +1741,46 @@ export interface QualityLevel {
 /**
  * Graphics. Each level is a row; the Graphics setting picks one, or Auto lets the quality governor
  * (src/app/quality.ts) pick: the picture gets cheaper when the machine cannot keep up, so the play
- * never slows, and richer again after a long run of fast frames. None of it touches the play.
+ * never slows, and richer again when it can. None of it touches the play.
  *
  * The governor averages frames over `window` s. Under `slowFps` for `slowWindows` windows in a row
- * steps down a level; at `fastFps` or more for `upWindows` windows (40 s) steps up. A step up that
- * is slow again within `upFail` windows doubles the wait before the next try (up to `upMaxWindows`),
- * so a frame rate on the edge between two levels does not flicker between them. A step down that
- * gains under `minGain` of the frame rate did not help (the screen is capped, say a phone's low power
- * mode at 30 fps, or the processor is the limit): the picture goes back up, and that frame rate is the
- * cap; only `capBand` under it is slow, and `capBand` over it clears it. Auto starts at `autoTop`
- * on every device (a phone too: it is the level phones had before there was a setting) and never
- * climbs past it: Very high draws a phone's own pixels, about 2.5 times High's work, and a climb
- * that turns out slow would cost seconds of slow frames in the middle of a rally, so it is the
- * player's pick only. No step for `startCooldown` s after the game starts (loading costs frames),
- * nor `changeCooldown` s after a change (the change itself costs frames). Tuned on a laptop with
- * integrated graphics.
+ * steps down a level. At `fastFps` or more for `upWindows` windows (40 s) it steps up, but only in a
+ * calm moment (a menu, the pause, a replay, a dead ball): a step up resizes the picture, which costs
+ * a frame, and may turn out slow, and neither should land in the middle of a rally. After a step up
+ * it waits `probeCooldown` s, and its first window must hold the frame rate it had (`minGain` of it,
+ * counted up to `fastFps`, so a 120 Hz phone at 80 fps keeps the sharper picture) or it steps back at
+ * once. A step up that fails, or is slow again within `upFail` windows, doubles the wait before the
+ * next try, up to `upMaxWindows` (320 s), so a frame rate on the edge between two levels does not
+ * flicker. That is the cost of trying: on a device that runs High but not Very high, about 3 s of
+ * slow frames every 5 minutes, nearly always in a calm moment.
+ *
+ * A step down that gains under `minGain` of the frame rate did not help (the screen is capped, say a
+ * phone's low power mode at 30 fps or a 50 Hz screen, or the processor is the limit): the picture
+ * goes back up, and that frame rate is the cap. Under a cap only `capBand` under it is slow, a
+ * window that holds it (half of `capBand` under it) counts as fast, so a capped device still climbs
+ * back after a slow moment, and `capBand` over it in play clears it (not in a menu, which can run
+ * faster than play where the processor is the limit).
+ *
+ * Auto starts at `autoTop` on every device (a phone too: it is the level phones had before there was
+ * a setting) and climbs as far as `autoCeiling`. Past `autoTop` only with no cap: a capped phone is
+ * saving power or shedding heat, and Very high draws a phone's own pixels, about 2.5 times High's
+ * work (measured on a laptop, 30.5 ms against 12.4 ms a frame at 844x390 @3x). Turned down: never
+ * climbing past `autoTop` (the PR's first version); a phone that runs its own pixels at 60 fps then
+ * never showed them, and the calm-moment rule removes the cost to the play that kept it out. A lost
+ * graphics context while Auto is above `autoTop` keeps Auto at `autoTop` on that browser from then
+ * on (the context loss is the browser running out of graphics memory).
+ *
+ * No level draws a buffer over `maxPixels` (a 4K frame, 3840x2160): a desktop at 2x with a large
+ * window would otherwise ask Very high for 5120x2880, about 470 MB of MSAA colour alone; a phone's
+ * 3x screen (2532x1170, 2796x1290) is well inside it. No step for `startCooldown` s after the game
+ * starts (loading costs frames), nor `changeCooldown` s after a step down (the change itself costs
+ * frames). Tuned on a laptop with integrated graphics.
  */
 export const QUALITY: {
   levels: Record<GraphicsLevel, QualityLevel>;
   autoTop: GraphicsLevel;
+  autoCeiling: GraphicsLevel;
+  maxPixels: number;
   window: number;
   slowFps: number;
   slowWindows: number;
@@ -1772,6 +1792,7 @@ export const QUALITY: {
   capBand: number;
   startCooldown: number;
   changeCooldown: number;
+  probeCooldown: number;
 } = {
   levels: {
     veryLow: { label: 'Very low', pixelRatio: 0.6, msaa: 4, shadowMap: 512, mirror: 0 },
@@ -1781,6 +1802,8 @@ export const QUALITY: {
     veryHigh: { label: 'Very high', pixelRatio: 3, msaa: 4, shadowMap: 4096, mirror: 0.5 },
   },
   autoTop: 'high',
+  autoCeiling: 'veryHigh',
+  maxPixels: 3840 * 2160,
   window: 2,
   slowFps: 50,
   slowWindows: 2,
@@ -1792,6 +1815,7 @@ export const QUALITY: {
   capBand: 0.15,
   startCooldown: 3,
   changeCooldown: 4,
+  probeCooldown: 1,
 };
 
 export const AI = {

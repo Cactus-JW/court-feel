@@ -63,13 +63,15 @@ import { makeRingTexture } from '../world/textures';
 import type { UserActions } from '../game/userActions';
 import { lessonStore } from './lessonStore';
 import { Pace } from './pace';
-import { QualityGovernor } from './quality';
+import { pixelRatioFor, QualityGovernor } from './quality';
 import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
 import { Effects } from '../fx/effects';
 import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tutorial';
 
 /** consecutive frames that throw before the game stops and shows the crash screen */
 const MAX_FAILED_FRAMES = 10;
+/** stored once a graphics context was lost while Auto drew above `QUALITY.autoTop` (Game.watchContext) */
+const AUTO_TOP_ONLY_KEY = 'courtfeel.graphicsAutoTopOnly';
 
 /**
  * Owns the renderer, the fixed-timestep simulation, the current drill and
@@ -252,6 +254,7 @@ export class Game implements AiHost {
     this.post = new Post(this.renderer, this.scene, this.rig.camera);
     this.applyVenue();
     this.post.preRender = () => this.arena.reflection.render(this.rig.camera);
+    this.watchContext();
     this.setGraphics(settings.graphics);
     // the net's top shakes when the ball hits it
     this.events.on('ballEvent', (e) => this.arena.ballHit(e));
@@ -631,6 +634,12 @@ export class Game implements AiHost {
   resize(): void {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
+    // the level's pixel ratio, held under QUALITY.maxPixels for this size of view
+    const ratio = pixelRatioFor(QUALITY.levels[this.quality], window.devicePixelRatio, w, h);
+    if (ratio !== this.renderer.getPixelRatio()) {
+      this.renderer.setPixelRatio(ratio);
+      this.post.composer.setPixelRatio(ratio);
+    }
     this.renderer.setSize(w, h);
     this.post.setSize(w, h);
     const pr = this.renderer.getPixelRatio();
@@ -747,7 +756,30 @@ export class Game implements AiHost {
 
   private governQuality(dt: number): void {
     if (this.manual || document.hidden) return;
-    if (this.governor.frame(dt) !== null) this.applyQuality();
+    // nothing the player times hangs on this frame: the only time Auto steps the picture up
+    const calm = this.paused || this.inMenu || this.fx.replaying || this.fx.ballDead();
+    if (this.governor.frame(dt, calm) !== null) this.applyQuality();
+  }
+
+  /**
+   * A lost graphics context while Auto drew above where it starts (the browser ran out of graphics
+   * memory): Auto stays at `QUALITY.autoTop` on this browser from then on. main.ts offers the reload.
+   */
+  private watchContext(): void {
+    try {
+      if (localStorage.getItem(AUTO_TOP_ONLY_KEY)) this.governor.lostContext();
+    } catch {
+      // no storage (a private window): nothing was learned before
+    }
+    this.renderer.domElement.addEventListener('webglcontextlost', () => {
+      if (!this.governor.auto || this.governor.level <= GRAPHICS_LEVEL_IDS.indexOf(QUALITY.autoTop)) return;
+      this.governor.lostContext();
+      try {
+        localStorage.setItem(AUTO_TOP_ONLY_KEY, '1');
+      } catch {
+        // no storage: this page load still keeps it
+      }
+    });
   }
 
   /** the player's Graphics setting: a level of its own, or Auto (from QUALITY.autoTop) */
@@ -766,8 +798,6 @@ export class Game implements AiHost {
     const q = QUALITY.levels[this.quality];
     this.post.setSamples(q.msaa);
     this.arena.reflection.setScale(q.mirror);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
-    this.post.composer.setPixelRatio(this.renderer.getPixelRatio());
     const sm = this.arena.keyLight.shadow;
     const size = q.shadowMap;
     if (sm.mapSize.x !== size) {
