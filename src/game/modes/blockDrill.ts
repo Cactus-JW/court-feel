@@ -88,6 +88,7 @@ export class BlockDrill extends Mode {
         ? 'Their middle hits quicks: if they jump with the setter, jump with them · otherwise read the set'
         : 'Read the set · shuffle A/D · hold RMB for hands · Space to jump',
       3.6,
+      true,
     );
     this.toPhase('intro');
   }

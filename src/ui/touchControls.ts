@@ -12,6 +12,8 @@ import type { Effects } from '../fx/effects';
 import type { Hud } from './hud';
 import { SET_PLAYS } from '../game/plays';
 import { SET_PICKS, type SetPick } from '../game/setterCalls';
+import { callCss } from '../game/callRuns';
+import type { RouteView } from '../game/routes';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, html = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -30,7 +32,7 @@ export const TOUCH_KEY_LABELS: Record<string, string> = {
   Space: 'JUMP',
   E: 'PASS',
   Q: 'TOSS',
-  V: 'CAM',
+  // (no V: the camera is the pause menu's View on a phone, and a hint leaves "V camera" out)
   N: 'RESET',
   R: 'REPLAY',
   B: 'VS BLOCK',
@@ -47,10 +49,10 @@ export const TOUCH_KEY_LABELS: Record<string, string> = {
   'Shift+W': 'stick out',
 };
 
-/** while you set, the number keys are the SET TO chips (a hint's 1-4 is the chip row) */
+/** while you set, the number keys are the hitter chips (a hint's 1-4 is the chip row, OH to PIPE) */
 export const SETTER_KEY_LABELS: Record<string, string> = {
   ...TOUCH_KEY_LABELS,
-  '1-4': 'SET TO',
+  '1-4': 'OH–PIPE',
   '1': 'OH',
   '2': 'MB',
   '3': 'OPP',
@@ -90,7 +92,7 @@ export function wantsTouch(setting: 'auto' | 'on' | 'off'): boolean {
 export interface TouchHost {
   readonly input: Input;
   readonly events: Pick<Emitter<GameEvents>, 'on'>;
-  readonly hud: Pick<Hud, 'keyLabels' | 'collarSweet'>;
+  readonly hud: Pick<Hud, 'keyLabels' | 'collarSweet' | 'touch' | 'scoreShort' | 'callView'>;
   readonly fx: Pick<Effects, 'audio' | 'replaying' | 'endReplay'>;
   readonly tutorial: Pick<Tutorial, 'active' | 'teaching' | 'serving' | 'quiet' | 'stuck' | 'requestSkip'>;
   readonly settings: Settings;
@@ -103,7 +105,154 @@ export interface TouchHost {
   readonly inMenu: boolean;
   readonly paused: boolean;
   replayAvailable(): boolean;
+  /** your routes as a hitter (null: you are not calling your own route) */
+  routeView(): RouteView | null;
+  /** a finger holding PLAY, or on the open play wheel, is at (x, y): the wheel points at the play under it (-1: none) */
+  pointWheel(x: number, y: number): number;
+  /** is (x, y) on the open play wheel? */
+  wheelAt(x: number, y: number): boolean;
+  /** the finger pointing at the wheel is gone without a call (cancelled): point at nothing */
+  unpointWheel(): void;
+  /** the touch controls are on: the play wheel's centre says how a finger calls a play (set by `setEnabled`) */
+  wheelTouch: boolean;
 }
+
+/** what `WheelFingers` needs of the game: the open play wheel */
+export type WheelHost = Pick<TouchHost, 'pointWheel' | 'wheelAt' | 'unpointWheel'>;
+
+/**
+ * The fingers that point at a play on the open wheel (the wheel sits under the touch layer, so its
+ * own taps never fire). A finger that comes down on the wheel points at the play under it, and
+ * letting go calls it. A finger holding PLAY points only once it has slid onto the wheel, past
+ * `TOUCH.lookDeadZone` from where it came down: a real tap wobbles a pixel or two, and the PLAY
+ * chip is outside the wheel, so pointing from its first move would pick the slice towards the chip,
+ * and letting go of PLAY would call it before the second touch. A cancelled touch calls nothing and
+ * leaves nothing pointed at (the wheel also calls the pointed play on a HIT press).
+ */
+export class WheelFingers {
+  /** fingers that came down on the open wheel */
+  private onWheel = new Set<number>();
+  /** fingers holding PLAY: where they came down, and whether they point at the wheel yet */
+  private play = new Map<number, { x0: number; y0: number; pointing: boolean }>();
+
+  constructor(private host: WheelHost) {}
+
+  /** a finger came down at (x, y): true when it is on the open wheel (then it is the wheel's, not the pad's) */
+  down(id: number, x: number, y: number): boolean {
+    if (!this.host.wheelAt(x, y)) return false;
+    this.onWheel.add(id);
+    this.host.pointWheel(x, y);
+    return true;
+  }
+
+  /** the pad took the finger that came down at (x, y) as PLAY (letting go is C's release: the game calls what it points at) */
+  holdPlay(id: number, x: number, y: number): void {
+    this.play.set(id, { x0: x, y0: y, pointing: false });
+  }
+
+  /** a finger moved: true when it is the wheel's (the pad does not see it) */
+  move(id: number, x: number, y: number): boolean {
+    if (this.onWheel.has(id)) {
+      this.host.pointWheel(x, y);
+      return true;
+    }
+    const p = this.play.get(id);
+    if (p && !p.pointing) p.pointing = Math.hypot(x - p.x0, y - p.y0) > TOUCH.lookDeadZone && this.host.wheelAt(x, y);
+    if (p?.pointing) this.host.pointWheel(x, y);
+    return false;
+  }
+
+  /** a finger lifted (`cancelled`: the phone took it): the play a wheel finger calls, -1 for none */
+  up(id: number, x: number, y: number, cancelled: boolean): number {
+    const held = this.play.delete(id);
+    if (this.onWheel.delete(id)) {
+      if (!cancelled) return this.host.pointWheel(x, y);
+      this.host.unpointWheel();
+    } else if (held && cancelled) this.host.unpointWheel();
+    return -1;
+  }
+
+  /** is this finger the wheel's (it came down on it)? */
+  has(id: number): boolean {
+    return this.onWheel.has(id);
+  }
+
+  clear(): void {
+    this.onWheel.clear();
+    this.play.clear();
+  }
+}
+
+/**
+ * A panel over the court that a finger reads (the route panel). It sits under the touch layer, which
+ * takes every touch, so its own scrolling never sees a finger: the controls scroll it and tap it.
+ */
+export interface TouchSheet {
+  /** is (x, y) on the open panel? */
+  at(x: number, y: number): boolean;
+  /** scroll the panel by `dy` px (positive: further down the list) */
+  scrollBy(dy: number): void;
+  /** the item under (x, y) that a tap calls (its number key less one), -1 for none */
+  itemAt(x: number, y: number): number;
+}
+
+/**
+ * The fingers on an open panel (`TouchSheet`). A drag past `TOUCH.lookDeadZone` scrolls it, the list
+ * following the finger as a phone's lists do; a tap that does not move calls the item under it. A
+ * finger on the panel is the panel's: it neither turns the camera nor moves the stick.
+ */
+export class SheetFingers {
+  private fingers = new Map<number, { y: number; x0: number; y0: number; dragging: boolean }>();
+
+  constructor(private sheet: () => TouchSheet | null) {}
+
+  /** a finger came down at (x, y): true when it is on the open panel (then it is the panel's) */
+  down(id: number, x: number, y: number): boolean {
+    if (!this.sheet()?.at(x, y)) return false;
+    this.fingers.set(id, { y, x0: x, y0: y, dragging: false });
+    return true;
+  }
+
+  /** a finger moved: true when it is the panel's */
+  move(id: number, x: number, y: number): boolean {
+    const f = this.fingers.get(id);
+    if (!f) return false;
+    if (!f.dragging) f.dragging = Math.hypot(x - f.x0, y - f.y0) > TOUCH.lookDeadZone;
+    if (f.dragging) {
+      this.sheet()?.scrollBy(f.y - y);
+      f.y = y;
+    }
+    return true;
+  }
+
+  /** a finger lifted: the item a tap calls, -1 for none (a drag or a cancelled touch calls nothing) */
+  up(id: number, x: number, y: number, cancelled: boolean): number {
+    const f = this.fingers.get(id);
+    if (!f) return -1;
+    this.fingers.delete(id);
+    if (cancelled || f.dragging) return -1;
+    return this.sheet()?.itemAt(x, y) ?? -1;
+  }
+
+  /** is this finger the panel's? */
+  has(id: number): boolean {
+    return this.fingers.has(id);
+  }
+
+  clear(): void {
+    this.fingers.clear();
+  }
+}
+
+/** a chip in the top bar that is a call: a hitter you can set (with their call), or one of your routes */
+interface CallChip {
+  e: HTMLElement;
+  pick?: SetPick;
+  route?: number;
+  html: string;
+}
+
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /**
  * On-screen touch controls: a floating joystick on the left, aim by dragging
@@ -123,6 +272,10 @@ export class TouchControls {
   private jumpRing: HTMLDivElement;
   private chips: HTMLDivElement;
   private chipsFor = '';
+  /** the chips that are calls: each says what it runs, the one running is underlined */
+  private callChips: CallChip[] = [];
+  private scoreEl: HTMLDivElement;
+  private resetBtn: HTMLElement;
   /** the setter's chips are up: hints name them for the number keys */
   private labels = TOUCH_KEY_LABELS;
   private pauseBtn: HTMLDivElement;
@@ -130,6 +283,12 @@ export class TouchControls {
   private replayBtn: HTMLElement;
   private lastCharge = -1;
   private visible = false;
+  /** fingers that point at a play on the open wheel: on it, or holding PLAY */
+  private wheel: WheelFingers;
+  /** the panel a finger scrolls and taps (the route panel; the app hands it over) */
+  sheet: TouchSheet | null = null;
+  /** fingers on that panel */
+  private sheetFingers = new SheetFingers(() => this.sheet);
 
   constructor(
     parent: HTMLElement,
@@ -137,6 +296,7 @@ export class TouchControls {
     private cb: { pause(): void },
   ) {
     this.root = el('div', 'touch', parent);
+    this.wheel = new WheelFingers(g);
     this.root.style.display = 'none';
     // resting stick hint (the live stick floats under the thumb)
     this.stickBase = el('div', 't-stick', this.root);
@@ -152,15 +312,15 @@ export class TouchControls {
     }
     this.hitRing = this.buttons.get('hit')!.querySelector('.t-ring') as HTMLDivElement;
     this.jumpRing = this.buttons.get('jump')!.querySelector('.t-ring') as HTMLDivElement;
+    // the top bar: a soft shade along the edge, the drill's chips on the left, the score and pause on the right
+    el('div', 't-band', this.root);
     const top = el('div', 't-top', this.root);
-    // first chip, left of pause (the keyboard skip lives on the HUD instead)
+    // first chip (the keyboard skip lives on the HUD instead)
     this.skipBtn = el('div', 't-tap t-skip', top, 'SKIP TUTORIAL');
     this.skipBtn.style.display = 'none';
-    this.pauseBtn = el('div', 't-tap t-pause', top, '<span>❚❚</span>');
-    this.pauseBtn.dataset.tap = 'pause';
+    // (the camera is the pause menu's View: one less button over the court)
     for (const [id, label] of [
       ['replay', 'REPLAY'],
-      ['cam', 'CAM'],
       ['reset', 'RESET'],
     ] as [PadButton, string][]) {
       const e = el('div', 't-tap', top, label);
@@ -168,6 +328,10 @@ export class TouchControls {
       this.buttons.set(id, e);
     }
     this.replayBtn = this.buttons.get('replay')!;
+    this.resetBtn = this.buttons.get('reset')!;
+    this.scoreEl = el('div', 't-score', top);
+    this.pauseBtn = el('div', 't-tap t-pause', top, '<span>❚❚</span>');
+    this.pauseBtn.dataset.tap = 'pause';
     this.chips = el('div', 't-chips', this.root);
     el('div', 't-rotate', this.root, 'Turn your phone sideways');
 
@@ -204,6 +368,8 @@ export class TouchControls {
     if (this.enabled === on) return;
     this.enabled = on;
     this.g.input.touch = on;
+    this.g.hud.touch = on;
+    this.g.wheelTouch = on;
     document.body.classList.toggle('touchmode', on);
     this.g.hud.keyLabels = on ? this.labels : null;
     if (!on) {
@@ -216,7 +382,11 @@ export class TouchControls {
     if (this.visible === v) return;
     this.visible = v;
     this.root.style.display = v ? 'block' : 'none';
-    if (!v) this.pad.releaseAll();
+    if (!v) {
+      this.pad.releaseAll();
+      this.wheel.clear();
+      this.sheetFingers.clear();
+    }
   }
 
   private buzz(pattern: number | number[]): void {
@@ -270,11 +440,21 @@ export class TouchControls {
     } catch {
       /* already captured */
     }
+    const onButton = !!this.buttonAt(e.clientX, e.clientY);
+    // the open route panel is under this layer too: a finger on it scrolls it or calls the route it taps. Not in the
+    // air or loading a jump: then the whole right half is HIT, panel or not
+    const air = this.g.me.state === 'air' || this.g.me.state === 'load';
+    if (!onButton && !air && this.sheetFingers.down(e.pointerId, e.clientX, e.clientY)) return;
+    // the open play wheel is under this layer: a finger on it points at a play, not the camera (a button over it stays a button)
+    if (!onButton && this.wheel.down(e.pointerId, e.clientX, e.clientY)) return;
     this.pad.begin(e.pointerId, e.clientX, e.clientY, performance.now());
+    if (this.pad.pointers.get(e.pointerId)?.button === 'play') this.wheel.holdPlay(e.pointerId, e.clientX, e.clientY);
   }
 
   private onMove(e: PointerEvent): void {
     if (!this.enabled) return;
+    if (this.sheetFingers.move(e.pointerId, e.clientX, e.clientY)) return;
+    if (this.wheel.move(e.pointerId, e.clientX, e.clientY)) return;
     // coalesced events keep a fast thumb drag smooth
     const evs: PointerEvent[] = e.getCoalescedEvents?.() ?? [];
     if (evs.length) for (const c of evs) this.pad.move(e.pointerId, c.clientX, c.clientY);
@@ -283,7 +463,23 @@ export class TouchControls {
 
   private onUp(e: PointerEvent): void {
     if (!this.enabled) return;
-    this.pad.end(e.pointerId);
+    if (this.sheetFingers.has(e.pointerId)) {
+      // a tap on a route: its number, through Input like the route chips
+      const r = this.sheetFingers.up(e.pointerId, e.clientX, e.clientY, e.type === 'pointercancel');
+      if (r >= 0) {
+        this.g.input.down(`Digit${r + 1}`);
+        this.g.input.up(`Digit${r + 1}`);
+      }
+      return;
+    }
+    const onWheel = this.wheel.has(e.pointerId);
+    // let go on a play: its number, through Input like every control (a cancelled touch calls nothing)
+    const i = this.wheel.up(e.pointerId, e.clientX, e.clientY, e.type === 'pointercancel');
+    if (i >= 0) {
+      this.g.input.down(`Digit${i + 1}`);
+      this.g.input.up(`Digit${i + 1}`);
+    }
+    if (!onWheel) this.pad.end(e.pointerId);
   }
 
   private hitTap(node: HTMLElement, e: PointerEvent): boolean {
@@ -346,6 +542,18 @@ export class TouchControls {
     const replay = g.replayAvailable() && !g.fx.replaying;
     const rd = replay ? '' : 'none';
     if (this.replayBtn.style.display !== rd) this.replayBtn.style.display = rd;
+    // Mini Rally: no rep to reset (the pause menu restarts it)
+    const resetD = g.modeId === 'rally' ? 'none' : '';
+    if (this.resetBtn.style.display !== resetD) this.resetBtn.style.display = resetD;
+    const score = g.hud.scoreShort;
+    if (this.scoreEl.dataset.score !== score) {
+      this.scoreEl.dataset.score = score;
+      // Mini Rally's serve marker (●, on the serving side of the score) is a gold dot
+      this.scoreEl.innerHTML = esc(score).replace('●', '<i class="t-serve" aria-label="serving"></i>');
+    }
+    // the buttons stay where they are; your job sizes them (styles.css). The Setter Drill is a setter's, whatever position you picked
+    const pos = g.modeId === 'setter' ? 'S' : g.position;
+    if (this.root.dataset.pos !== pos) this.root.dataset.pos = pos;
     // drill context: set calls / feed types / toss
     // (the setter's chips follow who they can pick: the front row's dump comes and goes with ROW)
     const picks = g.tutorial.active ? null : (g.mode?.setterPicks?.() ?? null);
@@ -353,6 +561,41 @@ export class TouchControls {
     if (key !== this.chipsFor) {
       this.chipsFor = key;
       this.buildChips(picks);
+    }
+    this.drawCalls();
+  }
+
+  /** each call chip says what it runs (tap the running one again: their next set), the one running underlined */
+  private drawCalls(): void {
+    if (!this.callChips.length) return;
+    const view = this.g.hud.callView;
+    const routes = this.callChips[0].route !== undefined ? this.g.routeView() : null;
+    for (const c of this.callChips) {
+      let html = c.e.dataset.label ?? '';
+      let on = false;
+      let off = false;
+      // each call in its hitter's colour, as on the call cards (a hitter's routes: their position's)
+      let color = '';
+      if (c.pick) {
+        const it = view?.items.find((i) => i.id === c.pick);
+        if (it) {
+          html = `${esc(it.who.toUpperCase())}${it.call ? ` <em>${esc(it.call)}</em>` : ''}`;
+          on = it.lit;
+          off = it.off;
+          color = it.color;
+        }
+      } else if (c.route !== undefined && routes) {
+        html = `<em class="solo">${esc(html)}</em>`;
+        on = routes.on === c.route;
+        color = callCss(routes.position);
+      }
+      if (html !== c.html) {
+        c.html = html;
+        c.e.innerHTML = html;
+      }
+      if (c.e.style.getPropertyValue('--c') !== color) c.e.style.setProperty('--c', color);
+      c.e.classList.toggle('on', on);
+      c.e.classList.toggle('off', off);
     }
   }
 
@@ -374,10 +617,13 @@ export class TouchControls {
     for (const id of ['feed', 'auto', 'vsblock', 'play', 'row', 'help', 'd1', 'd2', 'd3', 'd4', 'd5'] as PadButton[])
       this.buttons.delete(id);
     this.chips.innerHTML = '';
+    this.callChips = [];
     const chip = (id: PadButton, label: string) => {
       const e = el('div', 't-tap t-chip', this.chips, label);
       e.dataset.btn = id;
+      e.dataset.label = label;
       this.buttons.set(id, e);
+      return e;
     };
     const toss = this.buttons.get('toss')!;
     toss.style.display = g.modeId === 'free' || g.modeId === 'serve' ? '' : 'none';
@@ -386,9 +632,8 @@ export class TouchControls {
     // tutorial reps: no set-call chips and no block toggle (one Outside story, block off)
     const setter = picks !== null;
     if (setter) {
-      el('span', 't-chip-l', this.chips, 'SET TO');
-      // a chip per hitter you can set now (Digit1 outside ... Digit5 the dump)
-      for (const k of picks) chip(`d${SET_PICKS.indexOf(k) + 1}` as PadButton, k);
+      // a chip per hitter you can set now (Digit1 outside ... Digit5 the dump), with the call they run
+      for (const k of picks) this.callChips.push({ e: chip(`d${SET_PICKS.indexOf(k) + 1}` as PadButton, k), pick: k, html: '' });
       if (g.modeId === 'setter' || g.position === 'S') chip('play', 'PLAY');
       if (g.modeId === 'setter') chip('row', 'ROW');
       // Mini Rally: you can't get to the second ball, a team-mate takes it
@@ -397,8 +642,7 @@ export class TouchControls {
     // your route as a hitter: a chip per route, by its call (1-5); ROUTES opens the route panel
     const calls = !setter && !g.tutorial.active && (g.modeId === 'spike' || g.modeId === 'rally') && SET_PLAYS[g.position];
     if (calls) {
-      el('span', 't-chip-l', this.chips, 'ROUTE');
-      calls.forEach((p, i) => chip(`d${i + 1}` as PadButton, p.short.toUpperCase()));
+      calls.forEach((p, i) => this.callChips.push({ e: chip(`d${i + 1}` as PadButton, p.short.toUpperCase()), route: i, html: '' }));
       chip('play', 'ROUTES');
     }
     this.labels = setter ? SETTER_KEY_LABELS : calls ? HITTER_KEY_LABELS : TOUCH_KEY_LABELS;

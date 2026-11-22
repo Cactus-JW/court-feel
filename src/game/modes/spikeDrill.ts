@@ -306,6 +306,7 @@ export class SpikeDrill extends Mode {
             ? `Approach: Shift + W · plant: Space · hold LMB, release to hit${routes}`
             : 'Approach: Shift + W · plant: Space · hold LMB to wind up, release to hit',
         3.6,
+        true,
       );
     }
   }

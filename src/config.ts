@@ -939,6 +939,12 @@ export const ASSIST = {
 
 export const CAMERA = {
   fov: 72,
+  /**
+   * The field of view with the touch controls on (a phone held sideways, about 2.16 : 1). At 72°
+   * the wide screen shows about 115° across, far more than a monitor; 62° shows about 105°, what
+   * 72° shows on a 16:9 monitor. Its own setting, so old saves (72° for everyone) don't carry over.
+   */
+  touchFov: 62,
   fovApproachBoost: 6,
   near: 0.04,
   /** FP clips anything closer than this (your own shoulder beside the eye) */
@@ -1581,6 +1587,13 @@ export const FX = {
    * is capped at `reach` px so a small move back changes the pick.
    */
   playWheel: { size: 384, hole: 184, dead: 24, reach: 80 },
+  /**
+   * How long (real s) a grade stays up: `perfect` and `other` after most touches. After your own
+   * pass or dig (serve receive, defence) it is `pass`, and so is the Receive Drill's pass banner:
+   * the play goes on at once and the setter's touch comes about a second later, and the grade sat
+   * over it. The player who reported it (2026-11-22) said it "gets in the way of the play".
+   */
+  grade: { perfect: 1.6, other: 1.2, pass: 0.6 },
   /**
    * Where to stand for the set in first person (`src/ui/setRadar.ts`): a dial `size` px across,
    * `below` px under the crosshair, showing the floor `range` m around your feet.
@@ -2616,6 +2629,8 @@ export type Hand = 'right' | 'left';
 export interface Settings {
   sensitivity: number;
   fov: number;
+  /** the field of view while the touch controls are on (a phone) */
+  touchFov: number;
   invertY: boolean;
   womenNet: boolean;
   /** spike slow-mo: time slows as the ball reaches you in the air (never in a jump set) */
@@ -2651,8 +2666,11 @@ export interface Settings {
   shake: number;
   volume: number;
   firstPerson: boolean;
-  /** the key hint line at the bottom of the screen */
-  showHints: boolean;
+  /**
+   * the key hint line at the bottom of the screen. Off by default (2026-11-22: the screen is for
+   * the court). Saved before then as `showHints`, which was on for everyone: that is not carried over.
+   */
+  keyHints: boolean;
   /** touch controls: auto (on touch screens), always on, or off */
   touchControls: 'auto' | 'on' | 'off';
   /** touch aim sensitivity multiplier */
@@ -2670,6 +2688,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1.0,
   fov: CAMERA.fov,
+  touchFov: CAMERA.touchFov,
   invertY: false,
   womenNet: false,
   slowmoAssist: false,
@@ -2689,7 +2708,7 @@ export const DEFAULT_SETTINGS: Settings = {
   shake: 1.0,
   volume: AUDIO.master,
   firstPerson: false,
-  showHints: true,
+  keyHints: false,
   touchControls: 'auto',
   touchSensitivity: 1.0,
   bodies: {},
@@ -2709,6 +2728,7 @@ export const SETTING_RANGES: Record<NumericSettingKey, { min: number; max: numbe
   sensitivity: { min: 0.2, max: 3, step: 0.05 },
   touchSensitivity: { min: 0.3, max: 3, step: 0.05 },
   fov: { min: 55, max: 100, step: 1 },
+  touchFov: { min: 50, max: 100, step: 1 },
   aimAssist: { min: 0, max: 1, step: 0.05 },
   setAimAssist: { min: 0, max: 1, step: 0.05 },
   shake: { min: 0, max: 1.5, step: 0.05 },

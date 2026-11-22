@@ -1241,7 +1241,7 @@ export class Menu {
         'Auto turns them on for touch screens.',
       ),
       this.sliderRow('Touch aim sensitivity', 'touchSensitivity', two),
-      sw('Key hints', 'showHints', 'The line at the bottom of the screen: what to press now.'),
+      sw('Key hints', 'keyHints', 'The line at the bottom of the screen: what to press now.'),
     ]);
     group('camera', 'Camera', [
       seg(
@@ -1249,7 +1249,7 @@ export class Menu {
         ['Third person', 'First person'],
         () => (s.firstPerson ? 1 : 0),
         (i) => (s.firstPerson = i === 1),
-        'V switches while you play.',
+        'V switches while you play (on a phone: View in the pause menu).',
       ),
       seg(
         'Graphics',
@@ -1258,7 +1258,8 @@ export class Menu {
         (i) => (s.graphics = GRAPHICS_SETTINGS[i]),
         'Higher is sharper, lower runs smoother. Auto starts at High, goes sharper between rallies while your device keeps up, and draws less when it cannot.',
       ),
-      this.sliderRow('Field of view', 'fov', (v) => `${v.toFixed(0)}°`),
+      this.sliderRow('Field of view', 'fov', (v) => `${v.toFixed(0)}°`, 'only-kb'),
+      this.sliderRow('Field of view', 'touchFov', (v) => `${v.toFixed(0)}°`, 'only-tc'),
       this.sliderRow('Camera shake', 'shake', percent),
       sw('Perfect-spike replays', 'replays'),
     ]);

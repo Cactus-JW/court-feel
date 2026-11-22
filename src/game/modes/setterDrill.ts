@@ -118,7 +118,7 @@ export class SetterDrill extends Mode {
     this.calls.canHold = (k) => holdForHigh(this.hitters, k);
     g.hud.setTitle('Setter Drill');
     this.updateScore();
-    g.hud.message('RMB as the ball reaches your hands, release in the green · 1-4 pick a hitter', 3.2);
+    g.hud.message('RMB as the ball reaches your hands, release in the green · 1-4 pick a hitter', 3.2, true);
     this.toPhase('intro');
   }
 

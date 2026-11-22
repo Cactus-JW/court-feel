@@ -278,10 +278,18 @@ describe('the replay hint', () => {
   });
 });
 
+describe('the camera hint on touch', () => {
+  it('is left out: a phone has no camera button (it is View in the pause menu)', () => {
+    const hint = '<kbd>RMB</kbd> hands up · <kbd>V</kbd> camera · <kbd>N</kbd> reset';
+    expect(translateKeyMarkup(hint, TOUCH_KEY_LABELS)).toBe('<kbd>BLOCK</kbd> hands up · <kbd>RESET</kbd> reset');
+    expect(translateKeyMarkup('<kbd>E</kbd> pass · <kbd>V</kbd> camera', TOUCH_KEY_LABELS)).toBe('<kbd>PASS</kbd> pass');
+  });
+});
+
 describe("the setter's hints on touch", () => {
-  it('name the SET TO chips, not number keys that have no button', () => {
+  it('name the hitter chips, not number keys that have no button', () => {
     const hint = '<kbd>1</kbd>-<kbd>4</kbd> who · again: high · <kbd>5</kbd> dump';
-    expect(translateKeyMarkup(hint, SETTER_KEY_LABELS)).toBe('<kbd>SET TO</kbd> who · again: high · <kbd>DUMP</kbd>');
+    expect(translateKeyMarkup(hint, SETTER_KEY_LABELS)).toBe('<kbd>OH–PIPE</kbd> who · again: high · <kbd>DUMP</kbd>');
     // the libero backing up sets a pin
     expect(translateKeyMarkup('<kbd>1</kbd> OH <kbd>3</kbd> OPP', SETTER_KEY_LABELS)).toBe('<kbd>OH</kbd> <kbd>OPP</kbd>');
   });
