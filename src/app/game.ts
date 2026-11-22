@@ -146,6 +146,16 @@ export class Game implements AiHost {
   get wheelOpen(): boolean {
     return this.wheel.open;
   }
+
+  /** a finger on the open play wheel (or holding PLAY) is at (x, y): the wheel points at the play under it (-1: none) */
+  pointWheel(x: number, y: number): number {
+    return this.wheel.open ? this.wheel.pointAt(x, y) : -1;
+  }
+
+  /** is (x, y) on the open play wheel? */
+  wheelAt(x: number, y: number): boolean {
+    return this.wheel.contains(x, y);
+  }
   private setSpot!: SetSpot;
   private spotP = { x: 0, y: 0, z: 0 };
   /** seconds the play holds still after a clean hit: the effects ask for it, the pace spends it */

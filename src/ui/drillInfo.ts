@@ -291,8 +291,8 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'In a drill',
       rows: [
         { k: 'ROUTE', a: 'Top left: call your route; ROUTES shows them (Spike Drill, Mini Rally; hitters)' },
-        { k: 'SET TO', a: 'Top left: tap a hitter when you set, again for their next set; gold = on (Setter Drill, Mini Rally)' },
-        { k: 'PLAY', a: 'Top left: the play wheel when you set, then tap a play (Setter Drill, Mini Rally)' },
+        { k: 'SET TO', a: 'Top left: tap a hitter when you set, again for their next set; underlined = on (Setter Drill, Mini Rally)' },
+        { k: 'PLAY', a: 'Top left: hold, slide onto a play and let go; or tap, then a play (Setter Drill, Mini Rally)' },
         { k: 'ROW  DUMP', a: 'Top left: front row, and your dump there (Setter Drill)' },
         { k: 'HELP', a: "Top left: you can't get to the second ball (Mini Rally)" },
         { k: 'SERVE', a: 'Top left: standing float, jump float, jump serve (Serve Drill)' },

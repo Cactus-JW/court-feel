@@ -12,6 +12,7 @@ import type { Effects } from '../fx/effects';
 import type { Hud } from './hud';
 import { SET_PLAYS } from '../game/plays';
 import { SET_PICKS, type SetPick } from '../game/setterCalls';
+import { callCss } from '../game/callRuns';
 import type { RouteView } from '../game/routes';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, html = ''): HTMLElementTagNameMap[K] {
@@ -106,6 +107,10 @@ export interface TouchHost {
   replayAvailable(): boolean;
   /** your routes as a hitter (null: you are not calling your own route) */
   routeView(): RouteView | null;
+  /** a finger holding PLAY, or on the open play wheel, is at (x, y): the wheel points at the play under it (-1: none) */
+  pointWheel(x: number, y: number): number;
+  /** is (x, y) on the open play wheel? */
+  wheelAt(x: number, y: number): boolean;
 }
 
 /** a chip in the top bar that is a call: a hitter you can set (with their call), or one of your routes */
@@ -147,6 +152,8 @@ export class TouchControls {
   private replayBtn: HTMLElement;
   private lastCharge = -1;
   private visible = false;
+  /** fingers that came down on the open play wheel: they point at a play, and letting go calls it */
+  private wheelTouch = new Set<number>();
 
   constructor(
     parent: HTMLElement,
@@ -238,7 +245,10 @@ export class TouchControls {
     if (this.visible === v) return;
     this.visible = v;
     this.root.style.display = v ? 'block' : 'none';
-    if (!v) this.pad.releaseAll();
+    if (!v) {
+      this.pad.releaseAll();
+      this.wheelTouch.clear();
+    }
   }
 
   private buzz(pattern: number | number[]): void {
@@ -292,19 +302,40 @@ export class TouchControls {
     } catch {
       /* already captured */
     }
+    // the open play wheel is under this layer: a finger on it points at a play, not the camera
+    if (this.g.wheelAt(e.clientX, e.clientY)) {
+      this.wheelTouch.add(e.pointerId);
+      this.g.pointWheel(e.clientX, e.clientY);
+      return;
+    }
     this.pad.begin(e.pointerId, e.clientX, e.clientY, performance.now());
   }
 
   private onMove(e: PointerEvent): void {
     if (!this.enabled) return;
+    if (this.wheelTouch.has(e.pointerId)) {
+      this.g.pointWheel(e.clientX, e.clientY);
+      return;
+    }
     // coalesced events keep a fast thumb drag smooth
     const evs: PointerEvent[] = e.getCoalescedEvents?.() ?? [];
     if (evs.length) for (const c of evs) this.pad.move(e.pointerId, c.clientX, c.clientY);
     else this.pad.move(e.pointerId, e.clientX, e.clientY);
+    // PLAY held: slide onto a play, and letting go (C released) calls it
+    if (this.pad.pointers.get(e.pointerId)?.button === 'play') this.g.pointWheel(e.clientX, e.clientY);
   }
 
   private onUp(e: PointerEvent): void {
     if (!this.enabled) return;
+    if (this.wheelTouch.delete(e.pointerId)) {
+      // let go on a play: its number, through Input like every control (a cancelled touch calls nothing)
+      const i = e.type === 'pointerup' ? this.g.pointWheel(e.clientX, e.clientY) : -1;
+      if (i >= 0) {
+        this.g.input.down(`Digit${i + 1}`);
+        this.g.input.up(`Digit${i + 1}`);
+      }
+      return;
+    }
     this.pad.end(e.pointerId);
   }
 
@@ -395,18 +426,26 @@ export class TouchControls {
       let html = c.e.dataset.label ?? '';
       let on = false;
       let off = false;
+      // each call in its hitter's colour, as on the call cards (a hitter's routes: their position's)
+      let color = '';
       if (c.pick) {
         const it = view?.items.find((i) => i.id === c.pick);
         if (it) {
           html = `${esc(it.who.toUpperCase())}${it.call ? ` <em>${esc(it.call)}</em>` : ''}`;
           on = it.lit;
           off = it.off;
+          color = it.color;
         }
-      } else if (c.route !== undefined) on = routes?.on === c.route;
+      } else if (c.route !== undefined && routes) {
+        html = `<em class="solo">${esc(html)}</em>`;
+        on = routes.on === c.route;
+        color = callCss(routes.position);
+      }
       if (html !== c.html) {
         c.html = html;
         c.e.innerHTML = html;
       }
+      if (c.e.style.getPropertyValue('--c') !== color) c.e.style.setProperty('--c', color);
       c.e.classList.toggle('on', on);
       c.e.classList.toggle('off', off);
     }

@@ -17,7 +17,8 @@ export function wheelSlice(x: number, y: number, n: number, dead: number): numbe
 /**
  * The play wheel: the setter's combinations (COMBOS, or your own play where you saved one: the
  * start screen's Plays), called before the pass like a hand signal behind the back. Hold C and move the mouse towards a play, let go to call it (or press its
- * number; on touch, tap PLAY and then the play). The centre shows what the play is: every
+ * number; on touch, hold PLAY, slide onto a play and let go, or tap PLAY, then touch a play and
+ * let go: the touch controls hand a finger on the open wheel to `pointAt`). The centre shows what the play is: every
  * hitter's run on a little court, and their calls. It only sets the calls: who gets the ball is
  * still yours to choose at the touch.
  */
@@ -148,6 +149,37 @@ export class PlayWheel {
     this.draw();
   }
 
+  /**
+   * A finger at (x, y) on the screen (touch, PLAY held): the pull points at the slice under it, so
+   * letting go of PLAY calls that play. In the centre: no pull (letting go calls nothing).
+   */
+  pointAt(x: number, y: number): number {
+    const v = this.local(x, y);
+    if (!v) return -1;
+    const W = FX.playWheel;
+    const l = Math.hypot(v.x, v.y);
+    const f = l < W.hole / 2 ? 0 : W.reach / l;
+    this.x = v.x * f;
+    this.y = v.y * f;
+    this.sel = wheelSlice(this.x, this.y, COMBOS.length, W.dead);
+    this.draw();
+    return this.sel;
+  }
+
+  /** is the screen point (x, y) on the open wheel (inside its outer edge)? */
+  contains(x: number, y: number): boolean {
+    const v = this.open ? this.local(x, y) : null;
+    return !!v && Math.hypot(v.x, v.y) <= FX.playWheel.size / 2;
+  }
+
+  /** a screen point in the wheel's own px from its centre (it is drawn smaller while the ball is in play) */
+  private local(x: number, y: number): { x: number; y: number } | null {
+    const r = this.el.getBoundingClientRect();
+    if (!r.width) return null;
+    const k = FX.playWheel.size / r.width;
+    return { x: (x - (r.left + r.width / 2)) * k, y: (y - (r.top + r.height / 2)) * k };
+  }
+
   private draw(): void {
     const show = this.sel >= 0 ? this.sel : this.on;
     if (show === this.shown) return;
@@ -155,7 +187,12 @@ export class PlayWheel {
     this.slices.forEach((p, i) => p.setAttribute('class', `pw-slice${i === this.sel ? ' sel' : i === this.on ? ' on' : ''}`));
     const combo = show >= 0 ? this.plays[show] : null;
     this.name.textContent = combo ? combo.name : 'Call a play';
-    this.idea.textContent = combo ? combo.idea : 'Move towards a play, or press its number';
+    const touch = document.body.classList.contains('touchmode');
+    this.idea.textContent = combo
+      ? combo.idea
+      : touch
+        ? 'Slide onto a play and let go, or tap it'
+        : 'Move towards a play, or press its number';
     this.court.innerHTML = combo ? PlayWheel.runs(combo) : '';
   }
 }
