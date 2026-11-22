@@ -76,6 +76,15 @@ describe('stored settings are validated', () => {
     expect(sanitizeSettings({ keyHints: true }).keyHints).toBe(true);
   });
 
+  it('a phone sees about as wide as a monitor: its own field of view, 62°, whatever an old save had', () => {
+    // horizontal view (degrees) from a vertical field of view and the screen's aspect
+    const across = (fov: number, aspect: number) => (2 * Math.atan(Math.tan(((fov / 2) * Math.PI) / 180) * aspect) * 180) / Math.PI;
+    expect(DEFAULT_SETTINGS.touchFov).toBe(62);
+    expect(Math.abs(across(DEFAULT_SETTINGS.touchFov, 844 / 390) - across(DEFAULT_SETTINGS.fov, 16 / 9))).toBeLessThan(2);
+    // saved before phones had their own: the computer's 72° stays the computer's
+    expect(sanitizeSettings({ fov: 72 }).touchFov).toBe(62);
+  });
+
   it('survives garbage: null, arrays, primitives', () => {
     for (const raw of [null, undefined, 42, 'x', [1, 2]]) expect(sanitizeSettings(raw)).toEqual(DEFAULT_SETTINGS);
   });

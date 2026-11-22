@@ -939,6 +939,12 @@ export const ASSIST = {
 
 export const CAMERA = {
   fov: 72,
+  /**
+   * The field of view with the touch controls on (a phone held sideways, about 2.16 : 1). At 72°
+   * the wide screen shows about 115° across, far more than a monitor; 62° shows about 105°, what
+   * 72° shows on a 16:9 monitor. Its own setting, so old saves (72° for everyone) don't carry over.
+   */
+  touchFov: 62,
   fovApproachBoost: 6,
   near: 0.04,
   /** FP clips anything closer than this (your own shoulder beside the eye) */
@@ -2534,6 +2540,8 @@ export type Hand = 'right' | 'left';
 export interface Settings {
   sensitivity: number;
   fov: number;
+  /** the field of view while the touch controls are on (a phone) */
+  touchFov: number;
   invertY: boolean;
   womenNet: boolean;
   /** spike slow-mo: time slows as the ball reaches you in the air (never in a jump set) */
@@ -2589,6 +2597,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1.0,
   fov: CAMERA.fov,
+  touchFov: CAMERA.touchFov,
   invertY: false,
   womenNet: false,
   slowmoAssist: false,
@@ -2627,6 +2636,7 @@ export const SETTING_RANGES: Record<NumericSettingKey, { min: number; max: numbe
   sensitivity: { min: 0.2, max: 3, step: 0.05 },
   touchSensitivity: { min: 0.3, max: 3, step: 0.05 },
   fov: { min: 55, max: 100, step: 1 },
+  touchFov: { min: 50, max: 100, step: 1 },
   aimAssist: { min: 0, max: 1, step: 0.05 },
   setAimAssist: { min: 0, max: 1, step: 0.05 },
   shake: { min: 0, max: 1.5, step: 0.05 },

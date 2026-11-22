@@ -604,7 +604,6 @@ export class Game implements AiHost {
   // ------------------------------------------------------------ settings
   applySettings(): void {
     const s = this.settings;
-    this.rig.baseFov = s.fov;
     this.rig.shakeScale = s.shake;
     if (s.venue !== this.venueSetting) {
       this.venueSetting = s.venue;
@@ -1148,6 +1147,8 @@ export class Game implements AiHost {
     f.height = me.height;
     f.side = me.side;
     this.rig.frozen = this.hitStop > 0;
+    // a phone has its own field of view (the touch controls can come on mid-game, at the first touch)
+    this.rig.baseFov = this.input.touch ? this.settings.touchFov : this.settings.fov;
     this.rig.update(realDt, this.inMenu ? null : f);
     const cues = this.settings.setRing && this.ball.active && this.ball.visible && !this.inMenu;
     this.setRing.update(this.setPrev, this.ball.rpos, tr, this.rig.camera, cues);

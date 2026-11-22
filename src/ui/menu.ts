@@ -1230,9 +1230,10 @@ export class Menu {
         ['Third person', 'First person'],
         () => (s.firstPerson ? 1 : 0),
         (i) => (s.firstPerson = i === 1),
-        'V switches while you play.',
+        'V switches while you play (on a phone: View in the pause menu).',
       ),
-      this.sliderRow('Field of view', 'fov', (v) => `${v.toFixed(0)}°`),
+      this.sliderRow('Field of view', 'fov', (v) => `${v.toFixed(0)}°`, 'only-kb'),
+      this.sliderRow('Field of view', 'touchFov', (v) => `${v.toFixed(0)}°`, 'only-tc'),
       this.sliderRow('Camera shake', 'shake', percent),
       sw('Perfect-spike replays', 'replays'),
     ]);
