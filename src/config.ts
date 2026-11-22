@@ -1049,8 +1049,6 @@ export const BALL_LOOK = {
 export const ARENA = {
   /** the floor mirrors the players, the net and the boards */
   reflection: {
-    /** size of the mirror image relative to the view */
-    scale: 0.5,
     /** how bright the mirror image is at a grazing angle, and the fraction of that seen straight down */
     strength: 0.8,
     facing: 0.09,
@@ -1716,25 +1714,85 @@ export const AUDIO = {
  */
 export const PLAYBOOK = { minGap: 0.6, nameMax: 16, hutTop: 1.4 } as const;
 
+/** the graphics levels, cheapest first (Settings, Camera, Graphics) */
+export const GRAPHICS_LEVEL_IDS = ['veryLow', 'low', 'medium', 'high', 'veryHigh'] as const;
+export type GraphicsLevel = (typeof GRAPHICS_LEVEL_IDS)[number];
+/** the Graphics setting: a level of its own, or auto (the quality governor picks one) */
+export type GraphicsSetting = 'auto' | GraphicsLevel;
+export const GRAPHICS_SETTINGS: readonly GraphicsSetting[] = ['auto', ...GRAPHICS_LEVEL_IDS];
+
+/** what one graphics level draws */
+export interface QualityLevel {
+  label: string;
+  /** the most screen pixels per CSS pixel (never more than the screen has): a phone's screen has 3 */
+  pixelRatio: number;
+  /**
+   * MSAA samples on the HDR picture (0: none). Every level keeps 4: without it the 5 cm court lines
+   * drop out at a distance (at 844x390, Very low to Medium each lost some of the side, attack and
+   * centre lines), and a player has to see the lines. It cost 0.6-1.3 ms a frame on those levels.
+
+   */
+  msaa: number;
+  /** the key light's shadow map (texels a side) */
+  shadowMap: number;
+  /** the floor mirror's image, as a share of the picture's size (0: no floor mirror) */
+  mirror: number;
+}
+
 /**
- * The quality governor (src/app/quality.ts): the picture gets cheaper when the machine cannot keep
- * up, so the play never slows. Level 0 is full (MSAA, pixel ratio up to 1.5), 1 has no MSAA and a
- * pixel ratio of 1, `lowest` draws at 0.8x with smaller shadows and no floor mirror. Tuned on a
- * laptop with integrated graphics.
+ * Graphics. Each level is a row; the Graphics setting picks one, or Auto lets the quality governor
+ * (src/app/quality.ts) pick: the picture gets cheaper when the machine cannot keep up, so the play
+ * never slows, and richer again after a long run of fast frames. None of it touches the play.
+ *
+ * The governor averages frames over `window` s. Under `slowFps` for `slowWindows` windows in a row
+ * steps down a level; at `fastFps` or more for `upWindows` windows (40 s) steps up. A step up that
+ * is slow again within `upFail` windows doubles the wait before the next try (up to `upMaxWindows`),
+ * so a frame rate on the edge between two levels does not flicker between them. A step down that
+ * gains under `minGain` of the frame rate did not help (the screen is capped, say a phone's low power
+ * mode at 30 fps, or the processor is the limit): the picture goes back up, and that frame rate is the
+ * cap; only `capBand` under it is slow, and `capBand` over it clears it. Auto starts at `autoTop`
+ * on every device (a phone too: it is the level phones had before there was a setting) and never
+ * climbs past it: Very high draws a phone's own pixels, about 2.5 times High's work, and a climb
+ * that turns out slow would cost seconds of slow frames in the middle of a rally, so it is the
+ * player's pick only. No step for `startCooldown` s after the game starts (loading costs frames),
+ * nor `changeCooldown` s after a change (the change itself costs frames). Tuned on a laptop with
+ * integrated graphics.
  */
-export const QUALITY = {
-  lowest: 2,
-  /** frames are averaged over this long (s) */
+export const QUALITY: {
+  levels: Record<GraphicsLevel, QualityLevel>;
+  autoTop: GraphicsLevel;
+  window: number;
+  slowFps: number;
+  slowWindows: number;
+  fastFps: number;
+  upWindows: number;
+  upMaxWindows: number;
+  upFail: number;
+  minGain: number;
+  capBand: number;
+  startCooldown: number;
+  changeCooldown: number;
+} = {
+  levels: {
+    veryLow: { label: 'Very low', pixelRatio: 0.6, msaa: 4, shadowMap: 512, mirror: 0 },
+    low: { label: 'Low', pixelRatio: 0.8, msaa: 4, shadowMap: 1024, mirror: 0 },
+    medium: { label: 'Medium', pixelRatio: 1, msaa: 4, shadowMap: 2048, mirror: 0.35 },
+    high: { label: 'High', pixelRatio: 1.5, msaa: 4, shadowMap: 2048, mirror: 0.5 },
+    veryHigh: { label: 'Very high', pixelRatio: 3, msaa: 4, shadowMap: 4096, mirror: 0.5 },
+  },
+  autoTop: 'high',
   window: 2,
-  /** a window averaging below this many frames a second is slow */
   slowFps: 50,
-  /** this many slow windows in a row step the quality down one level */
   slowWindows: 2,
-  /** no step for this long after the game starts (s): loading costs frames */
+  fastFps: 57,
+  upWindows: 20,
+  upMaxWindows: 160,
+  upFail: 5,
+  minGain: 0.1,
+  capBand: 0.15,
   startCooldown: 3,
-  /** nor for this long after a change (s): the change itself costs frames */
   changeCooldown: 4,
-} as const;
+};
 
 export const AI = {
   reactionTime: 0.18,
@@ -2581,6 +2639,8 @@ export interface Settings {
   venue: VenueId;
   /** your hitting hand, one for every position (the AI stays right-handed); timing, power and reach are the same for both */
   hand: Hand;
+  /** how rich the picture is (QUALITY.levels), or auto: the game picks by the frame rate */
+  graphics: GraphicsSetting;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -2611,6 +2671,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bodies: {},
   venue: 'hall',
   hand: 'right',
+  graphics: 'auto',
 };
 
 export type NumericSettingKey = { [K in keyof Settings]: Settings[K] extends number ? K : never }[keyof Settings];

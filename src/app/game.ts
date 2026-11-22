@@ -3,11 +3,15 @@ import {
   CAMERA,
   CHARACTER,
   COURT,
+  GRAPHICS_LEVEL_IDS,
   PLAYER,
+  QUALITY,
   SERVE,
   SIM,
   TIMING,
   TUTORIAL,
+  type GraphicsLevel,
+  type GraphicsSetting,
   type PositionId,
   type ServeKind,
   type Settings,
@@ -229,7 +233,6 @@ export class Game implements AiHost {
     this.venueSetting = settings.venue;
     setVenue(venueOverride ?? settings.venue);
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.shadowMap.enabled = true;
     // three r187 removed PCFSoftShadowMap: the soft edge comes from the key light's shadow radius
@@ -249,6 +252,7 @@ export class Game implements AiHost {
     this.post = new Post(this.renderer, this.scene, this.rig.camera);
     this.applyVenue();
     this.post.preRender = () => this.arena.reflection.render(this.rig.camera);
+    this.setGraphics(settings.graphics);
     // the net's top shakes when the ball hits it
     this.events.on('ballEvent', (e) => this.arena.ballHit(e));
     this.input = new Input(this.renderer.domElement);
@@ -573,7 +577,7 @@ export class Game implements AiHost {
     this.applyVenueToBallAndSound();
     this.ball.version++;
     // the mirror's size and the quality level's choices belong to the arena that was thrown away
-    this.setQuality(this.quality);
+    this.applyQuality();
   }
 
   /** the venue the court is standing in */
@@ -610,6 +614,7 @@ export class Game implements AiHost {
     this.rig.blockers = this.arena.cameraBlockers;
     if (!this.inMenu) this.rig.setMode(s.firstPerson ? 'fp' : 'tp');
     this.hud.showHints = s.showHints;
+    this.setGraphics(s.graphics);
     this.fx?.audio.setVolume(s.volume);
     this.applyUserBody();
     this.persist(s);
@@ -731,28 +736,40 @@ export class Game implements AiHost {
     }
   }
 
-  // ------------------------------------------------------------ quality governor
-  /** 0 = full (MSAA, 1.5x DPR cap), 1 = no MSAA + 1x DPR, 2 = 0.8x scale + 1024 shadows + no floor mirror */
-  get quality(): number {
-    return this.governor.level;
+  // ------------------------------------------------------------ graphics (quality governor)
+  /** the graphics level being drawn (QUALITY.levels): the player's, or the governor's pick on Auto */
+  get quality(): GraphicsLevel {
+    return GRAPHICS_LEVEL_IDS[this.governor.level];
   }
   private readonly governor = new QualityGovernor();
+  /** the Graphics setting applied (null before the first) */
+  private graphicsSetting: GraphicsSetting | null = null;
 
   private governQuality(dt: number): void {
     if (this.manual || document.hidden) return;
-    const next = this.governor.frame(dt);
-    if (next !== null) this.setQuality(next);
+    if (this.governor.frame(dt) !== null) this.applyQuality();
   }
 
-  setQuality(q: number): void {
-    this.governor.set(q);
-    const dpr = window.devicePixelRatio || 1;
-    this.post.setSamples(this.quality === 0 ? 4 : 0);
-    this.arena.reflection.setEnabled(this.quality < 2);
-    this.renderer.setPixelRatio(this.quality === 0 ? Math.min(dpr, 1.5) : this.quality === 1 ? Math.min(dpr, 1) : 0.8);
+  /** the player's Graphics setting: a level of its own, or Auto (from QUALITY.autoTop) */
+  private setGraphics(g: GraphicsSetting): void {
+    if (g === this.graphicsSetting) return;
+    const first = this.graphicsSetting === null;
+    this.graphicsSetting = g;
+    if (g !== 'auto') this.governor.fix(GRAPHICS_LEVEL_IDS.indexOf(g));
+    // a fresh governor already starts there, with the longer start-up hold
+    else if (!first) this.governor.start();
+    this.applyQuality();
+  }
+
+  /** draw at the current graphics level */
+  private applyQuality(): void {
+    const q = QUALITY.levels[this.quality];
+    this.post.setSamples(q.msaa);
+    this.arena.reflection.setScale(q.mirror);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     this.post.composer.setPixelRatio(this.renderer.getPixelRatio());
     const sm = this.arena.keyLight.shadow;
-    const size = this.quality === 2 ? 1024 : 2048;
+    const size = q.shadowMap;
     if (sm.mapSize.x !== size) {
       sm.mapSize.set(size, size);
       sm.map?.dispose();
@@ -1276,7 +1293,7 @@ export class Game implements AiHost {
       steps: this.stepsThisFrame,
       lines: [
         `me ${me.role} ${me.state} pos ${me.pos.x.toFixed(2)},${me.pos.y.toFixed(2)},${me.pos.z.toFixed(2)} spd ${me.speed.toFixed(2)} jump ${me.jumpH.toFixed(2)}`,
-        `quality ${this.quality} (${['high', 'medium', 'low'][this.quality]}) · cam ${this.rig.mode} yaw ${this.rig.yaw.toFixed(2)} pitch ${this.rig.pitch.toFixed(2)} timescale ${(this.timeScale * this.slowmo).toFixed(2)}`,
+        `graphics ${QUALITY.levels[this.quality].label}${this.governor.auto ? ` (auto${this.governor.cap ? `, capped ${this.governor.cap.toFixed(0)} fps` : ''})` : ''} x${this.renderer.getPixelRatio().toFixed(2)} · cam ${this.rig.mode} yaw ${this.rig.yaw.toFixed(2)} pitch ${this.rig.pitch.toFixed(2)} timescale ${(this.timeScale * this.slowmo).toFixed(2)}`,
         `draws ${this.renderer.info.render.calls} tris ${this.renderer.info.render.triangles} mem geo ${this.renderer.info.memory.geometries} tex ${this.renderer.info.memory.textures}`,
         this.ballDebug(),
         `action ${me.action ? me.action.kind : '-'} grade ${act?.grade ?? '-'} err ${act ? (act.err * 1000).toFixed(0) : '-'} ms${lp}`,

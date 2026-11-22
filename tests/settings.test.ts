@@ -68,6 +68,12 @@ describe('stored settings are validated', () => {
     expect(sanitizeSettings({})).toEqual(DEFAULT_SETTINGS);
   });
 
+  it('a save from before the Graphics setting gets Auto; a level is kept, anything else is Auto', () => {
+    expect(sanitizeSettings({ fov: 90, volume: 0.3 }).graphics).toBe('auto');
+    expect(sanitizeSettings({ graphics: 'veryHigh' }).graphics).toBe('veryHigh');
+    for (const g of ['ultra', 3, null, 'Auto']) expect(sanitizeSettings({ graphics: g }).graphics).toBe('auto');
+  });
+
   it('survives garbage: null, arrays, primitives', () => {
     for (const raw of [null, undefined, 42, 'x', [1, 2]]) expect(sanitizeSettings(raw)).toEqual(DEFAULT_SETTINGS);
   });
