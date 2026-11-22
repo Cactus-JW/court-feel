@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Grade } from '../game/athlete';
-import { TIMING } from '../config';
+import { FX, TIMING } from '../config';
 import { COLLAR_DEG_PER_S, collarDegrees, collarZone, CUE_NAMES, CUE_ORDER, type Cue, type CueId } from '../game/tutorial';
 import type { CallSheetView } from '../game/callRuns';
 
@@ -66,6 +66,7 @@ export class Hud {
   private sheet: HTMLDivElement;
   private sheetHtml = '';
   private msg: HTMLDivElement;
+  private topCallEl: HTMLDivElement;
   private cross: HTMLDivElement;
   private fadeEl: HTMLDivElement;
   private camTag: HTMLDivElement;
@@ -137,6 +138,7 @@ export class Hud {
     this.hint = el('div', 'hud-hint', this.root);
     this.sheet = el('div', 'call-sheet', this.root);
     this.msg = el('div', 'hud-msg', this.root);
+    this.topCallEl = el('div', 'hud-topcall', this.root);
     this.skipBtn = el('button', 't-tap t-skip-kb', this.root, 'SKIP TUTORIAL');
     this.skipBtn.type = 'button';
     this.skipBtn.addEventListener('pointerdown', (e) => {
@@ -382,6 +384,7 @@ export class Hud {
 
   /** drop a grade / banner left up by the previous drill (tutorial entry, replay) */
   clearFlash(): void {
+    this.topCall(null);
     this.gradeTimer = 0;
     this.bannerTimer = 0;
     this.grade.classList.remove('show');
@@ -391,15 +394,15 @@ export class Hud {
   /** show the grade to one side, off the line a served ball flies down (the Serve Drill) */
   gradeAside = false;
 
-  /** `green`: a perfectly timed set reads GREEN, in green */
-  showGrade(g: Grade, sub: string, green = false): void {
+  /** `green`: a perfectly timed set reads GREEN, in green; `pass`: your pass or dig, whose grade clears sooner (`FX.grade`) */
+  showGrade(g: Grade, sub: string, green = false, pass = false): void {
     this.gradeText.textContent = green ? 'GREEN' : g === 'Miss' ? 'MISS' : g.toUpperCase();
     this.grade.className = 'hud-grade show ' + (green ? 'g-green' : GRADE_CLASS[g]) + (this.gradeAside ? ' aside' : '');
     this.gradeSub.textContent = sub;
     // restart animation
     void this.grade.offsetWidth;
     this.grade.classList.add('pop');
-    this.gradeTimer = g === 'Perfect' ? 1.6 : 1.2;
+    this.gradeTimer = pass ? FX.grade.pass : g === 'Perfect' ? FX.grade.perfect : FX.grade.other;
   }
 
   showBanner(text: string, kind: 'good' | 'bad' | 'neutral' = 'neutral', dur = 1.5): void {
@@ -430,6 +433,12 @@ export class Hud {
     this.msg.textContent = text;
     this.msg.classList.add('show');
     this.msgTimer = dur;
+  }
+
+  /** a call at the very top of the screen, clear of the ball, that stays until `topCall(null)` */
+  topCall(text: string | null): void {
+    if (text) this.topCallEl.textContent = this.keyLabels ? Hud.translateText(text) : text;
+    this.topCallEl.classList.toggle('show', !!text);
   }
 
   setSpeed(kmh: number | null): void {

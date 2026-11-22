@@ -582,8 +582,8 @@ screen show them. Only your player uses them; AI players keep the defaults.
    sideways only: a ball going by overhead is played on the feet or not at all); at any other
    ball a dive backwards is only the end of a chase, turned and running flat out after a ball
    that isn't coming fast, never at a hard ball or a fast deflection off the block, and
-   for a jump serve, read off the toss ("Jump serve · step back"), the three passers
-   start a metre deeper. Nobody dives into the net either, and a pass coming down on
+   for a jump serve, read off the toss ("Jump serve · step back" along the top of the
+   screen, gone once the server leaves the floor), the three passers start a metre deeper. Nobody dives into the net either, and a pass coming down on
    the tape is called out of system. A ball of theirs dropping at the net is still
    theirs while they can play it (a tight pass their setter gets to, a tight set their
    hitter goes up for): nobody leaves the net for it, only a real overpass is yours. A

@@ -45,6 +45,8 @@ export interface DrillHud {
   showBanner(text: string, kind?: 'good' | 'bad' | 'neutral', dur?: number): void;
   /** an `intro` line says what the drill is about: a phone leaves it out (the screen is for the court) */
   message(text: string, dur?: number, intro?: boolean): void;
+  /** a call at the very top of the screen, clear of the ball, until `topCall(null)` (their jump serve, until the server leaves the floor) */
+  topCall(text: string | null): void;
   go(): void;
   call(
     who: string,

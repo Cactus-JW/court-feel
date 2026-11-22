@@ -27,6 +27,7 @@ function silentHud(said: string[]): DrillHud {
     go: say('go'),
     call: say('call'),
     clearCall: () => {},
+    topCall: (text: string | null) => said.push(text ? `topCall ${text}` : 'topCall off'),
   };
 }
 

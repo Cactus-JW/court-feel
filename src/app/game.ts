@@ -534,6 +534,7 @@ export class Game implements AiHost {
     this.mode = mode;
     this.hud.setStreak(0);
     this.hud.setSpeed(null);
+    this.hud.topCall(null);
     mode.setup();
     this.fx.onModeStart();
     this.inMenu = false;
@@ -679,7 +680,7 @@ export class Game implements AiHost {
         let sub =
           ev.grade === 'Miss' || set ? ev.note : `${kmh.toFixed(0)} km/h${pw}${ev.note ? ' · ' + ev.note : ''}${ev.tip ? ' · tip' : ''}`;
         if (this.tutorial.active) sub = this.tutorial.gradeSub(ev.grade, sub);
-        this.hud.showGrade(ev.grade, sub, set && ev.perfect);
+        this.hud.showGrade(ev.grade, sub, set && ev.perfect, ev.kind === 'pass' || ev.kind === 'dig');
       }
       if (ev.speed > 0) this.hud.setSpeed(ev.speed * 3.6);
     }

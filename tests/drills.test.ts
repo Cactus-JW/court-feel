@@ -80,3 +80,31 @@ describe('every drill plays with nobody watching', () => {
     expect(game.outcomes.length).toBeGreaterThan(0);
   });
 });
+
+describe('Mini Rally: their jump serve', () => {
+  // a passer reads a jump serve off the server's toss and steps back. The call says so at the top
+  // of the screen (clear of the toss, which flies up the middle) and is gone by the time the server
+  // leaves the floor: from then on the passer's eyes are on the ball (player report, 2026-11-22)
+  it('the passers hear it on the toss, and the call is gone once the server leaves the floor', () => {
+    const game = headlessGame('rally', 'OH');
+    let up = -1;
+    let down = -1;
+    let struck = -1;
+    for (let f = 0; f < 120 * 60 && struck < 0; f++) {
+      const said = game.said.length;
+      const touched = game.touches.length;
+      game.frame();
+      for (const line of game.said.slice(said)) {
+        if (line === 'topCall Jump serve · step back' && up < 0) up = game.sim.simTime;
+        if (line === 'topCall off' && up >= 0 && down < 0) down = game.sim.simTime;
+      }
+      if (up >= 0 && game.touches.slice(touched).some((t) => /A serve /.test(t))) struck = game.sim.simTime;
+    }
+    expect(up).toBeGreaterThan(0);
+    expect(struck).toBeGreaterThan(up);
+    expect(down).toBeGreaterThan(up);
+    expect(down).toBeLessThan(struck);
+    // the call is never the drill's message line, which sits over the court
+    expect(game.said.some((line) => line.startsWith('message Jump serve'))).toBe(false);
+  });
+});

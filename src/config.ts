@@ -1590,6 +1590,13 @@ export const FX = {
    */
   playWheel: { size: 384, hole: 184, dead: 24, reach: 80 },
   /**
+   * How long (real s) a grade stays up: `perfect` and `other` after most touches. After your own
+   * pass or dig (serve receive, defence) it is `pass`, and so is the Receive Drill's pass banner:
+   * the play goes on at once and the setter's touch comes about a second later, and the grade sat
+   * over it. The player who reported it (2026-11-22) said it "gets in the way of the play".
+   */
+  grade: { perfect: 1.6, other: 1.2, pass: 0.6 },
+  /**
    * Where to stand for the set in first person (`src/ui/setRadar.ts`): a dial `size` px across,
    * `below` px under the crosshair, showing the floor `range` m around your feet.
    */

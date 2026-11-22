@@ -22,7 +22,7 @@
     "src/game/intent.ts": 1,
     "src/game/modes/blockDrill.ts": 26,
     "src/game/modes/freePlay.ts": 39,
-    "src/game/modes/miniRally.ts": 29,
+    "src/game/modes/miniRally.ts": 28,
     "src/game/modes/receiveDrill.ts": 63,
     "src/game/modes/serveDrill.ts": 17,
     "src/game/modes/setterDrill.ts": 33,
