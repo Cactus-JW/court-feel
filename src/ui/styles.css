@@ -765,9 +765,12 @@ body.touchmode .coach-cue { bottom: 44px; font-size: 14px; padding: 8px 14px; }
 .callout-sub { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.9; }
 .callout.pop .callout-bubble { animation: calloutPop 0.38s cubic-bezier(.2,1.6,.35,1); }
 @keyframes calloutPop { 0% { transform: scale(0.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-body.touchmode .callout-word { font-size: 22px; }
-body.touchmode .c-in .callout-word { font-size: 17px; }
-body.touchmode .callout-sub { font-size: 9px; }
+/* a phone's popups are smaller (2026-11-22): in a rally they sit over the play */
+body.touchmode .callout-who { font-size: 8px; }
+body.touchmode .callout-word { font-size: 17px; }
+body.touchmode .c-in .callout-word { font-size: 14px; }
+body.touchmode .callout-sub { font-size: 8px; }
+body.touchmode .hud-grade.aside .hud-grade-text { font-size: 28px; }
 
 /* ------------------------------------------------------------------ touch controls */
 .touch { position: absolute; inset: 0; z-index: 15; touch-action: none; user-select: none; -webkit-user-select: none;
@@ -793,8 +796,8 @@ body.touchmode .replay-tag { top: auto; bottom: calc(9vh + 10px); left: 50%; tra
    lower and smaller, the banner one line below the grade (on a 375 px tall phone they used to sit on each other) */
 body.touchmode .hud-msg { top: calc(72px + env(safe-area-inset-top, 0px)); font-size: 12px; max-width: 64vw; white-space: normal; line-height: 1.4; }
 body.touchmode .hud-grade { top: 37%; }
-body.touchmode .hud-grade-text { font-size: 44px; }
-body.touchmode .hud-grade-sub { font-size: 13px; margin-top: 4px; }
+body.touchmode .hud-grade-text { font-size: 36px; }
+body.touchmode .hud-grade-sub { font-size: 12px; margin-top: 4px; }
 body.touchmode .hud-banner { top: 55%; font-size: 15px; letter-spacing: 0.08em; white-space: nowrap; }
 body.touchmode .call-sheet { bottom: auto; top: calc(56px + env(safe-area-inset-top, 0px)); font-size: 11px; }
 /* touch: the route strip at the top like the call strip; the panel a sheet across the top (court beside the list), the strip hidden under it */
