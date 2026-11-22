@@ -19,6 +19,8 @@ export class FloorReflection {
   private strength = { value: ARENA.reflection.strength };
   private black: THREE.Texture;
   enabled = true;
+  /** the mirror image's size relative to the view (the graphics level's: QUALITY.levels) */
+  private scale = 0;
 
   constructor(
     private renderer: THREE.WebGLRenderer,
@@ -48,12 +50,14 @@ export class FloorReflection {
 
   /** `w`, `h`: drawing-buffer size of the main view in pixels */
   setSize(w: number, h: number): void {
-    const s = ARENA.reflection.scale;
+    const s = this.scale;
     this.target.setSize(Math.max(4, Math.round(w * s)), Math.max(4, Math.round(h * s)));
   }
 
-  setEnabled(on: boolean): void {
-    this.enabled = on && this.share > 0;
+  /** the mirror image's size relative to the view: 0 turns the mirror off (call setSize after) */
+  setScale(scale: number): void {
+    this.scale = scale;
+    this.enabled = scale > 0 && this.share > 0;
     this.map.value = this.enabled ? this.target.texture : this.black;
     this.strength.value = this.enabled ? ARENA.reflection.strength * this.share : 0;
   }

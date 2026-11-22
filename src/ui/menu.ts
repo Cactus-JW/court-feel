@@ -1,8 +1,10 @@
 import {
   ASSIST,
   BODY,
+  GRAPHICS_SETTINGS,
   isPositionId,
   POSITIONS,
+  QUALITY,
   SERVE,
   SERVE_KINDS,
   SET_LEVEL_IDS,
@@ -523,6 +525,20 @@ export class Menu {
     );
   }
 
+  /** Graphics: Auto, then each level, cheapest first */
+  private graphicsPicker(keep = true): HTMLElement {
+    return this.chipGroup(
+      'Graphics',
+      GRAPHICS_SETTINGS.map((g) => (g === 'auto' ? 'Auto' : QUALITY.levels[g].label)),
+      () => GRAPHICS_SETTINGS.indexOf(this.settings.graphics),
+      (i) => {
+        this.settings.graphics = GRAPHICS_SETTINGS[i];
+        this.cb.settingsChanged();
+      },
+      keep,
+    );
+  }
+
   // ---------------------------------------------------------------- home
 
   private buildHome(): HTMLElement {
@@ -891,8 +907,11 @@ export class Menu {
     quick.append(txt('div', 'eyebrow', 'Quick settings'));
     const view = h('div', 'set-row choice');
     view.append(txt('span', 'set-l', 'View'), this.viewPicker(false));
+    const graphics = h('div', 'set-row choice');
+    graphics.append(txt('span', 'set-l', 'Graphics'), this.graphicsPicker(false));
     quick.append(
       view,
+      graphics,
       this.sliderRow('Mouse sensitivity', 'sensitivity', (v) => v.toFixed(2), 'only-kb'),
     );
     quick.append(this.sliderRow('Touch aim sensitivity', 'touchSensitivity', (v) => v.toFixed(2), 'only-tc'));
@@ -1231,6 +1250,13 @@ export class Menu {
         () => (s.firstPerson ? 1 : 0),
         (i) => (s.firstPerson = i === 1),
         'V switches while you play (on a phone: View in the pause menu).',
+      ),
+      seg(
+        'Graphics',
+        GRAPHICS_SETTINGS.map((g) => (g === 'auto' ? 'Auto' : QUALITY.levels[g].label)),
+        () => GRAPHICS_SETTINGS.indexOf(s.graphics),
+        (i) => (s.graphics = GRAPHICS_SETTINGS[i]),
+        'Higher is sharper, lower runs smoother. Auto starts at High, goes sharper between rallies while your device keeps up, and draws less when it cannot.',
       ),
       this.sliderRow('Field of view', 'fov', (v) => `${v.toFixed(0)}°`, 'only-kb'),
       this.sliderRow('Field of view', 'touchFov', (v) => `${v.toFixed(0)}°`, 'only-tc'),
