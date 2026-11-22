@@ -122,7 +122,7 @@ Real frames from the game: no paint-overs, no staged cameras.
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/screenshots/phone-touch-controls.jpg" alt="Phone in landscape: joystick on the left, PASS, BLOCK, JUMP and HIT buttons on the right, set call chips at the top">
+      <img src="docs/screenshots/phone-touch-controls.jpg" alt="Phone in landscape, Mini Rally as the setter: joystick on the left, a big SET button over PASS, JUMP and a smaller HIT on the right, and one thin bar at the top with each hitter's call, the score and pause">
       <b>On your phone.</b> A joystick for your feet, drag to aim, hold to jump and hold to swing. The timing windows are the same as on a keyboard.
     </td>
     <td width="50%" valign="top">
@@ -261,10 +261,12 @@ Hold the phone sideways.
 | Right thumb, drag anywhere | Look / aim, exactly like the mouse (Settings → Touch aim sensitivity). |
 | **JUMP** | Hold to load, release to take off (auto at 0.3 s). Roll the thumb from JUMP onto HIT without lifting: you take off and the wind-up starts. |
 | **HIT** | Hold to wind up (the ring around your thumb fills), release to swing, tap = tip. Drag while holding to aim. While you are loading or in the air, **the whole right half of the screen is HIT**, so the thumb does not have to find the button after the jump. |
-| **BLOCK** | Hands up and load a jump; release to take off. The hands stay up until you land. When the ball is dropping onto you from your side the button reads **SET** and sets instead (it loads no jump: off a pass in system your body goes up by itself, the jump set): press as the ball reaches your hands, release in the green. |
+| **BLOCK** | Hands up and load a jump; release to take off. The hands stay up until you land. When the ball is dropping onto you from your side the button reads **SET** and sets instead (it loads no jump: off a pass in system your body goes up by itself, the jump set): press as the ball reaches your hands, release in the green. Let go of SET in a jump set and the ball goes at once, in the air. |
 | **PASS** | Hold: platform ready. |
 | **TOSS** | Serve toss (Serve Drill, Free Play). Hold it longer for a higher toss. |
-| Top right | Pause, camera toggle, reset rep, and REPLAY when your last attempt can be watched again. Top left: ROUTE chips, one per route, and ROUTES for the route panel (Spike Drill, Mini Rally, as a hitter), SET TO chips when you set (tap a hitter to pick, again for their next set; PLAY opens the play wheel, then tap a play; Setter Drill: ROW for the front row, DUMP; Mini Rally: HELP), the opposing block toggle (Spike Drill), your serve (Serve Drill) or feed types (Free Play). |
+| Top bar | One thin bar along the top edge. Right: pause, the score (Mini Rally), reset rep (the drills) and REPLAY when your last attempt can be watched again; the camera is the pause menu's View. Left: one chip per route (Spike Drill, Mini Rally, as a hitter) and ROUTES for the route panel, or, when you set, one chip per hitter with the call they run (tap a hitter to pick, again for their next set; PLAY opens the play wheel until the pass, then tap a play; Setter Drill: ROW for the front row, DUMP; Mini Rally: HELP). The call that is on is underlined in gold. Also the opposing block toggle (Spike Drill), your serve (Serve Drill) or feed types (Free Play). |
+| Button sizes | The buttons stay in the same places; your position sizes them. A setter's SET is bigger and HIT smaller, a middle's BLOCK bigger and PASS smaller, a libero's PASS bigger and HIT and JUMP smaller. |
+| On a phone | Only the court, the buttons and the top bar: no title, speed, streak, camera name or drill intro line, and the set bar without its checklist. Key hints start off (Settings → Key hints). |
 
 Haptics (Android) tick at full charge and on a graded contact. Tunables are in
 `TOUCH` in `src/config.ts` (stick radius, run threshold, look scale, the

@@ -773,6 +773,11 @@ body.touchmode .hud-cam { top: 56px; }
 body.touchmode .hud.tutoring .hud-cam { top: 56px; }
 body.touchmode .hud.tutoring button.t-skip-kb { display: none; }
 body.touchmode .hud-title { font-size: 11px; }
+/* a phone keeps the court clear (2026-11-22): no title, speed, streak or camera name; the calls are the top bar's chips;
+   Mini Rally's score is the bar's bare score; the set bar keeps its zones, not the checklist */
+body.touchmode .hud-title, body.touchmode .hud-bl, body.touchmode .hud-streak, body.touchmode .hud-cam,
+body.touchmode .hud-top.short, body.touchmode .sb-pips { display: none; }
+body.touchmode .call-sheet, body.touchmode .route-strip { display: none !important; }
 body.touchmode .hud-score { font-size: 15px; }
 body.touchmode .hud-msg { top: 22%; font-size: 12px; max-width: 56vw; white-space: normal; line-height: 1.4; }
 body.touchmode .call-sheet { bottom: auto; top: calc(56px + env(safe-area-inset-top, 0px)); font-size: 11px; }
@@ -838,6 +843,27 @@ body.collar .t-hit.sweet { border-color: var(--gold); box-shadow: 0 0 18px rgba(
 .t-chips { position: absolute; top: calc(10px + var(--sa-t)); left: calc(12px + var(--sa-l)); display: flex; gap: 6px; align-items: center; }
 .t-chip { min-width: 32px; padding: 0 8px; }
 .t-chip-l { font-size: 9px; letter-spacing: 0.2em; opacity: 0.6; font-weight: 800; margin-right: 2px; }
+/* the top bar (2026-11-22): one soft shade along the edge; the chips are words on it, the call running underlined in gold */
+.t-band { position: absolute; left: 0; right: 0; top: 0; height: calc(52px + var(--sa-t)); pointer-events: none;
+  background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0)); }
+.t-chips { gap: 2px; }
+.t-chips .t-chip { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 0 8px; opacity: 0.6; white-space: nowrap; }
+.t-chips .t-chip em { font-style: normal; color: var(--gold); margin-left: 3px; }
+.t-chips .t-chip.on { opacity: 1; border-bottom-color: var(--gold); }
+.t-chips .t-chip.off { opacity: 0.3; text-decoration: line-through; }
+.t-chips .t-chip.held { background: rgba(255,210,63,0.25); }
+.t-score { display: flex; align-items: center; padding: 0 6px; font-size: 17px; font-weight: 900; letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+.t-score:empty { display: none; }
+/* the buttons stay where they are; your position sizes them: your job is the big one */
+.touch[data-pos='S'] .t-block { scale: 1.3; }
+.touch[data-pos='S'] .t-hit { scale: 0.75; }
+.touch[data-pos='S'] .t-jump, .touch[data-pos='S'] .t-pass { scale: 0.9; }
+.touch[data-pos='MB'] .t-block { scale: 1.2; }
+.touch[data-pos='MB'] .t-pass { scale: 0.8; }
+.touch[data-pos='L'] .t-pass { scale: 1.35; }
+.touch[data-pos='L'] .t-hit { scale: 0.7; }
+.touch[data-pos='L'] .t-jump { scale: 0.75; }
 .t-rotate { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 18px; border-radius: 10px;
   background: rgba(8,10,16,0.8); border: 1px solid rgba(255,255,255,0.2); font-weight: 800; letter-spacing: 0.1em; font-size: 14px; text-align: center; }
 @media (orientation: portrait) { body.touchmode .t-rotate { display: block; } body.touchmode .hud-hint { display: none; } }

@@ -12,6 +12,7 @@ import type { Effects } from '../fx/effects';
 import type { Hud } from './hud';
 import { SET_PLAYS } from '../game/plays';
 import { SET_PICKS, type SetPick } from '../game/setterCalls';
+import type { RouteView } from '../game/routes';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, html = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -90,7 +91,7 @@ export function wantsTouch(setting: 'auto' | 'on' | 'off'): boolean {
 export interface TouchHost {
   readonly input: Input;
   readonly events: Pick<Emitter<GameEvents>, 'on'>;
-  readonly hud: Pick<Hud, 'keyLabels' | 'collarSweet'>;
+  readonly hud: Pick<Hud, 'keyLabels' | 'collarSweet' | 'touch' | 'scoreShort' | 'callView'>;
   readonly fx: Pick<Effects, 'audio' | 'replaying' | 'endReplay'>;
   readonly tutorial: Pick<Tutorial, 'active' | 'teaching' | 'serving' | 'quiet' | 'stuck' | 'requestSkip'>;
   readonly settings: Settings;
@@ -103,7 +104,19 @@ export interface TouchHost {
   readonly inMenu: boolean;
   readonly paused: boolean;
   replayAvailable(): boolean;
+  /** your routes as a hitter (null: you are not calling your own route) */
+  routeView(): RouteView | null;
 }
+
+/** a chip in the top bar that is a call: a hitter you can set (with their call), or one of your routes */
+interface CallChip {
+  e: HTMLElement;
+  pick?: SetPick;
+  route?: number;
+  html: string;
+}
+
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /**
  * On-screen touch controls: a floating joystick on the left, aim by dragging
@@ -123,6 +136,10 @@ export class TouchControls {
   private jumpRing: HTMLDivElement;
   private chips: HTMLDivElement;
   private chipsFor = '';
+  /** the chips that are calls: each says what it runs, the one running is underlined */
+  private callChips: CallChip[] = [];
+  private scoreEl: HTMLDivElement;
+  private resetBtn: HTMLElement;
   /** the setter's chips are up: hints name them for the number keys */
   private labels = TOUCH_KEY_LABELS;
   private pauseBtn: HTMLDivElement;
@@ -152,15 +169,15 @@ export class TouchControls {
     }
     this.hitRing = this.buttons.get('hit')!.querySelector('.t-ring') as HTMLDivElement;
     this.jumpRing = this.buttons.get('jump')!.querySelector('.t-ring') as HTMLDivElement;
+    // the top bar: a soft shade along the edge, the drill's chips on the left, the score and pause on the right
+    el('div', 't-band', this.root);
     const top = el('div', 't-top', this.root);
-    // first chip, left of pause (the keyboard skip lives on the HUD instead)
+    // first chip (the keyboard skip lives on the HUD instead)
     this.skipBtn = el('div', 't-tap t-skip', top, 'SKIP TUTORIAL');
     this.skipBtn.style.display = 'none';
-    this.pauseBtn = el('div', 't-tap t-pause', top, '<span>❚❚</span>');
-    this.pauseBtn.dataset.tap = 'pause';
+    // (the camera is the pause menu's View: one less button over the court)
     for (const [id, label] of [
       ['replay', 'REPLAY'],
-      ['cam', 'CAM'],
       ['reset', 'RESET'],
     ] as [PadButton, string][]) {
       const e = el('div', 't-tap', top, label);
@@ -168,6 +185,10 @@ export class TouchControls {
       this.buttons.set(id, e);
     }
     this.replayBtn = this.buttons.get('replay')!;
+    this.resetBtn = this.buttons.get('reset')!;
+    this.scoreEl = el('div', 't-score', top);
+    this.pauseBtn = el('div', 't-tap t-pause', top, '<span>❚❚</span>');
+    this.pauseBtn.dataset.tap = 'pause';
     this.chips = el('div', 't-chips', this.root);
     el('div', 't-rotate', this.root, 'Turn your phone sideways');
 
@@ -204,6 +225,7 @@ export class TouchControls {
     if (this.enabled === on) return;
     this.enabled = on;
     this.g.input.touch = on;
+    this.g.hud.touch = on;
     document.body.classList.toggle('touchmode', on);
     this.g.hud.keyLabels = on ? this.labels : null;
     if (!on) {
@@ -346,6 +368,13 @@ export class TouchControls {
     const replay = g.replayAvailable() && !g.fx.replaying;
     const rd = replay ? '' : 'none';
     if (this.replayBtn.style.display !== rd) this.replayBtn.style.display = rd;
+    // Mini Rally: no rep to reset (the pause menu restarts it)
+    const resetD = g.modeId === 'rally' ? 'none' : '';
+    if (this.resetBtn.style.display !== resetD) this.resetBtn.style.display = resetD;
+    const score = g.hud.scoreShort;
+    if (this.scoreEl.textContent !== score) this.scoreEl.textContent = score;
+    // the buttons stay where they are; your position sizes them (styles.css)
+    if (this.root.dataset.pos !== g.position) this.root.dataset.pos = g.position;
     // drill context: set calls / feed types / toss
     // (the setter's chips follow who they can pick: the front row's dump comes and goes with ROW)
     const picks = g.tutorial.active ? null : (g.mode?.setterPicks?.() ?? null);
@@ -353,6 +382,33 @@ export class TouchControls {
     if (key !== this.chipsFor) {
       this.chipsFor = key;
       this.buildChips(picks);
+    }
+    this.drawCalls();
+  }
+
+  /** each call chip says what it runs (tap the running one again: their next set), the one running underlined */
+  private drawCalls(): void {
+    if (!this.callChips.length) return;
+    const view = this.g.hud.callView;
+    const routes = this.callChips[0].route !== undefined ? this.g.routeView() : null;
+    for (const c of this.callChips) {
+      let html = c.e.dataset.label ?? '';
+      let on = false;
+      let off = false;
+      if (c.pick) {
+        const it = view?.items.find((i) => i.id === c.pick);
+        if (it) {
+          html = `${esc(it.who.toUpperCase())}${it.call ? ` <em>${esc(it.call)}</em>` : ''}`;
+          on = it.lit;
+          off = it.off;
+        }
+      } else if (c.route !== undefined) on = routes?.on === c.route;
+      if (html !== c.html) {
+        c.html = html;
+        c.e.innerHTML = html;
+      }
+      c.e.classList.toggle('on', on);
+      c.e.classList.toggle('off', off);
     }
   }
 
@@ -374,10 +430,13 @@ export class TouchControls {
     for (const id of ['feed', 'auto', 'vsblock', 'play', 'row', 'help', 'd1', 'd2', 'd3', 'd4', 'd5'] as PadButton[])
       this.buttons.delete(id);
     this.chips.innerHTML = '';
+    this.callChips = [];
     const chip = (id: PadButton, label: string) => {
       const e = el('div', 't-tap t-chip', this.chips, label);
       e.dataset.btn = id;
+      e.dataset.label = label;
       this.buttons.set(id, e);
+      return e;
     };
     const toss = this.buttons.get('toss')!;
     toss.style.display = g.modeId === 'free' || g.modeId === 'serve' ? '' : 'none';
@@ -386,9 +445,8 @@ export class TouchControls {
     // tutorial reps: no set-call chips and no block toggle (one Outside story, block off)
     const setter = picks !== null;
     if (setter) {
-      el('span', 't-chip-l', this.chips, 'SET TO');
-      // a chip per hitter you can set now (Digit1 outside ... Digit5 the dump)
-      for (const k of picks) chip(`d${SET_PICKS.indexOf(k) + 1}` as PadButton, k);
+      // a chip per hitter you can set now (Digit1 outside ... Digit5 the dump), with the call they run
+      for (const k of picks) this.callChips.push({ e: chip(`d${SET_PICKS.indexOf(k) + 1}` as PadButton, k), pick: k, html: '' });
       if (g.modeId === 'setter' || g.position === 'S') chip('play', 'PLAY');
       if (g.modeId === 'setter') chip('row', 'ROW');
       // Mini Rally: you can't get to the second ball, a team-mate takes it
@@ -397,8 +455,7 @@ export class TouchControls {
     // your route as a hitter: a chip per route, by its call (1-5); ROUTES opens the route panel
     const calls = !setter && !g.tutorial.active && (g.modeId === 'spike' || g.modeId === 'rally') && SET_PLAYS[g.position];
     if (calls) {
-      el('span', 't-chip-l', this.chips, 'ROUTE');
-      calls.forEach((p, i) => chip(`d${i + 1}` as PadButton, p.short.toUpperCase()));
+      calls.forEach((p, i) => this.callChips.push({ e: chip(`d${i + 1}` as PadButton, p.short.toUpperCase()), route: i, html: '' }));
       chip('play', 'ROUTES');
     }
     this.labels = setter ? SETTER_KEY_LABELS : calls ? HITTER_KEY_LABELS : TOUCH_KEY_LABELS;

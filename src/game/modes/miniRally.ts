@@ -130,6 +130,7 @@ export class MiniRally extends Mode {
         ? `Play your position · win the point · 1-${this.plays.length} call your route · C see them`
         : 'Play your position · win the point',
       2.5,
+      true,
     );
   }
 
@@ -253,7 +254,10 @@ export class MiniRally extends Mode {
 
   private updateScore(): void {
     const call = this.play ? ` · call ${this.callIdx + 1}: ${this.play.name}` : '';
-    this.g.hud.setScore(`YOU ${this.scoreHome} : ${this.scoreAway} THEM · ${this.servingSide === 1 ? 'your serve' : 'their serve'}${call}`);
+    this.g.hud.setScore(
+      `YOU ${this.scoreHome} : ${this.scoreAway} THEM · ${this.servingSide === 1 ? 'your serve' : 'their serve'}${call}`,
+      `${this.scoreHome} : ${this.scoreAway}`,
+    );
   }
 
   frame(dt: number): void {

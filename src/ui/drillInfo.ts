@@ -283,7 +283,7 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
     {
       title: 'Game',
       rows: [
-        { k: 'Top right', a: 'Pause, camera, reset the rep, and REPLAY your last attempt' },
+        { k: 'Top right', a: 'Pause, the score, reset the rep, and REPLAY your last attempt (camera: pause menu, View)' },
         { k: 'TOSS', a: 'Serve toss: hold longer for a higher toss (Serve Drill, Free Play)' },
       ],
     },
@@ -291,7 +291,7 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'In a drill',
       rows: [
         { k: 'ROUTE', a: 'Top left: call your route; ROUTES shows them (Spike Drill, Mini Rally; hitters)' },
-        { k: 'SET TO', a: 'Top left: pick a hitter when you set; again: their next set (Setter Drill, Mini Rally)' },
+        { k: 'SET TO', a: 'Top left: tap a hitter when you set, again for their next set; gold = on (Setter Drill, Mini Rally)' },
         { k: 'PLAY', a: 'Top left: the play wheel when you set, then tap a play (Setter Drill, Mini Rally)' },
         { k: 'ROW  DUMP', a: 'Top left: front row, and your dump there (Setter Drill)' },
         { k: 'HELP', a: "Top left: you can't get to the second ball (Mini Rally)" },

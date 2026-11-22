@@ -271,6 +271,17 @@ describe('touch pad: hold buttons', () => {
     expect(input.isDown('Mouse2')).toBe(false);
   });
 
+  it('letting go of SET in a jump set releases the ball in the air (it is not held until the landing)', () => {
+    let air = false;
+    const { input, pad } = rig({ wantsSet: () => true, airborne: () => air });
+    const b = BUTTONS.block;
+    pad.begin(1, b.x, b.y, 0);
+    air = true; // the auto jump set took off
+    pad.end(1);
+    expect(input.isDown('Mouse2')).toBe(false);
+    expect(pad.isHeld('block')).toBe(false);
+  });
+
   it('PASS is E, held; releaseAll lets go of everything', () => {
     const { input, pad } = rig();
     const b = BUTTONS.pass;

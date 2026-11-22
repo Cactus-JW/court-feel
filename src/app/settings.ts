@@ -29,7 +29,7 @@ const BOOLEAN_SETTINGS: Record<BooleanSettingKey, true> = {
   spikeCollar: true,
   replays: true,
   firstPerson: true,
-  showHints: true,
+  keyHints: true,
 };
 
 /** the keys each validator in sanitizeSettings handles (exported for the coverage test) */
@@ -97,7 +97,7 @@ export function sanitizeSettings(raw: unknown, defaults: Settings = DEFAULT_SETT
   if (src.setAimAssist === undefined) out.setAimAssist = out.aimAssist;
   if (src.setArc === undefined) out.setArc = out.setRing;
   if (src.runUpGuide === undefined) out.runUpGuide = out.landingMarker;
-  if (src.spikeCollar === undefined) out.spikeCollar = out.showHints;
+  if (src.spikeCollar === undefined && typeof src.showHints === 'boolean') out.spikeCollar = src.showHints;
   return out;
 }
 

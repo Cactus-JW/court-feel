@@ -38,11 +38,13 @@ export interface DrillHud {
   /** the grade is drawn to one side, clear of the ball (a setter watching the set fly) */
   gradeAside: boolean;
   setTitle(t: string): void;
-  setScore(t: string): void;
+  /** `short` is the bare score a phone shows instead of the line (`3 : 5`) */
+  setScore(t: string, short?: string): void;
   setStreak(n: number): void;
   setCallSheet(v: CallSheetView | null): void;
   showBanner(text: string, kind?: 'good' | 'bad' | 'neutral', dur?: number): void;
-  message(text: string, dur?: number): void;
+  /** an `intro` line says what the drill is about: a phone leaves it out (the screen is for the court) */
+  message(text: string, dur?: number, intro?: boolean): void;
   go(): void;
   call(
     who: string,

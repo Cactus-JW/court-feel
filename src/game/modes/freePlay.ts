@@ -41,7 +41,7 @@ export class FreePlay extends Mode {
     this.placeMachine();
     g.hud.setTitle('Free Play');
     this.updateScore();
-    g.hud.message('1-4 choose the feed · F feed now · T auto-feed · Q serve yourself', 3.5);
+    g.hud.message('1-4 choose the feed · F feed now · T auto-feed · Q serve yourself', 3.5, true);
   }
 
   private placeMachine(): void {

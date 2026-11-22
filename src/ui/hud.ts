@@ -50,6 +50,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: 
 /** In-game HUD: timing grade, ball speed, streak, score line, key hints. */
 export class Hud {
   readonly root: HTMLDivElement;
+  private top: HTMLDivElement;
   private title: HTMLDivElement;
   private score: HTMLDivElement;
   private grade: HTMLDivElement;
@@ -107,12 +108,18 @@ export class Hud {
   showHints = true;
   /** touch controls: key names in hints are shown as button names (null = keyboard) */
   keyLabels: Record<string, string> | null = null;
+  /** the touch controls are on: the drill's intro line stays down (the touch bar draws the short score and the calls) */
+  touch = false;
+  /** the bare score (`3 : 5`), when the drill gives one: the touch bar shows it instead of the score line */
+  scoreShort = '';
+  /** the setter's calls, as last drawn (the touch bar's hitter chips read them) */
+  callView: CallSheetView | null = null;
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud', parent);
-    const top = el('div', 'hud-top', this.root);
-    this.title = el('div', 'hud-title', top);
-    this.score = el('div', 'hud-score', top);
+    this.top = el('div', 'hud-top', this.root);
+    this.title = el('div', 'hud-title', this.top);
+    this.score = el('div', 'hud-score', this.top);
     this.grade = el('div', 'hud-grade', this.root);
     this.gradeText = el('div', 'hud-grade-text', this.grade);
     this.gradeSub = el('div', 'hud-grade-sub', this.grade);
@@ -164,8 +171,10 @@ export class Hud {
     this.title.textContent = t;
   }
 
-  setScore(t: string): void {
+  setScore(t: string, short = ''): void {
     this.score.textContent = t;
+    this.scoreShort = short;
+    this.top.classList.toggle('short', !!short);
   }
 
   /** `force` keeps a tutorial coach line up even when Settings → Hints is off */
@@ -315,6 +324,7 @@ export class Hud {
    * hitter who can't be set this ball is struck out. Null hides it.
    */
   setCallSheet(v: CallSheetView | null): void {
+    this.callView = v;
     let html = '';
     if (v) {
       html = v.items
@@ -412,8 +422,8 @@ export class Hud {
     this.msgTimer = 0;
   }
 
-  message(text: string, dur = 1.5): void {
-    if (this.msgPinned) return;
+  message(text: string, dur = 1.5, intro = false): void {
+    if (this.msgPinned || (intro && this.touch)) return;
     if (this.keyLabels) text = Hud.translateText(text);
     this.msg.textContent = text;
     this.msg.classList.add('show');

@@ -609,7 +609,7 @@ export class Game implements AiHost {
     this.ball.showMarker = s.landingMarker;
     this.rig.blockers = this.arena.cameraBlockers;
     if (!this.inMenu) this.rig.setMode(s.firstPerson ? 'fp' : 'tp');
-    this.hud.showHints = s.showHints;
+    this.hud.showHints = s.keyHints;
     this.fx?.audio.setVolume(s.volume);
     this.applyUserBody();
     this.persist(s);

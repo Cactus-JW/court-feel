@@ -68,6 +68,14 @@ describe('stored settings are validated', () => {
     expect(sanitizeSettings({})).toEqual(DEFAULT_SETTINGS);
   });
 
+  it('the key hint line starts off, also for a player whose saved settings had it on', () => {
+    expect(DEFAULT_SETTINGS.keyHints).toBe(false);
+    // saved before 2026-11-22, when the hints were on for everyone
+    expect(sanitizeSettings({ showHints: true }).keyHints).toBe(false);
+    // a player who turns them on keeps them
+    expect(sanitizeSettings({ keyHints: true }).keyHints).toBe(true);
+  });
+
   it('survives garbage: null, arrays, primitives', () => {
     for (const raw of [null, undefined, 42, 'x', [1, 2]]) expect(sanitizeSettings(raw)).toEqual(DEFAULT_SETTINGS);
   });

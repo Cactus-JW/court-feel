@@ -128,7 +128,7 @@ export class ReceiveDrill extends Mode {
     this.targetHalo = g.markers.halo(SETTER_TARGET.x, 2.35, SETTER_TARGET.z);
     g.hud.setTitle('Serve Receive / Dig');
     this.updateScore();
-    g.hud.message('Get behind the ball · press E early to form the platform', 3);
+    g.hud.message('Get behind the ball · press E early to form the platform', 3, true);
     this.toPhase('intro');
   }
 

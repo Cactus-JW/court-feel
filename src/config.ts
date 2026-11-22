@@ -2569,8 +2569,11 @@ export interface Settings {
   shake: number;
   volume: number;
   firstPerson: boolean;
-  /** the key hint line at the bottom of the screen */
-  showHints: boolean;
+  /**
+   * the key hint line at the bottom of the screen. Off by default (2026-11-22: the screen is for
+   * the court). Saved before then as `showHints`, which was on for everyone: that is not carried over.
+   */
+  keyHints: boolean;
   /** touch controls: auto (on touch screens), always on, or off */
   touchControls: 'auto' | 'on' | 'off';
   /** touch aim sensitivity multiplier */
@@ -2605,7 +2608,7 @@ export const DEFAULT_SETTINGS: Settings = {
   shake: 1.0,
   volume: AUDIO.master,
   firstPerson: false,
-  showHints: true,
+  keyHints: false,
   touchControls: 'auto',
   touchSensitivity: 1.0,
   bodies: {},

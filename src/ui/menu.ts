@@ -1222,7 +1222,7 @@ export class Menu {
         'Auto turns them on for touch screens.',
       ),
       this.sliderRow('Touch aim sensitivity', 'touchSensitivity', two),
-      sw('Key hints', 'showHints', 'The line at the bottom of the screen: what to press now.'),
+      sw('Key hints', 'keyHints', 'The line at the bottom of the screen: what to press now.'),
     ]);
     group('camera', 'Camera', [
       seg(
