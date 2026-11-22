@@ -7,6 +7,7 @@ import { Athlete } from '../src/game/athlete';
 import { readIntent } from '../src/game/intent';
 import { UserController } from '../src/game/userController';
 import { Hud } from '../src/ui/hud';
+import { SheetFingers, WheelFingers, type WheelHost } from '../src/ui/touchControls';
 
 const DT = 1 / SIM.hz;
 
@@ -271,6 +272,17 @@ describe('touch pad: hold buttons', () => {
     expect(input.isDown('Mouse2')).toBe(false);
   });
 
+  it('letting go of SET in a jump set releases the ball in the air (it is not held until the landing)', () => {
+    let air = false;
+    const { input, pad } = rig({ wantsSet: () => true, airborne: () => air });
+    const b = BUTTONS.block;
+    pad.begin(1, b.x, b.y, 0);
+    air = true; // the auto jump set took off
+    pad.end(1);
+    expect(input.isDown('Mouse2')).toBe(false);
+    expect(pad.isHeld('block')).toBe(false);
+  });
+
   it('PASS is E, held; releaseAll lets go of everything', () => {
     const { input, pad } = rig();
     const b = BUTTONS.pass;
@@ -295,5 +307,123 @@ describe('touch: a drill says buttons, not keys', () => {
     expect(Hud.translateText('Play your position · win the point · 1-4 call your route · C see them')).toBe(
       'Play your position · win the point · the chips call your route · ROUTES see them',
     );
+  });
+});
+
+/** a wheel 200 px across around (400, 200), slices by direction like the real one (0 up, 1 right, 2 down, 3 left) */
+function wheelHost(): WheelHost & { sel: number } {
+  const h = {
+    sel: -1,
+    wheelAt: (x: number, y: number) => Math.hypot(x - 400, y - 200) <= 100,
+    pointWheel(x: number, y: number) {
+      const dx = x - 400;
+      const dy = y - 200;
+      if (Math.hypot(dx, dy) < 30) return (h.sel = -1);
+      const turn = Math.atan2(dx, -dy) / (2 * Math.PI);
+      return (h.sel = ((Math.round(turn * 4) % 4) + 4) % 4);
+    },
+    unpointWheel() {
+      h.sel = -1;
+    },
+  };
+  return h;
+}
+
+describe('touch: pointing at a play on the wheel', () => {
+  it('a PLAY tap that wobbles a pixel or two points at nothing (the wheel stays open for the second touch)', () => {
+    const h = wheelHost();
+    const f = new WheelFingers(h);
+    // the PLAY chip is in the top bar, up and left of the wheel
+    f.holdPlay(1, 250, 14);
+    f.move(1, 252, 15);
+    f.move(1, 251, 13);
+    expect(f.up(1, 251, 13, false)).toBe(-1);
+    expect(h.sel).toBe(-1);
+  });
+
+  it('a PLAY finger that slides onto the wheel points at the play under it, and keeps pointing past the edge', () => {
+    const h = wheelHost();
+    const f = new WheelFingers(h);
+    f.holdPlay(1, 250, 14);
+    f.move(1, 300, 120); // still off the wheel
+    expect(h.sel).toBe(-1);
+    f.move(1, 470, 200); // on the right slice
+    expect(h.sel).toBe(1);
+    f.move(1, 400, 330); // slid off the bottom edge: still pointing, down
+    expect(h.sel).toBe(2);
+  });
+
+  it('a finger that comes down on the open wheel points, and lifting it calls the play under it', () => {
+    const h = wheelHost();
+    const f = new WheelFingers(h);
+    expect(f.down(2, 400, 120)).toBe(true);
+    expect(f.move(2, 330, 200)).toBe(true);
+    expect(f.up(2, 330, 200, false)).toBe(3);
+    // off the wheel: not the wheel's
+    expect(f.down(3, 40, 300)).toBe(false);
+  });
+
+  it('a touch the phone cancels calls nothing and leaves nothing pointed at', () => {
+    const h = wheelHost();
+    const f = new WheelFingers(h);
+    f.down(2, 400, 120);
+    expect(f.up(2, 400, 120, true)).toBe(-1);
+    expect(h.sel).toBe(-1);
+    f.holdPlay(1, 250, 14);
+    f.move(1, 470, 200);
+    expect(h.sel).toBe(1);
+    f.up(1, 470, 200, true);
+    expect(h.sel).toBe(-1);
+  });
+});
+
+/** a route panel from (100, 60) to (400, 300): five routes 40 px tall from y 100, scrolled by `top` */
+function sheet() {
+  const s = {
+    top: 0,
+    at: (x: number, y: number) => x >= 100 && x <= 400 && y >= 60 && y <= 300,
+    scrollBy(dy: number) {
+      s.top = Math.max(0, s.top + dy);
+    },
+    itemAt(x: number, y: number) {
+      const i = Math.floor((y + s.top - 100) / 40);
+      return s.at(x, y) && i >= 0 && i < 5 ? i : -1;
+    },
+  };
+  return s;
+}
+
+describe('touch: the route panel under the touch layer', () => {
+  it('a drag on the open panel scrolls its list the way the finger goes (finger up: further down the list)', () => {
+    const s = sheet();
+    const f = new SheetFingers(() => s);
+    expect(f.down(1, 250, 280)).toBe(true);
+    expect(f.move(1, 250, 220)).toBe(true);
+    expect(s.top).toBe(60);
+    f.move(1, 250, 240);
+    expect(s.top).toBe(40);
+    // a drag calls no route
+    expect(f.up(1, 250, 240, false)).toBe(-1);
+  });
+
+  it('a tap on a route calls it, where the list is scrolled to', () => {
+    const s = sheet();
+    const f = new SheetFingers(() => s);
+    f.down(1, 250, 150);
+    f.move(1, 251, 151); // a real tap wobbles: still a tap
+    expect(f.up(1, 251, 151, false)).toBe(1);
+    s.top = 80;
+    f.down(2, 250, 150);
+    expect(f.up(2, 250, 150, false)).toBe(3);
+  });
+
+  it('a finger off the panel, on a closed panel, or cancelled by the phone is not a tap on a route', () => {
+    const s = sheet();
+    const f = new SheetFingers(() => s);
+    expect(f.down(1, 40, 300)).toBe(false);
+    expect(f.move(1, 60, 300)).toBe(false);
+    f.down(2, 250, 150);
+    expect(f.up(2, 250, 150, true)).toBe(-1);
+    expect(new SheetFingers(() => null).down(3, 250, 150)).toBe(false);
   });
 });

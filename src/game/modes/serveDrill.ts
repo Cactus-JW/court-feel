@@ -116,7 +116,7 @@ export class ServeDrill extends Mode {
     this.refreshHud();
     // (on touch the key names become the buttons': "toss: Q" reads "toss: TOSS")
     // the lesson speaks through the coach line: the drill's own intro stays down
-    if (!g.tutorial.serving) g.hud.message('Pick your serve: 1 2 3 · hold to toss higher: Q · serve at the seams', 3.5);
+    if (!g.tutorial.serving) g.hud.message('Pick your serve: 1 2 3 · hold to toss higher: Q · serve at the seams', 3.5, true);
   }
 
   refreshHud(): void {

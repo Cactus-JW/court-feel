@@ -88,6 +88,29 @@ export class RouteHud {
     parent.append(this.strip, this.panel);
   }
 
+  /** is (x, y) on the open panel? (the touch controls scroll it and tap it: `TouchSheet`) */
+  at(x: number, y: number): boolean {
+    if (!this.open) return false;
+    const r = this.panel.getBoundingClientRect();
+    return r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
+  /** scroll the open panel by `dy` px (a finger's drag) */
+  scrollBy(dy: number): void {
+    this.panel.scrollTop += dy;
+  }
+
+  /** the route under (x, y) on the open panel's list (its number less one), -1 for none */
+  itemAt(x: number, y: number): number {
+    if (!this.open) return -1;
+    const items = this.panel.querySelectorAll<HTMLElement>('.rp-list li');
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i].getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return i;
+    }
+    return -1;
+  }
+
   /** draw both for `v` (null: you are not calling a route; both hide), the panel when `open` */
   update(v: RouteView | null, open: boolean): void {
     this.open = !!v && open;

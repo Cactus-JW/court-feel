@@ -51,6 +51,8 @@ export class MiniRally extends Mode {
   private mineFor: unknown = null;
   /** their jump serve has been called this rally */
   private jumpCalled = false;
+  /** the jump-serve call is on the screen */
+  private jumpCallUp = false;
   private reason = '';
   private userTouches = 0;
   /** the routes the user's position calls for themselves (keys 1-5), if it has any */
@@ -78,7 +80,6 @@ export class MiniRally extends Mode {
     this.home.playsOn = !this.userSetter;
     this.home.playPool = wheelPlays;
     this.away.playsOn = true;
-    for (const team of [this.home, this.away]) team.onUserSet = () => g.hud.message('Set to you · attack!', 1.2);
     const userSlot = USER_SLOT[this.position];
     let seed = 50;
     for (const slot of SLOTS) {
@@ -130,6 +131,7 @@ export class MiniRally extends Mode {
         ? `Play your position · win the point · 1-${this.plays.length} call your route · C see them`
         : 'Play your position · win the point',
       2.5,
+      true,
     );
   }
 
@@ -253,7 +255,12 @@ export class MiniRally extends Mode {
 
   private updateScore(): void {
     const call = this.play ? ` · call ${this.callIdx + 1}: ${this.play.name}` : '';
-    this.g.hud.setScore(`YOU ${this.scoreHome} : ${this.scoreAway} THEM · ${this.servingSide === 1 ? 'your serve' : 'their serve'}${call}`);
+    // the bare score marks the serving side with ● on its side of the score, as a scoreboard's serve light does
+    const serve = this.servingSide === 1;
+    this.g.hud.setScore(
+      `YOU ${this.scoreHome} : ${this.scoreAway} THEM · ${serve ? 'your serve' : 'their serve'}${call}`,
+      `${serve ? '● ' : ''}${this.scoreHome} : ${this.scoreAway}${serve ? '' : ' ●'}`,
+    );
   }
 
   frame(dt: number): void {
@@ -419,6 +426,13 @@ export class MiniRally extends Mode {
     return !this.g.ballLive || super.ballDead();
   }
 
+  /** their server has left the floor (or swung at a float's toss): the serve is about to be struck */
+  private serverStriking(): boolean {
+    for (const b of this.away.brains.values())
+      if (b.job === 'serve' && (b.server.phase === 'air' || b.server.phase === 'done')) return true;
+    return false;
+  }
+
   /** six on court: a ball that drops is the user's rep only when it was theirs (the pass, the set to them, their set) */
   userBall(): boolean {
     const g = this.g;
@@ -470,10 +484,19 @@ export class MiniRally extends Mode {
         1.0,
       );
     }
-    // their server tosses for a jump serve: the passers call it and step back (only they do)
+    // their server tosses for a jump serve: the passers call it and step back (only they do). The
+    // call sits at the top of the screen, clear of the toss, and is gone once the server leaves the
+    // floor: from then on a passer's eyes are on the ball (player report, 2026-11-22)
     if (this.home.jumpServe && !this.jumpCalled && this.phase === 'serve' && !g.tutorial.active) {
       this.jumpCalled = true;
-      if (PASSERS.has(USER_SLOT[this.position])) g.hud.message('Jump serve · step back', 1.2);
+      if (PASSERS.has(USER_SLOT[this.position])) {
+        this.jumpCallUp = true;
+        g.hud.topCall('Jump serve · step back');
+      }
+    }
+    if (this.jumpCallUp && (this.phase !== 'serve' || this.serverStriking())) {
+      this.jumpCallUp = false;
+      g.hud.topCall(null);
     }
     g.ball.markerColor.setRGB(...((yours ? [0.35, 1.0, 0.45] : [0.3, 0.85, 1.0]) as [number, number, number]));
     switch (this.phase) {

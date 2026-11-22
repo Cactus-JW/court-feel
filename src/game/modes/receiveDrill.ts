@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { yawFromDir } from '../../core/mathx';
-import type { PositionId } from '../../config';
+import { FX, type PositionId } from '../../config';
 import { solveApex } from '../../physics/solve';
 import { HitterBrain } from '../../ai/hitter';
 import { ServerBrain } from '../../ai/server';
@@ -128,7 +128,7 @@ export class ReceiveDrill extends Mode {
     this.targetHalo = g.markers.halo(SETTER_TARGET.x, 2.35, SETTER_TARGET.z);
     g.hud.setTitle('Serve Receive / Dig');
     this.updateScore();
-    g.hud.message('Get behind the ball · press E early to form the platform', 3);
+    g.hud.message('Get behind the ball · press E early to form the platform', 3, true);
     this.toPhase('intro');
   }
 
@@ -222,6 +222,7 @@ export class ReceiveDrill extends Mode {
       g.hud.showBanner(
         `${label}${r.rating === 3 ? ' · PERFECT TO TARGET' : ''}`,
         r.rating >= 2 ? 'good' : r.rating === 1 ? 'neutral' : 'bad',
+        FX.grade.pass,
       );
       g.crowd(r.rating >= 2 ? 0.35 : 0.05);
     }

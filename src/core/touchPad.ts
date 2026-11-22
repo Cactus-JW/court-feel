@@ -106,6 +106,8 @@ export interface PadPointer {
   dragging: boolean;
   /** JUMP touch that rolled onto HIT */
   rolled: boolean;
+  /** a hands-up press that set (the ball was dropping onto you): let go, the ball goes, in the air too */
+  sets: boolean;
   t0: number;
 }
 
@@ -140,7 +142,21 @@ export class TouchPad {
     // airborne: the right half is the HIT button (JUMP included: the thumb is still there after the takeoff)
     if (air && TOUCH.airHitAnywhere && right && (button === null || button === 'jump')) button = 'hit';
     // a drag on empty space aims from the first pixel; a press on a button gets a dead zone first
-    const p: PadPointer = { id, kind: 'look', x0: x, y0: y, x, y, button, codes: [], aims: right, dragging: right, rolled: false, t0: now };
+    const p: PadPointer = {
+      id,
+      kind: 'look',
+      x0: x,
+      y0: y,
+      x,
+      y,
+      button,
+      codes: [],
+      aims: right,
+      dragging: right,
+      rolled: false,
+      sets: false,
+      t0: now,
+    };
     if (button) {
       p.dragging = false;
       p.kind = 'button';
@@ -206,8 +222,8 @@ export class TouchPad {
       return;
     }
     for (const c of p.codes) {
-      // a block jump keeps the hands up until the feet are back on the floor
-      if (c === 'Mouse2' && p.button === 'block' && this.ctx.airborne()) {
+      // a block jump keeps the hands up until the feet are back on the floor (a jump set does not: letting go is the push)
+      if (c === 'Mouse2' && p.button === 'block' && !p.sets && this.ctx.airborne()) {
         this.blockLatched = true;
         continue;
       }
@@ -240,7 +256,8 @@ export class TouchPad {
   private press(p: PadPointer, b: PadButton): void {
     const codes = [...BUTTON_CODES[b]];
     // hands up: block (with a jump to time) or, when the ball is dropping onto you, a set
-    if (b === 'block' && TOUCH.blockJumps && !this.ctx.wantsSet() && !this.ctx.airborne()) codes.push('Space');
+    p.sets = b === 'block' && this.ctx.wantsSet();
+    if (b === 'block' && TOUCH.blockJumps && !p.sets && !this.ctx.airborne()) codes.push('Space');
     for (const c of codes) this.input.down(c);
     p.codes = codes;
   }

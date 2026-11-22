@@ -67,6 +67,11 @@ body.touchmode .play-wheel.aside { left: 50%; top: calc(48px + env(safe-area-ins
 .pw-run { stroke-width: 1.8; stroke-linecap: round; }
 .pw-idea { font-size: 10px; line-height: 1.25; opacity: 0.8; max-width: 128px; }
 body.touchmode .play-wheel .pw-slice { pointer-events: auto; }
+/* a phone held sideways is shorter than the wheel (384 px on a 375 px screen): it opens below the top bar, scaled to fit
+   between the bar and the bottom edge (the touch layer reads it by its drawn box, so a finger still points where it lands) */
+@media (max-height: 480px) { body.touchmode .play-wheel:not(.aside) { top: calc(50% + 26px); transform: translate(-50%, -50%) scale(0.86); } }
+@media (max-height: 400px) { body.touchmode .play-wheel:not(.aside) { transform: translate(-50%, -50%) scale(0.8); } }
+@media (max-height: 340px) { body.touchmode .play-wheel:not(.aside) { transform: translate(-50%, -50%) scale(0.68); } }
 /* first person: where to stand, on a dial under the crosshair. The mark is your feet, up is where you look, the ring is the spot */
 .set-radar { position: absolute; left: 50%; top: 50%; display: none; transform: translateX(-50%); border-radius: 50%; pointer-events: none;
   background: rgba(8,10,16,0.38); box-shadow: 0 0 0 1px rgba(255,255,255,0.3); }
@@ -212,6 +217,10 @@ body.touchmode .play-wheel .pw-slice { pointer-events: auto; }
   opacity: 0; transition: opacity 0.3s; text-transform: uppercase; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
   background: rgba(8,10,16,0.5); padding: 6px 14px; border-radius: 6px; }
 .hud-msg.show { opacity: 1; }
+/* a call that must not cover the ball (their jump serve): along the top, under the title and score, above the toss */
+.hud-topcall { position: absolute; left: 50%; top: 68px; transform: translateX(-50%); font-weight: 800; font-size: 13px; letter-spacing: 0.12em;
+  text-transform: uppercase; white-space: nowrap; color: var(--gold); text-shadow: 0 1px 6px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+.hud-topcall.show { opacity: 1; }
 .hud-cam { position: absolute; top: 16px; right: 20px; font-size: 11px; letter-spacing: 0.2em; opacity: 0.45; font-weight: 700; }
 /* keyboard skip sits where the camera tag was; the tag drops below it (touch already uses 56px) */
 button.t-skip-kb { position: absolute; top: 12px; right: 20px; z-index: 5; display: none; pointer-events: auto; cursor: pointer; color: inherit; font: inherit; }
@@ -760,9 +769,12 @@ body.touchmode .coach-cue { bottom: 44px; font-size: 14px; padding: 8px 14px; }
 .callout-sub { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.9; }
 .callout.pop .callout-bubble { animation: calloutPop 0.38s cubic-bezier(.2,1.6,.35,1); }
 @keyframes calloutPop { 0% { transform: scale(0.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-body.touchmode .callout-word { font-size: 22px; }
-body.touchmode .c-in .callout-word { font-size: 17px; }
-body.touchmode .callout-sub { font-size: 9px; }
+/* a phone's popups are smaller (2026-11-22): in a rally they sit over the play */
+body.touchmode .callout-who { font-size: 8px; }
+body.touchmode .callout-word { font-size: 17px; }
+body.touchmode .c-in .callout-word { font-size: 14px; }
+body.touchmode .callout-sub { font-size: 8px; }
+body.touchmode .hud-grade.aside .hud-grade-text { font-size: 28px; }
 
 /* ------------------------------------------------------------------ touch controls */
 .touch { position: absolute; inset: 0; z-index: 15; touch-action: none; user-select: none; -webkit-user-select: none;
@@ -773,17 +785,45 @@ body.touchmode .hud-cam { top: 56px; }
 body.touchmode .hud.tutoring .hud-cam { top: 56px; }
 body.touchmode .hud.tutoring button.t-skip-kb { display: none; }
 body.touchmode .hud-title { font-size: 11px; }
-body.touchmode .hud-score { font-size: 15px; }
-body.touchmode .hud-msg { top: 22%; font-size: 12px; max-width: 56vw; white-space: normal; line-height: 1.4; }
+/* a phone keeps the court clear (2026-11-22): no title, speed, streak or camera name; the calls are the top bar's chips;
+   Mini Rally's score is the bar's bare score; the set bar keeps its zones, not the checklist */
+body.touchmode .hud-title, body.touchmode .hud-bl, body.touchmode .hud-streak, body.touchmode .hud-cam,
+body.touchmode .hud-top.short, body.touchmode .sb-pips { display: none; }
+body.touchmode .call-sheet, body.touchmode .route-strip { display: none !important; }
+/* the drill's score sentence (`0 pts · rep 0 · set 1: High ball`) is too long for the bar: a small line under it, centred,
+   so it never sits on the chips (the bar's own score is the bare `0 : 3` where a drill gives one) */
+body.touchmode .hud-top { top: calc(50px + env(safe-area-inset-top, 0px)); max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.touchmode .hud-score { font-size: 12px; font-weight: 700; opacity: 0.8; margin-top: 0; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
+/* a phone's replay tag sits at the bottom centre, between the stick and the buttons: the top is the bar and the score line */
+body.touchmode .replay-tag { top: auto; bottom: calc(9vh + 10px); left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 14px; }
+/* a short screen stacks what a touch says, none over another: the drill's message under the score line, the grade a little
+   lower and smaller, the banner one line below the grade (on a 375 px tall phone they used to sit on each other) */
+body.touchmode .hud-msg { top: calc(72px + env(safe-area-inset-top, 0px)); font-size: 12px; max-width: 64vw; white-space: normal; line-height: 1.4; }
+/* just under the top bar's words, inside its shade: an outside's routes reach the middle of a 667 px wide bar, so it
+   cannot sit level with them; the far server's toss flies well below this line */
+body.touchmode .hud-topcall { top: calc(46px + env(safe-area-inset-top, 0px)); font-size: 12px; }
+body.touchmode .hud-grade { top: 37%; }
+body.touchmode .hud-grade-text { font-size: 36px; }
+body.touchmode .hud-grade-sub { font-size: 12px; margin-top: 4px; }
+body.touchmode .hud-banner { top: 55%; font-size: 15px; letter-spacing: 0.08em; white-space: nowrap; }
 body.touchmode .call-sheet { bottom: auto; top: calc(56px + env(safe-area-inset-top, 0px)); font-size: 11px; }
 /* touch: the route strip at the top like the call strip; the panel a sheet across the top (court beside the list), the strip hidden under it */
 body.touchmode .route-strip { bottom: auto; top: calc(56px + env(safe-area-inset-top, 0px)); font-size: 11px; gap: 8px; }
 body.touchmode .route-strip .rs-c, body.touchmode .route-panel .rs-c { display: none; }
 body.touchmode .route-strip.panel-open { display: none !important; }
-/* between the stick and the thumb buttons, so neither is covered */
-body.touchmode .route-panel { left: 50%; top: calc(52px + env(safe-area-inset-top, 0px)); width: min(600px, calc(100vw - 360px)); max-height: calc(100% - 150px);
-  transform: translate(-50%, -10px); display: grid; grid-template-columns: minmax(180px, 230px) 1fr; column-gap: 12px; align-items: start; }
-body.touchmode .route-panel.open { transform: translate(-50%, 0); }
+/* from the left edge to the thumb buttons (their cluster is 240 px wide; a libero's big PASS reaches 203 px in), from under
+   the bar to near the bottom, so the court sketch and the whole list fit beside each other. Between the stick and the
+   buttons it was 307 px wide on a 667 px phone and cut the list off. It covers the stick's home while it is open: a
+   finger on it scrolls it or taps a route (the touch controls hand it over, `TouchSheet`), and ROUTES closes it */
+body.touchmode .route-panel { left: calc(12px + env(safe-area-inset-left, 0px)); top: calc(52px + env(safe-area-inset-top, 0px));
+  width: min(600px, calc(100vw - 222px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-height: calc(100% - 64px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); background: rgb(8,10,16);
+  transform: translateY(-10px); display: grid; grid-template-columns: minmax(150px, 230px) 1fr; column-gap: 12px; align-items: start; }
+body.touchmode .route-panel.open { transform: none; }
+/* opaque: the score line and the drill's message under it showed through. While it is open the stick's resting ring (the
+   touch layer, over the HUD) stays out of it, and so does the score line, which is wider than the panel and stuck out */
+body.touchmode:has(.route-panel.open) .t-stick:not(.live) { opacity: 0; }
+body.touchmode .hud:has(.route-panel.open) .hud-top { visibility: hidden; }
 body.touchmode .rp-head { grid-column: 1 / -1; }
 body.touchmode .rp-court { grid-row: 2 / span 2; }
 body.touchmode .rp-play { margin-top: 9px; }
@@ -795,8 +835,9 @@ body.touchmode .hud-bl { left: 16px; bottom: auto; top: 90px; }
 body.touchmode .hud-bl .hud-speed-val { font-size: 30px; }
 body.touchmode .hud-streak { right: 16px; bottom: auto; top: 90px; }
 body.touchmode .hud-streak-val { font-size: 28px; }
-/* joystick: a faint home marker, the live stick floats to the thumb */
-.t-stick { position: absolute; left: calc(110px + var(--sa-l)); top: calc(100% - 120px - var(--sa-b)); width: 0; height: 0; opacity: 0.35; transition: opacity 0.15s; }
+/* joystick: a faint home marker in the bottom-left corner (the left thumb's resting place; the player asked for it
+   lower, 2026-11-22), the live stick floats to the thumb */
+.t-stick { position: absolute; left: calc(92px + var(--sa-l)); top: calc(100% - 84px - var(--sa-b)); width: 0; height: 0; opacity: 0.35; transition: opacity 0.15s; }
 .t-stick.live { opacity: 1; }
 .t-stick-ring { position: absolute; left: -58px; top: -58px; width: 116px; height: 116px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.05); box-shadow: 0 0 0 1px rgba(0,0,0,0.25); transition: border-color 0.12s, box-shadow 0.12s; }
@@ -806,7 +847,8 @@ body.touchmode .hud-streak-val { font-size: 28px; }
 .t-knob { position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.75);
   box-shadow: 0 2px 10px rgba(0,0,0,0.45), inset 0 0 0 2px rgba(0,0,0,0.12); }
 .t-stick.run .t-knob { background: var(--gold); }
-/* hold buttons */
+/* hold buttons, low in the right-hand corner where the right thumb rests (moved 18 px lower on the player's ask, 2026-11-22;
+   the gaps between them are as before) */
 .t-cluster { position: absolute; right: var(--sa-r); bottom: var(--sa-b); width: 240px; height: 240px; }
 .t-btn { position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   background: rgba(10,12,20,0.5); border: 2px solid rgba(255,255,255,0.45); box-shadow: 0 2px 12px rgba(0,0,0,0.4);
@@ -814,15 +856,15 @@ body.touchmode .hud-streak-val { font-size: 28px; }
   transition: transform 0.08s, background 0.08s, border-color 0.08s; }
 .t-btn.held { transform: scale(0.94); background: rgba(255,210,63,0.35); border-color: var(--gold); }
 .t-btn.dim { opacity: 0.38; }
-.t-hit { width: 92px; height: 92px; right: 28px; bottom: 28px; font-size: 16px; border-color: rgba(255,255,255,0.7); }
+.t-hit { width: 92px; height: 92px; right: 28px; bottom: 10px; font-size: 16px; border-color: rgba(255,255,255,0.7); }
 .t-hit.ready { border-color: var(--gold); box-shadow: 0 0 22px rgba(255,200,60,0.6); animation: hitReady 0.7s ease-in-out infinite alternate; }
 body.collar .t-hit.ready { animation: none; box-shadow: none; border-color: rgba(255,255,255,0.7); }
 body.collar .t-hit.sweet { border-color: var(--gold); box-shadow: 0 0 18px rgba(255,210,63,0.9); animation: sweetPulse 0.5s ease-in-out infinite alternate; }
 @keyframes hitReady { from { transform: scale(1); } to { transform: scale(1.06); } }
-.t-jump { width: 80px; height: 80px; right: 136px; bottom: 36px; }
-.t-block { width: 70px; height: 70px; right: 40px; bottom: 138px; font-size: 11px; }
-.t-pass { width: 64px; height: 64px; right: 128px; bottom: 134px; font-size: 11px; }
-.t-toss { width: 56px; height: 56px; right: 232px; bottom: 44px; font-size: 10px; }
+.t-jump { width: 80px; height: 80px; right: 136px; bottom: 18px; }
+.t-block { width: 70px; height: 70px; right: 40px; bottom: 120px; font-size: 11px; }
+.t-pass { width: 64px; height: 64px; right: 128px; bottom: 116px; font-size: 11px; }
+.t-toss { width: 56px; height: 56px; right: 232px; bottom: 26px; font-size: 10px; }
 .t-label { position: relative; z-index: 1; }
 /* the wind-up charge and jump load drawn around the thumb */
 .t-ring { position: absolute; inset: -9px; border-radius: 50%; opacity: 0; transition: opacity 0.1s; --p: 0%;
@@ -838,6 +880,30 @@ body.collar .t-hit.sweet { border-color: var(--gold); box-shadow: 0 0 18px rgba(
 .t-chips { position: absolute; top: calc(10px + var(--sa-t)); left: calc(12px + var(--sa-l)); display: flex; gap: 6px; align-items: center; }
 .t-chip { min-width: 32px; padding: 0 8px; }
 .t-chip-l { font-size: 9px; letter-spacing: 0.2em; opacity: 0.6; font-weight: 800; margin-right: 2px; }
+/* the top bar (2026-11-22): one soft shade along the edge; the chips are words on it, the call running underlined in gold */
+.t-band { position: absolute; left: 0; right: 0; top: 0; height: calc(52px + var(--sa-t)); pointer-events: none;
+  background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0)); }
+.t-chips { gap: 2px; }
+.t-chips .t-chip { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 0 8px; opacity: 0.6; white-space: nowrap; }
+.t-chips .t-chip em { font-style: normal; color: var(--c, var(--gold)); margin-left: 3px; }
+.t-chips .t-chip em.solo { margin-left: 0; }
+.t-chips .t-chip.on { opacity: 1; border-bottom-color: var(--c, var(--gold)); }
+.t-chips .t-chip.off { opacity: 0.3; text-decoration: line-through; }
+.t-chips .t-chip.held { background: rgba(255,210,63,0.25); }
+.t-score { display: flex; align-items: center; padding: 0 6px; font-size: 17px; font-weight: 900; letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+.t-score:empty { display: none; }
+/* who serves (Mini Rally): a gold dot on the serving side of the score */
+.t-score .t-serve { display: inline-block; width: 8px; height: 8px; margin: 0 2px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 6px rgba(255,200,60,0.6); }
+/* the buttons stay where they are; your position sizes them: your job is the big one */
+.touch[data-pos='S'] .t-block { scale: 1.3; }
+.touch[data-pos='S'] .t-hit { scale: 0.75; }
+.touch[data-pos='S'] .t-jump, .touch[data-pos='S'] .t-pass { scale: 0.9; }
+.touch[data-pos='MB'] .t-block { scale: 1.2; }
+.touch[data-pos='MB'] .t-pass { scale: 0.8; }
+.touch[data-pos='L'] .t-pass { scale: 1.35; }
+.touch[data-pos='L'] .t-hit { scale: 0.7; }
+.touch[data-pos='L'] .t-jump { scale: 0.75; }
 .t-rotate { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 18px; border-radius: 10px;
   background: rgba(8,10,16,0.8); border: 1px solid rgba(255,255,255,0.2); font-weight: 800; letter-spacing: 0.1em; font-size: 14px; text-align: center; }
 @media (orientation: portrait) { body.touchmode .t-rotate { display: block; } body.touchmode .hud-hint { display: none; } }

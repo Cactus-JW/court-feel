@@ -146,6 +146,29 @@ export class Game implements AiHost {
   get wheelOpen(): boolean {
     return this.wheel.open;
   }
+
+  /** a finger on the open play wheel (or holding PLAY) is at (x, y): the wheel points at the play under it (-1: none) */
+  pointWheel(x: number, y: number): number {
+    return this.wheel.open ? this.wheel.pointAt(x, y) : -1;
+  }
+
+  /** is (x, y) on the open play wheel? */
+  wheelAt(x: number, y: number): boolean {
+    return this.wheel.contains(x, y);
+  }
+
+  /** the finger pointing at the wheel was cancelled: point at nothing */
+  unpointWheel(): void {
+    this.wheel.unpoint();
+  }
+
+  /** the touch controls are on: the wheel's centre tells a finger how to call a play */
+  get wheelTouch(): boolean {
+    return this.wheel.touch;
+  }
+  set wheelTouch(on: boolean) {
+    this.wheel.touch = on;
+  }
   private setSpot!: SetSpot;
   private spotP = { x: 0, y: 0, z: 0 };
   /** seconds the play holds still after a clean hit: the effects ask for it, the pace spends it */
@@ -511,6 +534,7 @@ export class Game implements AiHost {
     this.mode = mode;
     this.hud.setStreak(0);
     this.hud.setSpeed(null);
+    this.hud.topCall(null);
     mode.setup();
     this.fx.onModeStart();
     this.inMenu = false;
@@ -594,7 +618,6 @@ export class Game implements AiHost {
   // ------------------------------------------------------------ settings
   applySettings(): void {
     const s = this.settings;
-    this.rig.baseFov = s.fov;
     this.rig.shakeScale = s.shake;
     if (s.venue !== this.venueSetting) {
       this.venueSetting = s.venue;
@@ -609,7 +632,7 @@ export class Game implements AiHost {
     this.ball.showMarker = s.landingMarker;
     this.rig.blockers = this.arena.cameraBlockers;
     if (!this.inMenu) this.rig.setMode(s.firstPerson ? 'fp' : 'tp');
-    this.hud.showHints = s.showHints;
+    this.hud.showHints = s.keyHints;
     this.fx?.audio.setVolume(s.volume);
     this.applyUserBody();
     this.persist(s);
@@ -657,7 +680,7 @@ export class Game implements AiHost {
         let sub =
           ev.grade === 'Miss' || set ? ev.note : `${kmh.toFixed(0)} km/h${pw}${ev.note ? ' · ' + ev.note : ''}${ev.tip ? ' · tip' : ''}`;
         if (this.tutorial.active) sub = this.tutorial.gradeSub(ev.grade, sub);
-        this.hud.showGrade(ev.grade, sub, set && ev.perfect);
+        this.hud.showGrade(ev.grade, sub, set && ev.perfect, ev.kind === 'pass' || ev.kind === 'dig');
       }
       if (ev.speed > 0) this.hud.setSpeed(ev.speed * 3.6);
     }
@@ -1138,6 +1161,8 @@ export class Game implements AiHost {
     f.height = me.height;
     f.side = me.side;
     this.rig.frozen = this.hitStop > 0;
+    // a phone has its own field of view (the touch controls can come on mid-game, at the first touch)
+    this.rig.baseFov = this.input.touch ? this.settings.touchFov : this.settings.fov;
     this.rig.update(realDt, this.inMenu ? null : f);
     const cues = this.settings.setRing && this.ball.active && this.ball.visible && !this.inMenu;
     this.setRing.update(this.setPrev, this.ball.rpos, tr, this.rig.camera, cues);
