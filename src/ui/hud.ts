@@ -15,8 +15,10 @@ const GRADE_CLASS: Record<Grade, string> = {
 /** hint `<kbd>` names → touch button names. Combined approach keys first. */
 export function translateKeyMarkup(t: string, m: Record<string, string>): string {
   t = t.replace(/<kbd>Shift<\/kbd>\+<kbd>W<\/kbd>/g, `<kbd>${m['Shift+W'] ?? 'RUN'}</kbd>`);
-  // (a key range named as one button: the setter's 1-4 is the SET TO chips)
+  // (a key range named as one button: the setter's 1-4 is the hitter chips)
   t = t.replace(/<kbd>1<\/kbd>-<kbd>4<\/kbd>/g, (all) => (m['1-4'] ? `<kbd>${m['1-4']}</kbd>` : all));
+  // a key with no button is left out with its words (the camera on a phone: the pause menu's View)
+  if (!('V' in m)) t = t.replace(/ · <kbd>V<\/kbd> camera/g, '');
   t = t.replace(/<kbd>([^<]*)<\/kbd>/g, (all, k: string) => (k in m ? `<kbd>${m[k]}</kbd>` : all));
   // a setter's chip names itself: "DUMP dump", "OH OH" read once
   t = t.replace(/(<kbd>(OH|MB|OPP|PIPE|DUMP)<\/kbd>) \2\b/gi, '$1');

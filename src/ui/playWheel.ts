@@ -166,6 +166,13 @@ export class PlayWheel {
     return this.sel;
   }
 
+  /** the finger that pointed is gone without a call: no pull, nothing picked */
+  unpoint(): void {
+    this.x = this.y = 0;
+    this.sel = -1;
+    this.draw();
+  }
+
   /** is the screen point (x, y) on the open wheel (inside its outer edge)? */
   contains(x: number, y: number): boolean {
     const v = this.open ? this.local(x, y) : null;

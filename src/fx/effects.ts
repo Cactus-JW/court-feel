@@ -188,7 +188,9 @@ export class Effects {
     this.letterbox.className = 'letterbox';
     this.replayTag = document.createElement('div');
     this.replayTag.className = 'replay-tag';
-    this.replayTag.innerHTML = '<span>●</span> REPLAY <small>any key to skip</small>';
+    // (a phone has no keys: any touch ends the replay)
+    this.replayTag.innerHTML =
+      '<span>●</span> REPLAY <small class="only-kb">any key to skip</small><small class="only-tc">tap to skip</small>';
     parent.append(this.letterbox, this.replayTag);
 
     this.replay.onEvent = (e) => this.playEvent(e, true);

@@ -67,6 +67,11 @@ body.touchmode .play-wheel.aside { left: 50%; top: calc(48px + env(safe-area-ins
 .pw-run { stroke-width: 1.8; stroke-linecap: round; }
 .pw-idea { font-size: 10px; line-height: 1.25; opacity: 0.8; max-width: 128px; }
 body.touchmode .play-wheel .pw-slice { pointer-events: auto; }
+/* a phone held sideways is shorter than the wheel (384 px on a 375 px screen): it opens below the top bar, scaled to fit
+   between the bar and the bottom edge (the touch layer reads it by its drawn box, so a finger still points where it lands) */
+@media (max-height: 480px) { body.touchmode .play-wheel:not(.aside) { top: calc(50% + 26px); transform: translate(-50%, -50%) scale(0.86); } }
+@media (max-height: 400px) { body.touchmode .play-wheel:not(.aside) { transform: translate(-50%, -50%) scale(0.8); } }
+@media (max-height: 340px) { body.touchmode .play-wheel:not(.aside) { transform: translate(-50%, -50%) scale(0.68); } }
 /* first person: where to stand, on a dial under the crosshair. The mark is your feet, up is where you look, the ring is the spot */
 .set-radar { position: absolute; left: 50%; top: 50%; display: none; transform: translateX(-50%); border-radius: 50%; pointer-events: none;
   background: rgba(8,10,16,0.38); box-shadow: 0 0 0 1px rgba(255,255,255,0.3); }
@@ -778,8 +783,19 @@ body.touchmode .hud-title { font-size: 11px; }
 body.touchmode .hud-title, body.touchmode .hud-bl, body.touchmode .hud-streak, body.touchmode .hud-cam,
 body.touchmode .hud-top.short, body.touchmode .sb-pips { display: none; }
 body.touchmode .call-sheet, body.touchmode .route-strip { display: none !important; }
-body.touchmode .hud-score { font-size: 15px; }
-body.touchmode .hud-msg { top: 22%; font-size: 12px; max-width: 56vw; white-space: normal; line-height: 1.4; }
+/* the drill's score sentence (`0 pts · rep 0 · set 1: High ball`) is too long for the bar: a small line under it, centred,
+   so it never sits on the chips (the bar's own score is the bare `0 : 3` where a drill gives one) */
+body.touchmode .hud-top { top: calc(50px + env(safe-area-inset-top, 0px)); max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.touchmode .hud-score { font-size: 12px; font-weight: 700; opacity: 0.8; margin-top: 0; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
+/* a phone's replay tag sits at the bottom centre, between the stick and the buttons: the top is the bar and the score line */
+body.touchmode .replay-tag { top: auto; bottom: calc(9vh + 10px); left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 14px; }
+/* a short screen stacks what a touch says, none over another: the drill's message under the score line, the grade a little
+   lower and smaller, the banner one line below the grade (on a 375 px tall phone they used to sit on each other) */
+body.touchmode .hud-msg { top: calc(72px + env(safe-area-inset-top, 0px)); font-size: 12px; max-width: 64vw; white-space: normal; line-height: 1.4; }
+body.touchmode .hud-grade { top: 37%; }
+body.touchmode .hud-grade-text { font-size: 44px; }
+body.touchmode .hud-grade-sub { font-size: 13px; margin-top: 4px; }
+body.touchmode .hud-banner { top: 55%; font-size: 15px; letter-spacing: 0.08em; white-space: nowrap; }
 body.touchmode .call-sheet { bottom: auto; top: calc(56px + env(safe-area-inset-top, 0px)); font-size: 11px; }
 /* touch: the route strip at the top like the call strip; the panel a sheet across the top (court beside the list), the strip hidden under it */
 body.touchmode .route-strip { bottom: auto; top: calc(56px + env(safe-area-inset-top, 0px)); font-size: 11px; gap: 8px; }

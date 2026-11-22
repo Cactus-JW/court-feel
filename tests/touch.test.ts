@@ -7,6 +7,7 @@ import { Athlete } from '../src/game/athlete';
 import { readIntent } from '../src/game/intent';
 import { UserController } from '../src/game/userController';
 import { Hud } from '../src/ui/hud';
+import { WheelFingers, type WheelHost } from '../src/ui/touchControls';
 
 const DT = 1 / SIM.hz;
 
@@ -306,5 +307,72 @@ describe('touch: a drill says buttons, not keys', () => {
     expect(Hud.translateText('Play your position · win the point · 1-4 call your route · C see them')).toBe(
       'Play your position · win the point · the chips call your route · ROUTES see them',
     );
+  });
+});
+
+/** a wheel 200 px across around (400, 200), slices by direction like the real one (0 up, 1 right, 2 down, 3 left) */
+function wheelHost(): WheelHost & { sel: number } {
+  const h = {
+    sel: -1,
+    wheelAt: (x: number, y: number) => Math.hypot(x - 400, y - 200) <= 100,
+    pointWheel(x: number, y: number) {
+      const dx = x - 400;
+      const dy = y - 200;
+      if (Math.hypot(dx, dy) < 30) return (h.sel = -1);
+      const turn = Math.atan2(dx, -dy) / (2 * Math.PI);
+      return (h.sel = ((Math.round(turn * 4) % 4) + 4) % 4);
+    },
+    unpointWheel() {
+      h.sel = -1;
+    },
+  };
+  return h;
+}
+
+describe('touch: pointing at a play on the wheel', () => {
+  it('a PLAY tap that wobbles a pixel or two points at nothing (the wheel stays open for the second touch)', () => {
+    const h = wheelHost();
+    const f = new WheelFingers(h);
+    // the PLAY chip is in the top bar, up and left of the wheel
+    f.holdPlay(1, 250, 14);
+    f.move(1, 252, 15);
+    f.move(1, 251, 13);
+    expect(f.up(1, 251, 13, false)).toBe(-1);
+    expect(h.sel).toBe(-1);
+  });
+
+  it('a PLAY finger that slides onto the wheel points at the play under it, and keeps pointing past the edge', () => {
+    const h = wheelHost();
+    const f = new WheelFingers(h);
+    f.holdPlay(1, 250, 14);
+    f.move(1, 300, 120); // still off the wheel
+    expect(h.sel).toBe(-1);
+    f.move(1, 470, 200); // on the right slice
+    expect(h.sel).toBe(1);
+    f.move(1, 400, 330); // slid off the bottom edge: still pointing, down
+    expect(h.sel).toBe(2);
+  });
+
+  it('a finger that comes down on the open wheel points, and lifting it calls the play under it', () => {
+    const h = wheelHost();
+    const f = new WheelFingers(h);
+    expect(f.down(2, 400, 120)).toBe(true);
+    expect(f.move(2, 330, 200)).toBe(true);
+    expect(f.up(2, 330, 200, false)).toBe(3);
+    // off the wheel: not the wheel's
+    expect(f.down(3, 40, 300)).toBe(false);
+  });
+
+  it('a touch the phone cancels calls nothing and leaves nothing pointed at', () => {
+    const h = wheelHost();
+    const f = new WheelFingers(h);
+    f.down(2, 400, 120);
+    expect(f.up(2, 400, 120, true)).toBe(-1);
+    expect(h.sel).toBe(-1);
+    f.holdPlay(1, 250, 14);
+    f.move(1, 470, 200);
+    expect(h.sel).toBe(1);
+    f.up(1, 470, 200, true);
+    expect(h.sel).toBe(-1);
   });
 });

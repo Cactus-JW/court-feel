@@ -156,6 +156,11 @@ export class Game implements AiHost {
   wheelAt(x: number, y: number): boolean {
     return this.wheel.contains(x, y);
   }
+
+  /** the finger pointing at the wheel was cancelled: point at nothing */
+  unpointWheel(): void {
+    this.wheel.unpoint();
+  }
   private setSpot!: SetSpot;
   private spotP = { x: 0, y: 0, z: 0 };
   /** seconds the play holds still after a clean hit: the effects ask for it, the pace spends it */

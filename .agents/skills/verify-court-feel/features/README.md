@@ -66,7 +66,7 @@ These are user-facing and have no feature file. A proof that touches one must sa
 - Setter Drill: picking a hitter with `1` to `4` (the same key again steps their call), the catch and the bar (right mouse), the play wheel (`C`), the front row and the dump (`G`, `5`).
 - Plays (the start screen's top bar): the play designer, a saved play on the wheel and the call strip.
 - The set settings in Settings → Assists → Setting (difficulty, ring and bar, set slow-mo, auto jump set, set aim assist, arc and marker, hitter spots, keep my pick).
-- The setter's touch chips (`SET TO`, `DUMP`, `PLAY`, `ROW`, `HELP`).
+- The setter's touch chips (`OH`, `MB`, `OPP`, `PIPE`, `DUMP`, `PLAY`, `ROW`, `HELP`): `PLAY` by touch has a recipe in [touch controls](./touch-controls.md).
 - Crash screen and error reports: `RELOAD`, `Copy details`, the lost-graphics-context message.
 - Debug overlay (`F3`).
 - Keyboard-only menus (Tab order, the arrow keys between Settings tabs, focus returning to the button that opened a sheet) and reduced motion.

@@ -32,7 +32,7 @@ export const TOUCH_KEY_LABELS: Record<string, string> = {
   Space: 'JUMP',
   E: 'PASS',
   Q: 'TOSS',
-  V: 'CAM',
+  // (no V: the camera is the pause menu's View on a phone, and a hint leaves "V camera" out)
   N: 'RESET',
   R: 'REPLAY',
   B: 'VS BLOCK',
@@ -49,10 +49,10 @@ export const TOUCH_KEY_LABELS: Record<string, string> = {
   'Shift+W': 'stick out',
 };
 
-/** while you set, the number keys are the SET TO chips (a hint's 1-4 is the chip row) */
+/** while you set, the number keys are the hitter chips (a hint's 1-4 is the chip row, OH to PIPE) */
 export const SETTER_KEY_LABELS: Record<string, string> = {
   ...TOUCH_KEY_LABELS,
-  '1-4': 'SET TO',
+  '1-4': 'OH–PIPE',
   '1': 'OH',
   '2': 'MB',
   '3': 'OPP',
@@ -111,6 +111,74 @@ export interface TouchHost {
   pointWheel(x: number, y: number): number;
   /** is (x, y) on the open play wheel? */
   wheelAt(x: number, y: number): boolean;
+  /** the finger pointing at the wheel is gone without a call (cancelled): point at nothing */
+  unpointWheel(): void;
+}
+
+/** what `WheelFingers` needs of the game: the open play wheel */
+export type WheelHost = Pick<TouchHost, 'pointWheel' | 'wheelAt' | 'unpointWheel'>;
+
+/**
+ * The fingers that point at a play on the open wheel (the wheel sits under the touch layer, so its
+ * own taps never fire). A finger that comes down on the wheel points at the play under it, and
+ * letting go calls it. A finger holding PLAY points only once it has slid onto the wheel, past
+ * `TOUCH.lookDeadZone` from where it came down: a real tap wobbles a pixel or two, and the PLAY
+ * chip is outside the wheel, so pointing from its first move would pick the slice towards the chip,
+ * and letting go of PLAY would call it before the second touch. A cancelled touch calls nothing and
+ * leaves nothing pointed at (the wheel also calls the pointed play on a HIT press).
+ */
+export class WheelFingers {
+  /** fingers that came down on the open wheel */
+  private onWheel = new Set<number>();
+  /** fingers holding PLAY: where they came down, and whether they point at the wheel yet */
+  private play = new Map<number, { x0: number; y0: number; pointing: boolean }>();
+
+  constructor(private host: WheelHost) {}
+
+  /** a finger came down at (x, y): true when it is on the open wheel (then it is the wheel's, not the pad's) */
+  down(id: number, x: number, y: number): boolean {
+    if (!this.host.wheelAt(x, y)) return false;
+    this.onWheel.add(id);
+    this.host.pointWheel(x, y);
+    return true;
+  }
+
+  /** the pad took the finger that came down at (x, y) as PLAY (letting go is C's release: the game calls what it points at) */
+  holdPlay(id: number, x: number, y: number): void {
+    this.play.set(id, { x0: x, y0: y, pointing: false });
+  }
+
+  /** a finger moved: true when it is the wheel's (the pad does not see it) */
+  move(id: number, x: number, y: number): boolean {
+    if (this.onWheel.has(id)) {
+      this.host.pointWheel(x, y);
+      return true;
+    }
+    const p = this.play.get(id);
+    if (p && !p.pointing) p.pointing = Math.hypot(x - p.x0, y - p.y0) > TOUCH.lookDeadZone && this.host.wheelAt(x, y);
+    if (p?.pointing) this.host.pointWheel(x, y);
+    return false;
+  }
+
+  /** a finger lifted (`cancelled`: the phone took it): the play a wheel finger calls, -1 for none */
+  up(id: number, x: number, y: number, cancelled: boolean): number {
+    const held = this.play.delete(id);
+    if (this.onWheel.delete(id)) {
+      if (!cancelled) return this.host.pointWheel(x, y);
+      this.host.unpointWheel();
+    } else if (held && cancelled) this.host.unpointWheel();
+    return -1;
+  }
+
+  /** is this finger the wheel's (it came down on it)? */
+  has(id: number): boolean {
+    return this.onWheel.has(id);
+  }
+
+  clear(): void {
+    this.onWheel.clear();
+    this.play.clear();
+  }
 }
 
 /** a chip in the top bar that is a call: a hitter you can set (with their call), or one of your routes */
@@ -152,8 +220,8 @@ export class TouchControls {
   private replayBtn: HTMLElement;
   private lastCharge = -1;
   private visible = false;
-  /** fingers that came down on the open play wheel: they point at a play, and letting go calls it */
-  private wheelTouch = new Set<number>();
+  /** fingers that point at a play on the open wheel: on it, or holding PLAY */
+  private wheel: WheelFingers;
 
   constructor(
     parent: HTMLElement,
@@ -161,6 +229,7 @@ export class TouchControls {
     private cb: { pause(): void },
   ) {
     this.root = el('div', 'touch', parent);
+    this.wheel = new WheelFingers(g);
     this.root.style.display = 'none';
     // resting stick hint (the live stick floats under the thumb)
     this.stickBase = el('div', 't-stick', this.root);
@@ -247,7 +316,7 @@ export class TouchControls {
     this.root.style.display = v ? 'block' : 'none';
     if (!v) {
       this.pad.releaseAll();
-      this.wheelTouch.clear();
+      this.wheel.clear();
     }
   }
 
@@ -302,41 +371,31 @@ export class TouchControls {
     } catch {
       /* already captured */
     }
-    // the open play wheel is under this layer: a finger on it points at a play, not the camera
-    if (this.g.wheelAt(e.clientX, e.clientY)) {
-      this.wheelTouch.add(e.pointerId);
-      this.g.pointWheel(e.clientX, e.clientY);
-      return;
-    }
+    // the open play wheel is under this layer: a finger on it points at a play, not the camera (a button over it stays a button)
+    if (!this.buttonAt(e.clientX, e.clientY) && this.wheel.down(e.pointerId, e.clientX, e.clientY)) return;
     this.pad.begin(e.pointerId, e.clientX, e.clientY, performance.now());
+    if (this.pad.pointers.get(e.pointerId)?.button === 'play') this.wheel.holdPlay(e.pointerId, e.clientX, e.clientY);
   }
 
   private onMove(e: PointerEvent): void {
     if (!this.enabled) return;
-    if (this.wheelTouch.has(e.pointerId)) {
-      this.g.pointWheel(e.clientX, e.clientY);
-      return;
-    }
+    if (this.wheel.move(e.pointerId, e.clientX, e.clientY)) return;
     // coalesced events keep a fast thumb drag smooth
     const evs: PointerEvent[] = e.getCoalescedEvents?.() ?? [];
     if (evs.length) for (const c of evs) this.pad.move(e.pointerId, c.clientX, c.clientY);
     else this.pad.move(e.pointerId, e.clientX, e.clientY);
-    // PLAY held: slide onto a play, and letting go (C released) calls it
-    if (this.pad.pointers.get(e.pointerId)?.button === 'play') this.g.pointWheel(e.clientX, e.clientY);
   }
 
   private onUp(e: PointerEvent): void {
     if (!this.enabled) return;
-    if (this.wheelTouch.delete(e.pointerId)) {
-      // let go on a play: its number, through Input like every control (a cancelled touch calls nothing)
-      const i = e.type === 'pointerup' ? this.g.pointWheel(e.clientX, e.clientY) : -1;
-      if (i >= 0) {
-        this.g.input.down(`Digit${i + 1}`);
-        this.g.input.up(`Digit${i + 1}`);
-      }
-      return;
+    const onWheel = this.wheel.has(e.pointerId);
+    // let go on a play: its number, through Input like every control (a cancelled touch calls nothing)
+    const i = this.wheel.up(e.pointerId, e.clientX, e.clientY, e.type === 'pointercancel');
+    if (i >= 0) {
+      this.g.input.down(`Digit${i + 1}`);
+      this.g.input.up(`Digit${i + 1}`);
     }
-    this.pad.end(e.pointerId);
+    if (!onWheel) this.pad.end(e.pointerId);
   }
 
   private hitTap(node: HTMLElement, e: PointerEvent): boolean {
@@ -404,8 +463,9 @@ export class TouchControls {
     if (this.resetBtn.style.display !== resetD) this.resetBtn.style.display = resetD;
     const score = g.hud.scoreShort;
     if (this.scoreEl.textContent !== score) this.scoreEl.textContent = score;
-    // the buttons stay where they are; your position sizes them (styles.css)
-    if (this.root.dataset.pos !== g.position) this.root.dataset.pos = g.position;
+    // the buttons stay where they are; your job sizes them (styles.css). The Setter Drill is a setter's, whatever position you picked
+    const pos = g.modeId === 'setter' ? 'S' : g.position;
+    if (this.root.dataset.pos !== pos) this.root.dataset.pos = pos;
     // drill context: set calls / feed types / toss
     // (the setter's chips follow who they can pick: the front row's dump comes and goes with ROW)
     const picks = g.tutorial.active ? null : (g.mode?.setterPicks?.() ?? null);
