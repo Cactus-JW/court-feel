@@ -113,6 +113,8 @@ export interface TouchHost {
   wheelAt(x: number, y: number): boolean;
   /** the finger pointing at the wheel is gone without a call (cancelled): point at nothing */
   unpointWheel(): void;
+  /** the touch controls are on: the play wheel's centre says how a finger calls a play (set by `setEnabled`) */
+  wheelTouch: boolean;
 }
 
 /** what `WheelFingers` needs of the game: the open play wheel */
@@ -181,6 +183,67 @@ export class WheelFingers {
   }
 }
 
+/**
+ * A panel over the court that a finger reads (the route panel). It sits under the touch layer, which
+ * takes every touch, so its own scrolling never sees a finger: the controls scroll it and tap it.
+ */
+export interface TouchSheet {
+  /** is (x, y) on the open panel? */
+  at(x: number, y: number): boolean;
+  /** scroll the panel by `dy` px (positive: further down the list) */
+  scrollBy(dy: number): void;
+  /** the item under (x, y) that a tap calls (its number key less one), -1 for none */
+  itemAt(x: number, y: number): number;
+}
+
+/**
+ * The fingers on an open panel (`TouchSheet`). A drag past `TOUCH.lookDeadZone` scrolls it, the list
+ * following the finger as a phone's lists do; a tap that does not move calls the item under it. A
+ * finger on the panel is the panel's: it neither turns the camera nor moves the stick.
+ */
+export class SheetFingers {
+  private fingers = new Map<number, { y: number; x0: number; y0: number; dragging: boolean }>();
+
+  constructor(private sheet: () => TouchSheet | null) {}
+
+  /** a finger came down at (x, y): true when it is on the open panel (then it is the panel's) */
+  down(id: number, x: number, y: number): boolean {
+    if (!this.sheet()?.at(x, y)) return false;
+    this.fingers.set(id, { y, x0: x, y0: y, dragging: false });
+    return true;
+  }
+
+  /** a finger moved: true when it is the panel's */
+  move(id: number, x: number, y: number): boolean {
+    const f = this.fingers.get(id);
+    if (!f) return false;
+    if (!f.dragging) f.dragging = Math.hypot(x - f.x0, y - f.y0) > TOUCH.lookDeadZone;
+    if (f.dragging) {
+      this.sheet()?.scrollBy(f.y - y);
+      f.y = y;
+    }
+    return true;
+  }
+
+  /** a finger lifted: the item a tap calls, -1 for none (a drag or a cancelled touch calls nothing) */
+  up(id: number, x: number, y: number, cancelled: boolean): number {
+    const f = this.fingers.get(id);
+    if (!f) return -1;
+    this.fingers.delete(id);
+    if (cancelled || f.dragging) return -1;
+    return this.sheet()?.itemAt(x, y) ?? -1;
+  }
+
+  /** is this finger the panel's? */
+  has(id: number): boolean {
+    return this.fingers.has(id);
+  }
+
+  clear(): void {
+    this.fingers.clear();
+  }
+}
+
 /** a chip in the top bar that is a call: a hitter you can set (with their call), or one of your routes */
 interface CallChip {
   e: HTMLElement;
@@ -222,6 +285,10 @@ export class TouchControls {
   private visible = false;
   /** fingers that point at a play on the open wheel: on it, or holding PLAY */
   private wheel: WheelFingers;
+  /** the panel a finger scrolls and taps (the route panel; the app hands it over) */
+  sheet: TouchSheet | null = null;
+  /** fingers on that panel */
+  private sheetFingers = new SheetFingers(() => this.sheet);
 
   constructor(
     parent: HTMLElement,
@@ -302,6 +369,7 @@ export class TouchControls {
     this.enabled = on;
     this.g.input.touch = on;
     this.g.hud.touch = on;
+    this.g.wheelTouch = on;
     document.body.classList.toggle('touchmode', on);
     this.g.hud.keyLabels = on ? this.labels : null;
     if (!on) {
@@ -317,6 +385,7 @@ export class TouchControls {
     if (!v) {
       this.pad.releaseAll();
       this.wheel.clear();
+      this.sheetFingers.clear();
     }
   }
 
@@ -371,14 +440,20 @@ export class TouchControls {
     } catch {
       /* already captured */
     }
+    const onButton = !!this.buttonAt(e.clientX, e.clientY);
+    // the open route panel is under this layer too: a finger on it scrolls it or calls the route it taps. Not in the
+    // air or loading a jump: then the whole right half is HIT, panel or not
+    const air = this.g.me.state === 'air' || this.g.me.state === 'load';
+    if (!onButton && !air && this.sheetFingers.down(e.pointerId, e.clientX, e.clientY)) return;
     // the open play wheel is under this layer: a finger on it points at a play, not the camera (a button over it stays a button)
-    if (!this.buttonAt(e.clientX, e.clientY) && this.wheel.down(e.pointerId, e.clientX, e.clientY)) return;
+    if (!onButton && this.wheel.down(e.pointerId, e.clientX, e.clientY)) return;
     this.pad.begin(e.pointerId, e.clientX, e.clientY, performance.now());
     if (this.pad.pointers.get(e.pointerId)?.button === 'play') this.wheel.holdPlay(e.pointerId, e.clientX, e.clientY);
   }
 
   private onMove(e: PointerEvent): void {
     if (!this.enabled) return;
+    if (this.sheetFingers.move(e.pointerId, e.clientX, e.clientY)) return;
     if (this.wheel.move(e.pointerId, e.clientX, e.clientY)) return;
     // coalesced events keep a fast thumb drag smooth
     const evs: PointerEvent[] = e.getCoalescedEvents?.() ?? [];
@@ -388,6 +463,15 @@ export class TouchControls {
 
   private onUp(e: PointerEvent): void {
     if (!this.enabled) return;
+    if (this.sheetFingers.has(e.pointerId)) {
+      // a tap on a route: its number, through Input like the route chips
+      const r = this.sheetFingers.up(e.pointerId, e.clientX, e.clientY, e.type === 'pointercancel');
+      if (r >= 0) {
+        this.g.input.down(`Digit${r + 1}`);
+        this.g.input.up(`Digit${r + 1}`);
+      }
+      return;
+    }
     const onWheel = this.wheel.has(e.pointerId);
     // let go on a play: its number, through Input like every control (a cancelled touch calls nothing)
     const i = this.wheel.up(e.pointerId, e.clientX, e.clientY, e.type === 'pointercancel');
@@ -462,7 +546,11 @@ export class TouchControls {
     const resetD = g.modeId === 'rally' ? 'none' : '';
     if (this.resetBtn.style.display !== resetD) this.resetBtn.style.display = resetD;
     const score = g.hud.scoreShort;
-    if (this.scoreEl.textContent !== score) this.scoreEl.textContent = score;
+    if (this.scoreEl.dataset.score !== score) {
+      this.scoreEl.dataset.score = score;
+      // Mini Rally's serve marker (●, on the serving side of the score) is a gold dot
+      this.scoreEl.innerHTML = esc(score).replace('●', '<i class="t-serve" aria-label="serving"></i>');
+    }
     // the buttons stay where they are; your job sizes them (styles.css). The Setter Drill is a setter's, whatever position you picked
     const pos = g.modeId === 'setter' ? 'S' : g.position;
     if (this.root.dataset.pos !== pos) this.root.dataset.pos = pos;

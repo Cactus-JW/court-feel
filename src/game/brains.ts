@@ -8,7 +8,7 @@ import type { ContactSystem } from './contact';
  * What a brain may use of the game: the clock, the random stream, the ball, the net, the contact
  * system and the other athletes. A brain is handed this and never the game itself, so it cannot
  * reach the HUD, the camera or the user's input (docs/adr/0010). What a brain has to tell the
- * player goes out through a callback its drill listens to (`TeamAI.onRead`, `TeamAI.onUserSet`).
+ * player goes out through a callback its drill listens to (`TeamAI.onRead`).
  *
  * Both sides of the seam are declared here, in the simulation: the game runs brains and knows
  * nothing of `src/ai`, and `src/ai` implements `Brain` against `AiHost`.

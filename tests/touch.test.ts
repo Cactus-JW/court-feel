@@ -7,7 +7,7 @@ import { Athlete } from '../src/game/athlete';
 import { readIntent } from '../src/game/intent';
 import { UserController } from '../src/game/userController';
 import { Hud } from '../src/ui/hud';
-import { WheelFingers, type WheelHost } from '../src/ui/touchControls';
+import { SheetFingers, WheelFingers, type WheelHost } from '../src/ui/touchControls';
 
 const DT = 1 / SIM.hz;
 
@@ -374,5 +374,56 @@ describe('touch: pointing at a play on the wheel', () => {
     expect(h.sel).toBe(1);
     f.up(1, 470, 200, true);
     expect(h.sel).toBe(-1);
+  });
+});
+
+/** a route panel from (100, 60) to (400, 300): five routes 40 px tall from y 100, scrolled by `top` */
+function sheet() {
+  const s = {
+    top: 0,
+    at: (x: number, y: number) => x >= 100 && x <= 400 && y >= 60 && y <= 300,
+    scrollBy(dy: number) {
+      s.top = Math.max(0, s.top + dy);
+    },
+    itemAt(x: number, y: number) {
+      const i = Math.floor((y + s.top - 100) / 40);
+      return s.at(x, y) && i >= 0 && i < 5 ? i : -1;
+    },
+  };
+  return s;
+}
+
+describe('touch: the route panel under the touch layer', () => {
+  it('a drag on the open panel scrolls its list the way the finger goes (finger up: further down the list)', () => {
+    const s = sheet();
+    const f = new SheetFingers(() => s);
+    expect(f.down(1, 250, 280)).toBe(true);
+    expect(f.move(1, 250, 220)).toBe(true);
+    expect(s.top).toBe(60);
+    f.move(1, 250, 240);
+    expect(s.top).toBe(40);
+    // a drag calls no route
+    expect(f.up(1, 250, 240, false)).toBe(-1);
+  });
+
+  it('a tap on a route calls it, where the list is scrolled to', () => {
+    const s = sheet();
+    const f = new SheetFingers(() => s);
+    f.down(1, 250, 150);
+    f.move(1, 251, 151); // a real tap wobbles: still a tap
+    expect(f.up(1, 251, 151, false)).toBe(1);
+    s.top = 80;
+    f.down(2, 250, 150);
+    expect(f.up(2, 250, 150, false)).toBe(3);
+  });
+
+  it('a finger off the panel, on a closed panel, or cancelled by the phone is not a tap on a route', () => {
+    const s = sheet();
+    const f = new SheetFingers(() => s);
+    expect(f.down(1, 40, 300)).toBe(false);
+    expect(f.move(1, 60, 300)).toBe(false);
+    f.down(2, 250, 150);
+    expect(f.up(2, 250, 150, true)).toBe(-1);
+    expect(new SheetFingers(() => null).down(3, 250, 150)).toBe(false);
   });
 });

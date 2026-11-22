@@ -648,8 +648,6 @@ export class TeamAI {
   setInSystem = true;
   /** the setter has just called a read (the Mini Rally shows and voices it) */
   onRead: ((r: SetterRead) => void) | null = null;
-  /** our setter has just set the user (the Mini Rally tells them) */
-  onUserSet: (() => void) | null = null;
   /** our serve is in the air and nobody has touched it since */
   private ourServe = false;
   /** one of us touched our own serve before the other side did: a service fault */
@@ -1165,7 +1163,6 @@ export class TeamAI {
 
   onSet(hitter: Athlete | null): void {
     this.setFor = hitter;
-    if (hitter && hitter.isUser) this.onUserSet?.();
   }
 
   /** count touches for this side, reset when the other side touches */

@@ -283,14 +283,14 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
     {
       title: 'Game',
       rows: [
-        { k: 'Top right', a: 'Pause, the score, reset the rep, and REPLAY your last attempt (camera: pause menu, View)' },
+        { k: 'Top right', a: 'Pause, the score (● by the side that serves), reset the rep, REPLAY (camera: pause menu, View)' },
         { k: 'TOSS', a: 'Serve toss: hold longer for a higher toss (Serve Drill, Free Play)' },
       ],
     },
     {
       title: 'In a drill',
       rows: [
-        { k: 'HIGH  GO …', a: 'Top left: tap a route to call it; ROUTES shows them (Spike Drill, Mini Rally; hitters)' },
+        { k: 'HIGH  GO …', a: 'Top left: tap a route to call it; ROUTES: drag to scroll, tap a route (Spike Drill, Mini Rally; hitters)' },
         {
           k: 'OH  MB  OPP',
           a: 'Top left: tap a hitter when you set, again for their next set; underlined = on (Setter Drill, Mini Rally)',

@@ -36,6 +36,9 @@ export class PlayWheel {
   private idea: HTMLDivElement;
   private court: SVGSVGElement;
   private shown = -2;
+  /** the touch controls are on (`TouchControls.setEnabled`): the centre says how a finger calls a play */
+  touch = false;
+  private shownTouch = false;
   private on = -1;
 
   /** `tap(i)`: a slice was tapped (touch): the game presses that play's number through Input */
@@ -189,15 +192,15 @@ export class PlayWheel {
 
   private draw(): void {
     const show = this.sel >= 0 ? this.sel : this.on;
-    if (show === this.shown) return;
+    if (show === this.shown && this.touch === this.shownTouch) return;
     this.shown = show;
+    this.shownTouch = this.touch;
     this.slices.forEach((p, i) => p.setAttribute('class', `pw-slice${i === this.sel ? ' sel' : i === this.on ? ' on' : ''}`));
     const combo = show >= 0 ? this.plays[show] : null;
     this.name.textContent = combo ? combo.name : 'Call a play';
-    const touch = document.body.classList.contains('touchmode');
     this.idea.textContent = combo
       ? combo.idea
-      : touch
+      : this.touch
         ? 'Slide onto a play and let go, or tap it'
         : 'Move towards a play, or press its number';
     this.court.innerHTML = combo ? PlayWheel.runs(combo) : '';

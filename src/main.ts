@@ -193,6 +193,8 @@ window.addEventListener(
   { passive: true, capture: true },
 );
 const routes = new RouteHud(game.hud.root);
+// the route panel sits under the touch layer: a finger scrolls it and taps a route through the controls
+touch.sheet = routes;
 game.onFrame = () => {
   touch.update();
   routes.update(game.routeView(), game.routesOpen);

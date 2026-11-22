@@ -78,7 +78,6 @@ export class MiniRally extends Mode {
     this.home.playsOn = !this.userSetter;
     this.home.playPool = wheelPlays;
     this.away.playsOn = true;
-    for (const team of [this.home, this.away]) team.onUserSet = () => g.hud.message('Set to you · attack!', 1.2);
     const userSlot = USER_SLOT[this.position];
     let seed = 50;
     for (const slot of SLOTS) {
@@ -254,9 +253,11 @@ export class MiniRally extends Mode {
 
   private updateScore(): void {
     const call = this.play ? ` · call ${this.callIdx + 1}: ${this.play.name}` : '';
+    // the bare score marks the serving side with ● on its side of the score, as a scoreboard's serve light does
+    const serve = this.servingSide === 1;
     this.g.hud.setScore(
-      `YOU ${this.scoreHome} : ${this.scoreAway} THEM · ${this.servingSide === 1 ? 'your serve' : 'their serve'}${call}`,
-      `${this.scoreHome} : ${this.scoreAway}`,
+      `YOU ${this.scoreHome} : ${this.scoreAway} THEM · ${serve ? 'your serve' : 'their serve'}${call}`,
+      `${serve ? '● ' : ''}${this.scoreHome} : ${this.scoreAway}${serve ? '' : ' ●'}`,
     );
   }
 

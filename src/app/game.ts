@@ -161,6 +161,14 @@ export class Game implements AiHost {
   unpointWheel(): void {
     this.wheel.unpoint();
   }
+
+  /** the touch controls are on: the wheel's centre tells a finger how to call a play */
+  get wheelTouch(): boolean {
+    return this.wheel.touch;
+  }
+  set wheelTouch(on: boolean) {
+    this.wheel.touch = on;
+  }
   private setSpot!: SetSpot;
   private spotP = { x: 0, y: 0, z: 0 };
   /** seconds the play holds still after a clean hit: the effects ask for it, the pace spends it */
