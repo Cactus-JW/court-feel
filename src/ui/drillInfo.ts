@@ -233,7 +233,10 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'Game',
       rows: [
         { k: 'V', a: 'First / third person' },
-        { k: 'R', a: 'Replay your last attempt, misses included' },
+        {
+          k: 'R',
+          a: 'Replay your last attempt, misses included. Hold: the whole point (Mini Rally). In a replay: change the view (S: slow-mo off and on)',
+        },
         { k: 'N', a: 'Reset the rep' },
         { k: 'Esc', a: 'Pause' },
         { k: 'F3', a: 'Debug overlay' },
@@ -284,6 +287,10 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'Game',
       rows: [
         { k: 'Top right', a: 'Pause, the score (● by the side that serves), reset the rep, REPLAY (camera: pause menu, View)' },
+        {
+          k: 'REPLAY',
+          a: 'Your last attempt. Hold: the whole point (Mini Rally). In a replay it reads CAM: change the view; tap the court to skip',
+        },
         { k: 'TOSS', a: 'Serve toss: hold longer for a higher toss (Serve Drill, Free Play)' },
       ],
     },
