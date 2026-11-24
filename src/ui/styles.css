@@ -795,7 +795,11 @@ body.touchmode .call-sheet, body.touchmode .route-strip { display: none !importa
 body.touchmode .hud-top { top: calc(50px + env(safe-area-inset-top, 0px)); max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.touchmode .hud-score { font-size: 12px; font-weight: 700; opacity: 0.8; margin-top: 0; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
 /* a phone's replay tag sits at the bottom centre, between the stick and the buttons: the top is the bar and the score line */
-body.touchmode .replay-tag { top: auto; bottom: calc(9vh + 10px); left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 14px; }
+body.touchmode .replay-tag { top: auto; bottom: calc(9vh + 10px); left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 14px;
+  transition: none; }
+/* it comes in once the buttons have faded out (.t-cluster, 0.3 s), and goes at once when the replay ends, before they are back:
+   on a 667 px phone it sits where TOSS is, so the two are never on screen together */
+body.touchmode.replaying .replay-tag { transition: opacity 0.3s 0.3s; }
 /* a short screen stacks what a touch says, none over another: the drill's message under the score line, the grade a little
    lower and smaller, the banner one line below the grade (on a 375 px tall phone they used to sit on each other) */
 body.touchmode .hud-msg { top: calc(72px + env(safe-area-inset-top, 0px)); font-size: 12px; max-width: 64vw; white-space: normal; line-height: 1.4; }
@@ -849,7 +853,9 @@ body.touchmode .hud-streak-val { font-size: 28px; }
 .t-stick.run .t-knob { background: var(--gold); }
 /* hold buttons, low in the right-hand corner where the right thumb rests (moved 18 px lower on the player's ask, 2026-11-22;
    the gaps between them are as before) */
-.t-cluster { position: absolute; right: var(--sa-r); bottom: var(--sa-b); width: 240px; height: 240px; }
+.t-cluster { position: absolute; right: var(--sa-r); bottom: var(--sa-b); width: 240px; height: 240px; transition: opacity 0.3s; }
+/* a replay: a tap anywhere skips it, so the play buttons go (on a 667 px phone the REPLAY tag sat under TOSS) */
+body.replaying .t-cluster, body.replaying .t-stick { opacity: 0; }
 .t-btn { position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   background: rgba(10,12,20,0.5); border: 2px solid rgba(255,255,255,0.45); box-shadow: 0 2px 12px rgba(0,0,0,0.4);
   font-weight: 900; font-style: italic; font-size: 13px; letter-spacing: 0.08em; color: rgba(255,255,255,0.9);

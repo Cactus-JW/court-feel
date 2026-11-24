@@ -7,7 +7,7 @@ import { Athlete } from '../src/game/athlete';
 import { readIntent } from '../src/game/intent';
 import { UserController } from '../src/game/userController';
 import { Hud } from '../src/ui/hud';
-import { SheetFingers, WheelFingers, type WheelHost } from '../src/ui/touchControls';
+import { SheetFingers, SkipFingers, WheelFingers, type WheelHost } from '../src/ui/touchControls';
 
 const DT = 1 / SIM.hz;
 
@@ -425,5 +425,48 @@ describe('touch: the route panel under the touch layer', () => {
     f.down(2, 250, 150);
     expect(f.up(2, 250, 150, true)).toBe(-1);
     expect(new SheetFingers(() => null).down(3, 250, 150)).toBe(false);
+  });
+});
+
+describe('touch: a tap that skips a replay', () => {
+  /** a replay playing, and the controls' order for a finger: the skip first, then the pad */
+  function replayRig() {
+    const { input, pad } = rig();
+    const fx = { replaying: true, ends: 0, endReplay: () => ((fx.replaying = false), fx.ends++) };
+    const skip = new SkipFingers(fx);
+    const down = (id: number, x: number, y: number) => {
+      if (!skip.down(id)) pad.begin(id, x, y, 0);
+    };
+    const move = (id: number, x: number, y: number) => {
+      if (!skip.has(id)) pad.move(id, x, y);
+    };
+    const up = (id: number) => {
+      if (!skip.up(id)) pad.end(id);
+    };
+    return { input, pad, fx, down, move, up };
+  }
+
+  it('a touch that skips a replay presses nothing, as a key that skips one does nothing else', () => {
+    const r = replayRig();
+    // the thumb lands where JUMP is (hidden during the replay), holds a moment and lifts
+    r.down(1, BUTTONS.jump.x, BUTTONS.jump.y);
+    r.pad.frame();
+    r.move(1, BUTTONS.jump.x + 20, BUTTONS.jump.y);
+    r.pad.frame();
+    r.up(1);
+    r.pad.frame();
+    expect(r.fx.ends).toBe(1);
+    expect(r.input.log).toEqual([]);
+    expect(r.input.stick.active).toBe(false);
+  });
+
+  it('once the replay is over the next touch is play again', () => {
+    const r = replayRig();
+    r.down(1, 100, 300);
+    r.up(1);
+    r.down(2, BUTTONS.jump.x, BUTTONS.jump.y);
+    r.pad.frame();
+    expect(r.fx.ends).toBe(1);
+    expect(r.input.isDown('Space')).toBe(true);
   });
 });

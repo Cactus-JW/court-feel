@@ -7,6 +7,8 @@ import { flyFor, solveApex, solveFixedTime } from '../physics/solve';
 import { makeBlobTexture } from '../world/textures';
 
 const ZERO = { x: 0, y: 0, z: 0 };
+/** what keeps the top of a phone's screen: the top bar, the score line, and the message and call line (shown with `show`) */
+const TOP_OF_SCREEN = '.t-band, .hud-top, .hud-msg, .hud-topcall';
 
 /**
  * Who your set goes to, shown on the court so your eyes stay up: a marker over the hitter with
@@ -22,6 +24,9 @@ export class SetGuide {
   private mat: THREE.PointsMaterial;
   private label: HTMLDivElement;
   private text = '';
+  /** the marker's size (px), read when it is first shown with its text (0: not read yet) */
+  private labelW = 0;
+  private labelH = 0;
   private arcKey = '';
   private fade = 0;
   private hitter: Athlete | null = null;
@@ -84,6 +89,7 @@ export class SetGuide {
       if (o.label !== this.text) {
         this.text = o.label;
         this.label.textContent = o.label;
+        this.labelH = 0;
       }
       this.label.style.setProperty('--c', callCss(o.key));
       this.fade = Math.min(1, this.fade + realDt / G.fadeIn);
@@ -105,8 +111,31 @@ export class SetGuide {
     this.label.style.display = 'block';
     this.label.style.opacity = String(this.fade);
     const x = ((v.x + 1) / 2) * window.innerWidth;
-    const y = ((1 - v.y) / 2) * window.innerHeight;
+    if (!this.labelH) {
+      this.labelW = this.label.offsetWidth;
+      this.labelH = this.label.offsetHeight;
+    }
+    const y = Math.max(this.floor(x, this.labelW / 2) + this.labelH, ((1 - v.y) / 2) * window.innerHeight);
     this.label.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+  }
+
+  /**
+   * On a phone, how far down (px) the marker must stay at `x` (`half` its width): under the top bar, the
+   * drill's score line, and its message and call line while they show, so the marker over a middle in
+   * the air does not sit on them (Setter Drill, 740 px wide). Measured from the page, not a number of
+   * its own, so a notch's safe area and a change to the bar's height count. Only what is over the
+   * marker counts: off to the side of a message it rises as high as the bar.
+   */
+  private floor(x: number, half: number): number {
+    if (!document.body.classList.contains('touchmode')) return 0;
+    let f = 0;
+    for (const e of document.querySelectorAll<HTMLElement>(TOP_OF_SCREEN)) {
+      if ((e.classList.contains('hud-msg') || e.classList.contains('hud-topcall')) && !e.classList.contains('show')) continue;
+      const r = e.getBoundingClientRect();
+      if (r.height === 0 || r.right < x - half || r.left > x + half) continue;
+      f = Math.max(f, r.bottom);
+    }
+    return f;
   }
 
   hide(): void {

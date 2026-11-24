@@ -244,6 +244,40 @@ export class SheetFingers {
   }
 }
 
+/**
+ * The fingers that skipped a replay. A tap anywhere ends a replay, as any key does, and like the key
+ * it does nothing else: the finger is the skip's until it lifts, so landing where TOSS or JUMP sits
+ * (they fade out during a replay) neither presses them nor moves the stick. Turned down: letting the
+ * tap fall through to the pad, as it did, so one tap both skipped and tossed with no button to see.
+ */
+export class SkipFingers {
+  private fingers = new Set<number>();
+
+  constructor(private fx: Pick<Effects, 'replaying' | 'endReplay'>) {}
+
+  /** a finger came down: true when it ended a replay (then it is the skip's until it lifts) */
+  down(id: number): boolean {
+    if (!this.fx.replaying) return false;
+    this.fx.endReplay();
+    this.fingers.add(id);
+    return true;
+  }
+
+  /** is this finger the skip's? */
+  has(id: number): boolean {
+    return this.fingers.has(id);
+  }
+
+  /** a finger lifted: true when it was the skip's */
+  up(id: number): boolean {
+    return this.fingers.delete(id);
+  }
+
+  clear(): void {
+    this.fingers.clear();
+  }
+}
+
 /** a chip in the top bar that is a call: a hitter you can set (with their call), or one of your routes */
 interface CallChip {
   e: HTMLElement;
@@ -289,6 +323,8 @@ export class TouchControls {
   sheet: TouchSheet | null = null;
   /** fingers on that panel */
   private sheetFingers = new SheetFingers(() => this.sheet);
+  /** fingers that skipped a replay */
+  private skipFingers: SkipFingers;
 
   constructor(
     parent: HTMLElement,
@@ -297,6 +333,7 @@ export class TouchControls {
   ) {
     this.root = el('div', 'touch', parent);
     this.wheel = new WheelFingers(g);
+    this.skipFingers = new SkipFingers(g.fx);
     this.root.style.display = 'none';
     // resting stick hint (the live stick floats under the thumb)
     this.stickBase = el('div', 't-stick', this.root);
@@ -386,6 +423,7 @@ export class TouchControls {
       this.pad.releaseAll();
       this.wheel.clear();
       this.sheetFingers.clear();
+      this.skipFingers.clear();
     }
   }
 
@@ -434,14 +472,16 @@ export class TouchControls {
       return;
     }
     this.g.fx.audio.unlock();
-    // a replay: REPLAY (now CAM) changes the view, any other touch ends it
-    if (this.g.fx.replaying && this.buttonAt(e.clientX, e.clientY) !== 'replay') this.g.fx.endReplay();
     try {
       this.root.setPointerCapture(e.pointerId);
     } catch {
       /* already captured */
     }
-    const onButton = !!this.buttonAt(e.clientX, e.clientY);
+    // a replay: REPLAY (now CAM) changes the view; any other touch ends it and is only the skip, as a key is
+    // (`SkipFingers`); captured, so its lift comes back here
+    const at = this.buttonAt(e.clientX, e.clientY);
+    if (at !== 'replay' && this.skipFingers.down(e.pointerId)) return;
+    const onButton = !!at;
     // the open route panel is under this layer too: a finger on it scrolls it or calls the route it taps. Not in the
     // air or loading a jump: then the whole right half is HIT, panel or not
     const air = this.g.me.state === 'air' || this.g.me.state === 'load';
@@ -454,6 +494,7 @@ export class TouchControls {
 
   private onMove(e: PointerEvent): void {
     if (!this.enabled) return;
+    if (this.skipFingers.has(e.pointerId)) return;
     if (this.sheetFingers.move(e.pointerId, e.clientX, e.clientY)) return;
     if (this.wheel.move(e.pointerId, e.clientX, e.clientY)) return;
     // coalesced events keep a fast thumb drag smooth
@@ -464,6 +505,7 @@ export class TouchControls {
 
   private onUp(e: PointerEvent): void {
     if (!this.enabled) return;
+    if (this.skipFingers.up(e.pointerId)) return;
     if (this.sheetFingers.has(e.pointerId)) {
       // a tap on a route: its number, through Input like the route chips
       const r = this.sheetFingers.up(e.pointerId, e.clientX, e.clientY, e.type === 'pointercancel');
