@@ -929,11 +929,9 @@ back (on touch, CAM cycles them).
 * **Behind you**: the third-person camera behind your player, aimed where you aimed.
 * **Your eyes**: from your eye, even if you played in third person,
   following the ball (exactly where you looked kept the ball out of the frame
-  about half the time: the eyes drop on the approach). While two ways are
-  compared, 1 and 2 pick one: **smooth head** (a head turning onto the ball,
-  speeding up and slowing into each turn, no faster than a neck turns) and
-  **eyes catch up** (the eyes pursue the ball, and when a hard hit gets ahead
-  of them a quick turn catches up with it).
+  about half the time: the eyes drop on the approach), turning like a head:
+  speeding up and slowing into each turn, no faster than a neck turns, so a
+  hard hit gets a moment ahead of it.
 
 The replay plays the world back too: the antennae and the net's top shake as
 the replayed ball hits them, and the mark a hard spike leaves on the floor

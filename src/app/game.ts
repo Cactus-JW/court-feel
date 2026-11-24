@@ -66,7 +66,7 @@ import { lessonStore } from './lessonStore';
 import { Pace } from './pace';
 import { pixelRatioFor, QualityGovernor } from './quality';
 import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
-import { Effects, EYES_LOOKS } from '../fx/effects';
+import { Effects } from '../fx/effects';
 import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tutorial';
 
 /** consecutive frames that throw before the game stops and shows the crash screen */
@@ -887,9 +887,6 @@ export class Game implements AiHost {
       if (!this.inMenu && this.input.consumePress('KeyR')) this.fx.cycleView();
       else if (!this.inMenu && this.input.consumePress('KeyV')) this.fx.toggleEyes();
       else if (!this.inMenu && this.input.consumePress('KeyS')) this.fx.toggleSlow();
-      // (1, 2: how your eyes follow the ball, while the two are being compared)
-      else if (!this.inMenu && this.input.consumePress('Digit1')) this.fx.lookEyes(EYES_LOOKS[0]);
-      else if (!this.inMenu && this.input.consumePress('Digit2')) this.fx.lookEyes(EYES_LOOKS[1]);
       else if (this.input.consumeAny() && !this.inMenu) {
         this.fx.endReplay();
         return;

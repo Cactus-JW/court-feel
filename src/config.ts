@@ -1695,20 +1695,13 @@ export const FX = {
    */
   replayTv: { x: 10.5, y: 4.5, follow: 0.55, glide: 5, ease: 6, fov: 50, attackPre: 0.6, attackPost: 0.8 },
   /**
-   * Your eyes in a replay: from your recorded eye, following the ball (exactly where you looked left
-   * it out of the frame about half the time: the eyes drop on the approach). Two ways, being compared
-   * (1, 2 in a replay), `look` the one a replay opens with:
-   * - 'head': a head turning on a neck, critically damped at `head.rate` rad/s, never faster than
-   *   `head.maxTurn` rad/s (a quick head turn is 200 to 400 degrees a second);
-   * - 'pursuit': eyes pursue the ball at `gain` of its angular speed up to `max` rad/s (eyes and
-   *   head together follow about 100 degrees a second), and once it is `saccade` rad ahead a quick
-   *   catch-up at `catchUp`/s until within `landed` of that, then settle onto it at `settle`/s.
+   * Your eyes in a replay: from your recorded eye, following the ball like a head turning on a neck,
+   * critically damped at `rate` rad/s and never faster than `maxTurn` rad/s (a quick head turn is
+   * 200 to 400 degrees a second), so a hard spike gets a moment ahead of it. Exactly where you looked
+   * left the ball out of the frame about half the time (the eyes drop on the approach); the player
+   * picked this over eyes that keep the ball centred with quick catch-up turns.
    */
-  replayEyes: {
-    look: 'head' as 'head' | 'pursuit',
-    head: { rate: 9, maxTurn: 6 },
-    pursuit: { max: 1.75, gain: 0.9, saccade: 0.12, landed: 0.25, catchUp: 18, settle: 3 },
-  },
+  replayEyes: { rate: 9, maxTurn: 6 },
   /** a miss is replayed from further back than a highlight: the plant, the jump and the ball coming in (s) */
   replayMissPre: 1.3,
   /** and for this long after it: the ball going down (s) */
