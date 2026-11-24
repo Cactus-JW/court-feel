@@ -22,6 +22,8 @@ export class SetGuide {
   private mat: THREE.PointsMaterial;
   private label: HTMLDivElement;
   private text = '';
+  /** the marker's height (px), read once it is first shown */
+  private labelH = 0;
   private arcKey = '';
   private fade = 0;
   private hitter: Athlete | null = null;
@@ -105,7 +107,10 @@ export class SetGuide {
     this.label.style.display = 'block';
     this.label.style.opacity = String(this.fade);
     const x = ((v.x + 1) / 2) * window.innerWidth;
-    const y = ((1 - v.y) / 2) * window.innerHeight;
+    // a phone's top bar and the drill's score line under it keep the top of the screen: the marker stays under them
+    if (!this.labelH) this.labelH = this.label.offsetHeight;
+    const top = document.body.classList.contains('touchmode') ? G.touchTop + this.labelH : 0;
+    const y = Math.max(top, ((1 - v.y) / 2) * window.innerHeight);
     this.label.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
   }
 

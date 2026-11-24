@@ -849,7 +849,9 @@ body.touchmode .hud-streak-val { font-size: 28px; }
 .t-stick.run .t-knob { background: var(--gold); }
 /* hold buttons, low in the right-hand corner where the right thumb rests (moved 18 px lower on the player's ask, 2026-11-22;
    the gaps between them are as before) */
-.t-cluster { position: absolute; right: var(--sa-r); bottom: var(--sa-b); width: 240px; height: 240px; }
+.t-cluster { position: absolute; right: var(--sa-r); bottom: var(--sa-b); width: 240px; height: 240px; transition: opacity 0.3s; }
+/* a replay: a tap anywhere skips it, so the play buttons go (on a 667 px phone the REPLAY tag sat under TOSS) */
+body.replaying .t-cluster, body.replaying .t-stick { opacity: 0; }
 .t-btn { position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   background: rgba(10,12,20,0.5); border: 2px solid rgba(255,255,255,0.45); box-shadow: 0 2px 12px rgba(0,0,0,0.4);
   font-weight: 900; font-style: italic; font-size: 13px; letter-spacing: 0.08em; color: rgba(255,255,255,0.9);

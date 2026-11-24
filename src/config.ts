@@ -1603,9 +1603,10 @@ export const FX = {
    * Who your set goes to (`src/fx/setGuide.ts`): a marker `above` (m) the hitter's head, and the
    * set as `points` dots `size` px across, from `skip` of the way along its flight (clear of your
    * hands) to the hitter. It comes up in `fadeIn` s and, once the ball has left your hands, fades
-   * over `fadeOut` s (real time) so a set that missed is seen leaving it.
+   * over `fadeOut` s (real time) so a set that missed is seen leaving it. On a phone the marker
+   * never goes higher than `touchTop` px from the top: the top bar and the drill's score line are there.
    */
-  setGuide: { points: 22, size: 8, skip: 0.14, opacity: 0.8, above: 0.42, fadeIn: 0.15, fadeOut: 0.9 },
+  setGuide: { points: 22, size: 8, skip: 0.14, opacity: 0.8, above: 0.42, fadeIn: 0.15, fadeOut: 0.9, touchTop: 70 },
   /**
    * Where to stand for the set: a floor spot this wide (m), green once your feet are within
    * `CONTACT.setCentreOk`. When your body is going to jump for it (the jump set) a second ring
