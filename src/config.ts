@@ -1679,12 +1679,13 @@ export const FX = {
   /** R held this long (s, real time) replays the whole point; let go sooner, the last attempt */
   replayHold: 0.4,
   /**
-   * The whole point (Mini Rally): from `pre` s before the serve's toss to the ball down, at real
+   * The whole point (Mini Rally): from `pre` s before the serve's toss (the TV on the server from the
+   * first frame: opening earlier, it panned over from the other side of the net) to the ball down, at real
    * speed, slowing to `replaySlow` only for the hits (a spike, a serve) within `slowHold` s of the
    * contact, and back up to speed over `slowRamp` s. Slowing for every dig and landing too made a
    * 7 s rally take 23 s to watch (the player's call: slow for the hits only, and short).
    */
-  replayPoint: { pre: 0.6, slowHold: 0.12, slowRamp: 0.3 },
+  replayPoint: { pre: 0.1, slowHold: 0.12, slowRamp: 0.3 },
   /**
    * The whole point's TV view: a broadcast camera just past the boards on the long side (`x` m out,
    * `y` m up), panning along the court with the ball (`follow` of its z), with `fov`; and for each
@@ -1694,12 +1695,20 @@ export const FX = {
    */
   replayTv: { x: 10.5, y: 4.5, follow: 0.55, glide: 5, ease: 6, fov: 50, attackPre: 0.6, attackPost: 0.8 },
   /**
-   * Your eyes in a replay: from your recorded eye, `look` is where they point. 'look': exactly where
-   * you looked; 'ball': at the ball; 'frame': where you looked, turned just enough to keep the ball
-   * inside `keep` of the way from the middle of the view to its edge. Turning eases at `ease`/s. (Being
-   * compared: 1, 2, 3 pick one in a replay.)
+   * Your eyes in a replay: from your recorded eye, following the ball (exactly where you looked left
+   * it out of the frame about half the time: the eyes drop on the approach). Two ways, being compared
+   * (1, 2 in a replay), `look` the one a replay opens with:
+   * - 'head': a head turning on a neck, critically damped at `head.rate` rad/s, never faster than
+   *   `head.maxTurn` rad/s (a quick head turn is 200 to 400 degrees a second);
+   * - 'pursuit': eyes pursue the ball at `gain` of its angular speed up to `max` rad/s (eyes and
+   *   head together follow about 100 degrees a second), and once it is `saccade` rad ahead a quick
+   *   catch-up at `catchUp`/s until within `landed` of that, then settle onto it at `settle`/s.
    */
-  replayEyes: { look: 'frame' as 'look' | 'ball' | 'frame', ease: 6, keep: 0.6 },
+  replayEyes: {
+    look: 'head' as 'head' | 'pursuit',
+    head: { rate: 9, maxTurn: 6 },
+    pursuit: { max: 1.75, gain: 0.9, saccade: 0.12, landed: 0.25, catchUp: 18, settle: 3 },
+  },
   /** a miss is replayed from further back than a highlight: the plant, the jump and the ball coming in (s) */
   replayMissPre: 1.3,
   /** and for this long after it: the ball going down (s) */

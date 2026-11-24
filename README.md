@@ -232,7 +232,7 @@ Settings → **Spike timing collar** turns it off (on by default).
 | E | Bump / pass / dig (press early so the platform is ready; hold it) |
 | Q | Serve toss (Serve Drill; Free Play too). **Hold** it: the longer the hold, the higher the toss (and for a jump float or a jump serve, the further ahead, for a longer run-up), tossed when you let go (a tap is the lowest; the ring around the crosshair fills to the highest at 0.8 s). It is the toss of the serve you picked with 1 / 2 / 3. Then serve it with the spike's controls: run in (Shift + W) and jump (Space) for a jump float or a jump serve, hold and release Left mouse to hit |
 | V | Toggle first / third person instantly, any time (even mid-rally) |
-| R | Replay your last attempt in slow motion once the ball is dead: a clean contact, a poor one, a swing or a block that found no ball, or a ball that was yours and dropped untouched. **Hold** R (Mini Rally) for the whole point, serve to ball down. In a replay R changes the view (TV, behind you, your eyes) and V goes to your eyes and back; any other key skips it, and the game carries on where it was. |
+| R | Replay your last attempt in slow motion once the ball is dead: a clean contact, a poor one, a swing or a block that found no ball, or a ball that was yours and dropped untouched. **Hold** R (Mini Rally) for the whole point, serve to ball down. In a replay R changes the view (TV, behind you, your eyes), V goes to your eyes and back and S turns slow-mo off (and on again: it stays as you left it); any other key skips it, and the game carries on where it was. |
 | N | Reset / skip the current rep (Mini Rally: re-serve) |
 | 1 to 5 | Spike Drill and Mini Rally, as a hitter: your route for the next ball (the outside's High, Hut, Go, 3, 2; the middle's 1, Push, Shoot, Back 1; the opposite's Back, Fast, Back 2, Back 1, X — see "Calls, plays and the dump"). Serve Drill: 1 / 2 / 3 is your serve (standing float, jump float, jump serve) |
 | C (hitter) | Spike Drill and Mini Rally, as a hitter: the route panel. Your half of the court from above with every route's run and where it is hit, its tempo, and the play your setter has called with your team-mates' routes in it. C again closes it; the game does not stop for it. |
@@ -916,7 +916,7 @@ on touch), and R plays your most recent go at the ball.
   the block in a drill.
 
 **The whole point** (Mini Rally): hold R (or REPLAY) between points and the
-rally plays back from the serve's toss to the ball down. It runs at real
+rally plays back from the serve's toss to the ball down, the TV on the server from the first frame. It runs at real
 speed and slows down briefly for the hits (each serve and spike), the way TV
 shows a rally, and the TV view moves to the close angle beside the hitter for
 every attack: a quick glide, not a jump from the other end of the hall.
@@ -927,12 +927,13 @@ back (on touch, CAM cycles them).
 * **TV**: the broadcast camera (the close angle beside the hitter, then down
   to the floor; for the whole point, the stands' view with a cut for each attack).
 * **Behind you**: the third-person camera behind your player, aimed where you aimed.
-* **Your eyes**: what you saw, from your eye, even if you played in third
-  person. While three ways of looking are compared, 1, 2 and 3 pick one:
-  **as you looked** (where you looked: whether you watched the ball onto the
-  hand or looked up at the block), **on the ball** (your eye, turned smoothly
-  onto the ball) and **ball in view** (where you looked, turned only as far as
-  it takes to keep the ball in the frame; the default).
+* **Your eyes**: from your eye, even if you played in third person,
+  following the ball (exactly where you looked kept the ball out of the frame
+  about half the time: the eyes drop on the approach). While two ways are
+  compared, 1 and 2 pick one: **smooth head** (a head turning onto the ball,
+  speeding up and slowing into each turn, no faster than a neck turns) and
+  **eyes catch up** (the eyes pursue the ball, and when a hard hit gets ahead
+  of them a quick turn catches up with it).
 
 The replay plays the world back too: the antennae and the net's top shake as
 the replayed ball hits them, and the mark a hard spike leaves on the floor

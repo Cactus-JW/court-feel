@@ -139,6 +139,15 @@ describe('the whole point (R held)', () => {
     for (const t of [0.5, 1.7, 3.4]) expect(r.speedAt(t)).toBe(FX.replaySlow);
   });
 
+  it('with slow-mo off a replay plays at real speed, the hits and the last attempt too', () => {
+    const { r } = recorded(10);
+    r.realSpeed = true;
+    expect(r.start(0, 9.9, [2, 6])).toBe(true);
+    for (const t of [2, 4, 6]) expect(r.speedAt(t)).toBe(1);
+    expect(r.start(0.5, 3.5)).toBe(true);
+    expect(r.speedAt(1.7)).toBe(1);
+  });
+
   it('a 25 s rally and its serve fit in the buffer (a rally ends by itself at 25 s)', () => {
     const r = new Replay(FX.replaySeconds);
     expect(r.seconds).toBeGreaterThanOrEqual(25 + FX.replayPoint.pre + 2);

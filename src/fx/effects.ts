@@ -36,10 +36,10 @@ interface Decal {
 export type ReplayView = 'tv' | 'behind' | 'eyes';
 const VIEWS: readonly ReplayView[] = ['tv', 'behind', 'eyes'];
 const VIEW_NAME: Record<ReplayView, string> = { tv: 'TV', behind: 'BEHIND YOU', eyes: 'YOUR EYES' };
-/** where your eyes point in a replay (`FX.replayEyes`): as you looked, at the ball, or as you looked with the ball kept in view */
-export const EYES_LOOKS = ['look', 'ball', 'frame'] as const;
+/** how your eyes follow the ball in a replay (`FX.replayEyes`): a head turning on a spring, or eyes that pursue it and catch up */
+export const EYES_LOOKS = ['head', 'pursuit'] as const;
 export type EyesLook = (typeof EYES_LOOKS)[number];
-const EYES_NAME: Record<EyesLook, string> = { look: 'AS YOU LOOKED', ball: 'ON THE BALL', frame: 'BALL IN VIEW' };
+const EYES_NAME: Record<EyesLook, string> = { head: '1 SMOOTH HEAD', pursuit: '2 EYES CATCH UP' };
 
 /**
  * What the effects read of the game, and the two things they may change: the hit-stop they ask for
@@ -101,17 +101,21 @@ export class Effects {
   private viewBeforeEyes: ReplayView = 'tv';
   /** the replay on screen is the whole point (R held), not the last attempt */
   private whole = false;
-  /** the whole point's attacks, each cut to close up on the TV: when and where it was hit */
-  private attacks: { t: number; at: THREE.Vector3 }[] = [];
-  private cut: { t: number; at: THREE.Vector3 } | null = null;
+  /** the whole point's attacks, each cut to close up on the TV: when and where it was hit, and from when the camera is on it */
+  private attacks: { t: number; from: number; at: THREE.Vector3 }[] = [];
+  private cut: { t: number; from: number; at: THREE.Vector3 } | null = null;
   private tvLook = new THREE.Vector3();
   /** the TV's camera starts where it should (a fresh view) instead of gliding there */
   private tvSnap = true;
   private tvPos = new THREE.Vector3();
-  /** how your eyes look in a replay, and where they point now (eased) */
+  /** how your eyes follow the ball in a replay, where they point now and how fast they turn */
   eyesLook: EyesLook = FX.replayEyes.look;
   private eyesYaw = 0;
   private eyesPitch = 0;
+  private eyesVel = { yaw: 0, pitch: 0 };
+  /** the ball's direction last frame (its angular speed), and a catch-up under way */
+  private eyesBall = { yaw: 0, pitch: 0 };
+  private eyesCatching = false;
   private eyesSnap = true;
   /** where the user's eye was and where they looked at the moment replayed (a replay channel fills it in) */
   readonly replayCam = { eye: new THREE.Vector3(), yaw: 0, pitch: 0 };
@@ -223,7 +227,7 @@ export class Effects {
     // (a phone has no keys: REPLAY changes the view, any other touch ends the replay)
     this.replayTag.innerHTML =
       '<span>●</span> REPLAY <b class="replay-view"></b>' +
-      '<small class="only-kb">R view · V your eyes · 1 2 3 how they look · any other key to skip</small><small class="only-tc">REPLAY: view · tap to skip</small>';
+      '<small class="only-kb">R view · V your eyes · 1 2 how they follow · S slow-mo on/off · any other key to skip</small><small class="only-tc">REPLAY: view · tap to skip</small>';
     this.viewTag = this.replayTag.querySelector('.replay-view')!;
     parent.append(this.letterbox, this.replayTag);
 
@@ -875,7 +879,10 @@ export class Effects {
     for (const e of r.events) {
       if (e.t < from || e.t > to) continue;
       if (e.kind === 'touch' && e.data.hit > 0.5) marks.push(e.t);
-      if (e.kind === 'touch' && e.data.attack > 0.5) this.attacks.push({ t: e.t, at: new THREE.Vector3(e.data.x, e.data.y, e.data.z) });
+      if (e.kind !== 'touch' || e.data.attack < 0.5) continue;
+      // the first is the serve: the camera is on the server from the first frame, not panning over from the other side
+      const on = this.attacks.length ? e.t - FX.replayTv.attackPre : -Infinity;
+      this.attacks.push({ t: e.t, from: on, at: new THREE.Vector3(e.data.x, e.data.y, e.data.z) });
     }
     if (!r.start(from, to, marks)) return false;
     this.whole = true;
@@ -935,47 +942,88 @@ export class Effects {
       this.cut = null;
       this.tvSnap = true;
     }
-    this.viewTag.textContent = v === 'eyes' ? `${VIEW_NAME[v]} · ${EYES_NAME[this.eyesLook]}` : VIEW_NAME[v];
+    this.showTag();
   }
 
-  /** 1, 2, 3 in a replay: how your eyes look (to compare them), seen through your eyes */
+  /** the view's name, and whether slow-mo is off */
+  private showTag(): void {
+    const v = this.replayView;
+    this.viewTag.textContent =
+      (v === 'eyes' ? `${VIEW_NAME[v]} · ${EYES_NAME[this.eyesLook]}` : VIEW_NAME[v]) + (this.replay.realSpeed ? ' · REAL SPEED' : '');
+  }
+
+  /** 1, 2 in a replay: how your eyes follow the ball (to compare them), seen through your eyes */
   lookEyes(l: EyesLook): void {
     this.eyesLook = l;
-    this.setView('eyes');
+    if (this.replayView === 'eyes') this.showTag();
+    else this.setView('eyes');
+  }
+
+  /** S in a replay: slow-mo off (every replay at real speed) or back on; it stays as set for the next replay */
+  toggleSlow(): void {
+    if (!this.replaying) return;
+    this.replay.realSpeed = !this.replay.realSpeed;
+    this.showTag();
   }
 
   /**
-   * Where your eyes point in the replay: as you looked, at the ball, or as you looked turned just
-   * enough to keep the ball in view (`FX.replayEyes`), eased so it never snaps.
+   * Where your eyes point in the replay: from your eye, following the ball (where you looked while it
+   * is out of play) the way a player's head and eyes do (`FX.replayEyes`), never snapping.
    */
   private eyesAim(dt: number): void {
     const g = this.g;
     const c = this.replayCam;
-    const E = FX.replayEyes;
     let yaw = c.yaw;
     let pitch = c.pitch;
     const ball = g.ballView.mesh;
-    if (this.eyesLook !== 'look' && ball.visible) {
+    if (ball.visible) {
       const dx = ball.position.x - c.eye.x;
       const dy = ball.position.y - c.eye.y;
       const dz = ball.position.z - c.eye.z;
-      // the ball's direction, as a turn from where you looked
-      const turn = wrapAngle(yawFromDir(dx, dz) - c.yaw);
-      const tilt = Math.atan2(dy, Math.hypot(dx, dz)) - c.pitch;
-      if (this.eyesLook === 'ball') {
-        yaw += turn;
-        pitch += tilt;
-      } else {
-        const cam = g.rig.camera;
-        const halfV = THREE.MathUtils.degToRad(cam.fov) / 2;
-        const halfH = Math.atan(Math.tan(halfV) * cam.aspect);
-        yaw += beyond(turn, halfH * E.keep);
-        pitch += beyond(tilt, halfV * E.keep);
-      }
+      yaw = yawFromDir(dx, dz);
+      pitch = Math.atan2(dy, Math.hypot(dx, dz));
     }
-    const k = this.eyesSnap || this.eyesLook === 'look' ? 1 : damp(E.ease, dt);
-    this.eyesYaw = lerp(this.eyesYaw, yaw, k);
-    this.eyesPitch = lerp(this.eyesPitch, pitch, k);
+    // the target as the nearest turn from where the eyes point (yaw wraps)
+    yaw = this.eyesYaw + wrapAngle(yaw - this.eyesYaw);
+    const v = this.eyesVel;
+    const b = this.eyesBall;
+    if (this.eyesSnap || dt <= 0) {
+      this.eyesYaw = yaw;
+      this.eyesPitch = pitch;
+      v.yaw = v.pitch = 0;
+      this.eyesCatching = false;
+    } else if (this.eyesLook === 'head') {
+      // a head on a neck: it speeds up and slows down into the turn (critically damped), never
+      // faster than a neck turns, so a hard spike gets a moment ahead of it
+      const H = FX.replayEyes.head;
+      v.yaw += (H.rate * H.rate * (yaw - this.eyesYaw) - 2 * H.rate * v.yaw) * dt;
+      v.pitch += (H.rate * H.rate * (pitch - this.eyesPitch) - 2 * H.rate * v.pitch) * dt;
+      const s = Math.hypot(v.yaw, v.pitch);
+      if (s > H.maxTurn) {
+        v.yaw *= H.maxTurn / s;
+        v.pitch *= H.maxTurn / s;
+      }
+      this.eyesYaw += v.yaw * dt;
+      this.eyesPitch += v.pitch * dt;
+    } else {
+      // eyes: smooth pursuit of the ball's motion (as fast as eyes and head can follow), and once it
+      // is too far ahead a quick catch-up turn (a saccade) onto it, then pursuit again
+      const P = FX.replayEyes.pursuit;
+      const wy = clamp(wrapAngle(yaw - b.yaw) / dt, -P.max, P.max);
+      const wp = clamp((pitch - b.pitch) / dt, -P.max, P.max);
+      this.eyesYaw += P.gain * wy * dt;
+      this.eyesPitch += P.gain * wp * dt;
+      const ey = yaw - this.eyesYaw;
+      const ep = pitch - this.eyesPitch;
+      const off = Math.hypot(ey, ep);
+      if (off > P.saccade) this.eyesCatching = true;
+      else if (off < P.saccade * P.landed) this.eyesCatching = false;
+      const k = damp(this.eyesCatching ? P.catchUp : P.settle, dt);
+      this.eyesYaw += ey * k;
+      this.eyesPitch += ep * k;
+    }
+    b.yaw = yaw;
+    b.pitch = pitch;
     this.eyesSnap = false;
   }
 
@@ -1041,7 +1089,7 @@ export class Effects {
       if (this.whole) this.tvPoint(dt);
       else this.tvAttempt();
     } else {
-      // behind you: the camera you had, aimed where you aimed; your eyes: as `eyesLook` says
+      // behind you: the camera you had, aimed where you aimed; your eyes: on the ball
       const c = this.replayCam;
       if (this.replayView === 'eyes') this.eyesAim(dt);
       rig.yaw = this.replayView === 'eyes' ? this.eyesYaw : c.yaw;
@@ -1095,7 +1143,7 @@ export class Effects {
     const r = this.replay;
     const ball = this.g.ballView.mesh.position;
     const T = FX.replayTv;
-    const a = this.attacks.find((k) => r.cursor >= k.t - T.attackPre && r.cursor <= k.t + T.attackPost) ?? null;
+    const a = this.attacks.find((k) => r.cursor >= k.from && r.cursor <= k.t + T.attackPost) ?? null;
     if (a) {
       if (a !== this.cut) this.besideHitter(a.at, Math.abs(a.at.x) < 0.5 ? 1 : -Math.sign(a.at.x), CLOSE_DIST);
       _v.copy(this.cineA);
@@ -1144,8 +1192,6 @@ const _v = new THREE.Vector3();
 const CLOSE_DIST = 5.0;
 const CLOSE_FOV = 50;
 const _look = new THREE.Vector3();
-/** how far `d` goes past `m` either way (0 inside it) */
-const beyond = (d: number, m: number): number => (Math.abs(d) > m ? d - Math.sign(d) * m : 0);
 const _up = new THREE.Vector3(0, 1, 0);
 const _z = new THREE.Vector3(0, 0, 1);
 const _m1 = new THREE.Matrix4();

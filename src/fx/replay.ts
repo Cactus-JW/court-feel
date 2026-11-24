@@ -59,6 +59,8 @@ export class Replay {
   private extra = new Float32Array(0);
   /** the moments a whole-point replay slows down for (sim time; empty: slow all the way) */
   private marks: number[] = [];
+  /** slow-mo off (S in a replay): every replay plays at real speed */
+  realSpeed = false;
   views: AthleteView[] = [];
   events: ReplayEvent[] = [];
   // playback
@@ -202,6 +204,7 @@ export class Replay {
 
   /** how fast the recording plays at `t`: slow all the way, or slow only around a mark */
   speedAt(t: number): number {
+    if (this.realSpeed) return 1;
     if (!this.marks.length) return FX.replaySlow;
     let d = Infinity;
     for (const m of this.marks) d = Math.min(d, Math.abs(t - m));

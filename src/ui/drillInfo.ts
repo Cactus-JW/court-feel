@@ -233,7 +233,10 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'Game',
       rows: [
         { k: 'V', a: 'First / third person' },
-        { k: 'R', a: 'Replay your last attempt, misses included. Hold: the whole point (Mini Rally). In a replay: change the view' },
+        {
+          k: 'R',
+          a: 'Replay your last attempt, misses included. Hold: the whole point (Mini Rally). In a replay: change the view (S: slow-mo off and on)',
+        },
         { k: 'N', a: 'Reset the rep' },
         { k: 'Esc', a: 'Pause' },
         { k: 'F3', a: 'Debug overlay' },
