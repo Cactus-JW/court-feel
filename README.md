@@ -917,9 +917,9 @@ on touch), and R plays your most recent go at the ball.
 
 **The whole point** (Mini Rally): hold R (or REPLAY) between points and the
 rally plays back from the serve's toss to the ball down. It runs at real
-speed and slows down for each attack, block and dig and for the ball landing,
-the way TV shows a rally, and the TV view cuts to the close angle beside the
-hitter for every attack.
+speed and slows down briefly for the hits (each serve and spike), the way TV
+shows a rally, and the TV view moves to the close angle beside the hitter for
+every attack: a quick glide, not a jump from the other end of the hall.
 
 **Three views**, in every replay: R cycles them, and V goes to your eyes and
 back (on touch, CAM cycles them).
@@ -927,9 +927,12 @@ back (on touch, CAM cycles them).
 * **TV**: the broadcast camera (the close angle beside the hitter, then down
   to the floor; for the whole point, the stands' view with a cut for each attack).
 * **Behind you**: the third-person camera behind your player, aimed where you aimed.
-* **Your eyes**: what you saw, from your eye, looking where you looked, even
-  if you played in third person: whether you watched the ball onto the hand or
-  looked up at the block.
+* **Your eyes**: what you saw, from your eye, even if you played in third
+  person. While three ways of looking are compared, 1, 2 and 3 pick one:
+  **as you looked** (where you looked: whether you watched the ball onto the
+  hand or looked up at the block), **on the ball** (your eye, turned smoothly
+  onto the ball) and **ball in view** (where you looked, turned only as far as
+  it takes to keep the ball in the frame; the default).
 
 The replay plays the world back too: the antennae and the net's top shake as
 the replayed ball hits them, and the mark a hard spike leaves on the floor

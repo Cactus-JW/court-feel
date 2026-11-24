@@ -66,13 +66,15 @@ import { lessonStore } from './lessonStore';
 import { Pace } from './pace';
 import { pixelRatioFor, QualityGovernor } from './quality';
 import { BlockBot, isBotQuality, ServeBot, SpikeBot, TouchBot, type BotQuality } from './bot';
-import { Effects } from '../fx/effects';
+import { Effects, EYES_LOOKS } from '../fx/effects';
 import { reached, Tutorial, type Lesson, type TutorialBegin } from '../game/tutorial';
 
 /** consecutive frames that throw before the game stops and shows the crash screen */
 const MAX_FAILED_FRAMES = 10;
 /** stored once a graphics context was lost while Auto drew above `QUALITY.autoTop` (Game.watchContext) */
 const AUTO_TOP_ONLY_KEY = 'courtfeel.graphicsAutoTopOnly';
+/** in a replay: how your eyes look (`EYES_LOOKS`), while those are being compared */
+const EYES_KEYS = ['Digit1', 'Digit2', 'Digit3'];
 
 /**
  * Owns the renderer, the fixed-timestep simulation, the current drill and
@@ -883,8 +885,11 @@ export class Game implements AiHost {
     if (this.fx.replaying) {
       // slow-motion replay: the simulation is frozen. R changes the view, V goes to your eyes, any other key skips
       this.input.takeMouse();
+      // (1, 2, 3: how your eyes look, while those are being compared)
+      const eyes = this.inMenu ? -1 : EYES_KEYS.findIndex((k) => this.input.consumePress(k));
       if (!this.inMenu && this.input.consumePress('KeyR')) this.fx.cycleView();
       else if (!this.inMenu && this.input.consumePress('KeyV')) this.fx.toggleEyes();
+      else if (eyes >= 0) this.fx.lookEyes(EYES_LOOKS[eyes]);
       else if (this.input.consumeAny() && !this.inMenu) {
         this.fx.endReplay();
         return;

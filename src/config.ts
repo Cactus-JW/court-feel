@@ -1680,17 +1680,26 @@ export const FX = {
   replayHold: 0.4,
   /**
    * The whole point (Mini Rally): from `pre` s before the serve's toss to the ball down, at real
-   * speed, slowing to `replaySlow` within `slowHold` s of an attack, a block, a dig or the ball
-   * landing, and back up to speed over `slowRamp` s, as TV slows a rally down for its big touches.
+   * speed, slowing to `replaySlow` only for the hits (a spike, a serve) within `slowHold` s of the
+   * contact, and back up to speed over `slowRamp` s. Slowing for every dig and landing too made a
+   * 7 s rally take 23 s to watch (the player's call: slow for the hits only, and short).
    */
-  replayPoint: { pre: 0.6, slowHold: 0.3, slowRamp: 0.6 },
+  replayPoint: { pre: 0.6, slowHold: 0.12, slowRamp: 0.3 },
   /**
-   * The whole point's TV view: a broadcast camera in the stands on the long side (`x` m out, `y` m
-   * up), panning along the court with the ball (`follow` of its z), its aim easing after the ball at
-   * `ease`/s with `fov`; and for each attack a cut to the close angle beside the hitter (the one R
-   * uses) from `attackPre` s before the hit to `attackPost` s after it.
+   * The whole point's TV view: a broadcast camera just past the boards on the long side (`x` m out,
+   * `y` m up), panning along the court with the ball (`follow` of its z), with `fov`; and for each
+   * attack the close angle beside the hitter (the one R uses) from `attackPre` s before the hit to
+   * `attackPost` s after it. The camera glides from one spot to the next at `glide`/s and its aim eases
+   * after the ball at `ease`/s: cutting straight there jumped it 13 to 22 m across the hall in a frame.
    */
-  replayTv: { x: 13, y: 6.5, follow: 0.55, ease: 4, fov: 46, attackPre: 0.6, attackPost: 0.9 },
+  replayTv: { x: 10.5, y: 4.5, follow: 0.55, glide: 5, ease: 6, fov: 50, attackPre: 0.6, attackPost: 0.8 },
+  /**
+   * Your eyes in a replay: from your recorded eye, `look` is where they point. 'look': exactly where
+   * you looked; 'ball': at the ball; 'frame': where you looked, turned just enough to keep the ball
+   * inside `keep` of the way from the middle of the view to its edge. Turning eases at `ease`/s. (Being
+   * compared: 1, 2, 3 pick one in a replay.)
+   */
+  replayEyes: { look: 'frame' as 'look' | 'ball' | 'frame', ease: 6, keep: 0.6 },
   /** a miss is replayed from further back than a highlight: the plant, the jump and the ball coming in (s) */
   replayMissPre: 1.3,
   /** and for this long after it: the ball going down (s) */
