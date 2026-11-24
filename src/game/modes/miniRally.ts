@@ -43,6 +43,10 @@ export class MiniRally extends Mode {
   away!: TeamAI;
   private phase: Phase = 'prepare';
   private t = 0;
+  /** when this point's serve was tossed (sim time; null: no serve yet) */
+  private tossT: number | null = null;
+  /** the serve is coming: the next launch after this one (sim time) is its toss */
+  private tossAfter: number | null = null;
   servingSide: 1 | -1 = -1;
   scoreHome = 0;
   scoreAway = 0;
@@ -70,6 +74,8 @@ export class MiniRally extends Mode {
 
   setup(): void {
     const g = this.g;
+    this.tossT = null;
+    this.tossAfter = null;
     this.home = new TeamAI(1, g);
     this.away = new TeamAI(-1, g);
     this.home.opponents = this.away;
@@ -422,6 +428,11 @@ export class MiniRally extends Mode {
     this.prepare();
   }
 
+  /** a point begins with its serve's toss */
+  pointStart(): number | null {
+    return this.tossT;
+  }
+
   ballDead(): boolean {
     return !this.g.ballLive || super.ballDead();
   }
@@ -446,6 +457,10 @@ export class MiniRally extends Mode {
   step(dt: number): void {
     const g = this.g;
     this.t += dt;
+    if (this.tossAfter !== null && g.ball.lastLaunchT > this.tossAfter) {
+      this.tossT = g.ball.lastLaunchT;
+      this.tossAfter = null;
+    }
     this.home.step();
     this.away.step();
     // "your ball" cue (once per ball), also for the second ball when the user backs up the setter
@@ -504,6 +519,7 @@ export class MiniRally extends Mode {
         if (this.t > 1.6 && !g.wheelOpen) {
           this.phase = 'serve';
           this.t = 0;
+          this.tossAfter = g.ball.lastLaunchT;
           const recv = this.servingSide === 1 ? this.away : this.home;
           // a jump serve or a float, at the seams, the deep corners, short or at a passer (the user too)
           const passers = (['OH1', 'OH2', 'L'] as const).map((s) => recv.players.get(s)).filter((a) => a !== undefined);

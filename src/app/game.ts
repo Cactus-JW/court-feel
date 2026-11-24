@@ -3,6 +3,7 @@ import {
   CAMERA,
   CHARACTER,
   COURT,
+  FX,
   GRAPHICS_LEVEL_IDS,
   PLAYER,
   QUALITY,
@@ -323,6 +324,29 @@ export class Game implements AiHost {
     this.me.place(-3.2, 4.5, 0);
     this.addAthlete(this.me);
     this.fx = new Effects(this, container);
+    // a replay can be watched behind you or through your eyes: where your eye was and where you looked go on the record
+    const cam = this.fx.replayCam;
+    this.fx.replay.addChannel({
+      size: 5,
+      write: (o, i) => {
+        o[i] = this.eye.x;
+        o[i + 1] = this.eye.y;
+        o[i + 2] = this.eye.z;
+        o[i + 3] = this.rig.yaw;
+        o[i + 4] = this.rig.pitch;
+      },
+      read: (d, a, b, u) => {
+        cam.eye.set(lerp(d[a], d[b], u), lerp(d[a + 1], d[b + 1], u), lerp(d[a + 2], d[b + 2], u));
+        cam.yaw = lerp(d[a + 3], d[b + 3], u);
+        cam.pitch = lerp(d[a + 4], d[b + 4], u);
+      },
+    });
+    // ...and the antennae and the net's top, which the ball moves (through `this.arena`: a new venue builds a new one)
+    this.fx.replay.addChannel({
+      size: this.arena.shapeSize,
+      write: (o, i) => this.arena.writeShape(o, i),
+      read: (d, a, b, u) => this.arena.readShape(d, a, b, u),
+    });
     // the venue was applied above, before there was a ball or any sound: a saved or linked venue starts with its own
     this.applyVenueToBallAndSound();
 
@@ -857,10 +881,15 @@ export class Game implements AiHost {
 
   private tick(dt: number, draw: boolean): void {
     if (this.fx.replaying) {
-      // slow-motion replay: the simulation is frozen, any key skips
+      // slow-motion replay: the simulation is frozen. R changes the view, V goes to your eyes, any other key skips
       this.input.takeMouse();
-      if (this.input.consumeAny() && !this.inMenu) this.fx.endReplay();
-      else this.fx.replayStep(dt);
+      if (!this.inMenu && this.input.consumePress('KeyR')) this.fx.cycleView();
+      else if (!this.inMenu && this.input.consumePress('KeyV')) this.fx.toggleEyes();
+      else if (this.input.consumeAny() && !this.inMenu) {
+        this.fx.endReplay();
+        return;
+      }
+      this.fx.replayStep(dt);
       this.renderReplay(dt, draw);
       return;
     }
@@ -878,6 +907,8 @@ export class Game implements AiHost {
 
   /** replay recording runs while the ball is live and for a second after (sim time) */
   private recordUntil = 0;
+  /** how long R has been held (real s; -1: it is not) */
+  private rHeld = -1;
 
   /** can the last attempt be replayed right now (R)? */
   replayAvailable(): boolean {
@@ -893,11 +924,13 @@ export class Game implements AiHost {
     this.setSpot.hide();
     this.mode?.replayFrame();
     this.arena.netPress(this.ballView.mesh.visible ? this.ballView.mesh.position : null);
-    this.rig.update(dt, null);
+    this.rig.update(dt, this.fx.replayFollow());
     this.fx.update(dt * this.fx.replay.speed);
     this.arena.update(dt);
     this.hud.update(dt);
     this.hud.setCrosshair(false);
+    // the touch controls too: in a replay REPLAY is CAM, and a held button lets go
+    this.onFrame?.();
     if (!draw) return;
     this.renderer.info.reset();
     this.post.render(dt);
@@ -988,7 +1021,17 @@ export class Game implements AiHost {
     // from here on the frame is played from the intent: whoever's hands it came from
     this.user.intent = this.hands();
     if (this.keyPressed('KeyN')) this.mode?.restartRep();
-    if (this.input.consumePress('KeyR')) this.fx.startReplay();
+    // R: a tap replays your last attempt, held (`FX.replayHold`) the whole point where there is one (Mini Rally)
+    if (this.input.consumePress('KeyR')) this.rHeld = 0;
+    if (this.rHeld >= 0) {
+      if (!this.input.isDown('KeyR')) {
+        this.rHeld = -1;
+        this.fx.startReplay();
+      } else if ((this.rHeld += dt) >= FX.replayHold) {
+        this.rHeld = -1;
+        if (!this.fx.startPointReplay()) this.fx.startReplay();
+      }
+    }
     this.user.frame(dt);
     this.assistSetStep();
     // the lesson's together rep: the coach holds your line (what you hold decides whether time runs)
@@ -1257,7 +1300,8 @@ export class Game implements AiHost {
       const tutoring = this.tutorial.active;
       const base = tutoring ? this.tutorial.hint() : this.mode.hint();
       const replay = !tutoring && this.fx.replayAvailable() ? ` · ${kbd('R')} replay last attempt` : '';
-      this.hud.setHint(base + replay, tutoring);
+      const point = !tutoring && this.fx.pointAvailable() ? ` · hold ${kbd('R')} whole point` : '';
+      this.hud.setHint(base + replay + point, tutoring);
     }
     this.hud.setCrosshair(!this.inMenu, me.state === 'air');
     this.hud.setLoad(

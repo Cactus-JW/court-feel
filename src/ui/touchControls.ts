@@ -93,7 +93,7 @@ export interface TouchHost {
   readonly input: Input;
   readonly events: Pick<Emitter<GameEvents>, 'on'>;
   readonly hud: Pick<Hud, 'keyLabels' | 'collarSweet' | 'touch' | 'scoreShort' | 'callView'>;
-  readonly fx: Pick<Effects, 'audio' | 'replaying' | 'endReplay'>;
+  readonly fx: Pick<Effects, 'audio' | 'replaying' | 'endReplay' | 'pointAvailable'>;
   readonly tutorial: Pick<Tutorial, 'active' | 'teaching' | 'serving' | 'quiet' | 'stuck' | 'requestSkip'>;
   readonly settings: Settings;
   readonly simTime: number;
@@ -434,7 +434,8 @@ export class TouchControls {
       return;
     }
     this.g.fx.audio.unlock();
-    if (this.g.fx.replaying) this.g.fx.endReplay();
+    // a replay: REPLAY (now CAM) changes the view, any other touch ends it
+    if (this.g.fx.replaying && this.buttonAt(e.clientX, e.clientY) !== 'replay') this.g.fx.endReplay();
     try {
       this.root.setPointerCapture(e.pointerId);
     } catch {
@@ -538,10 +539,13 @@ export class TouchControls {
     const wantsSet = g.contact.wantsSet(me);
     const want = wantsSet ? 'SET' : 'BLOCK';
     if (blockLabel.textContent !== want) blockLabel.textContent = want;
-    // the last attempt can be replayed once the ball is dead
-    const replay = g.replayAvailable() && !g.fx.replaying;
+    // the last attempt (a tap) or the whole point (held) can be replayed once the ball is dead; in a replay it is CAM
+    const replaying = g.fx.replaying;
+    const replay = replaying || g.replayAvailable() || g.fx.pointAvailable();
     const rd = replay ? '' : 'none';
     if (this.replayBtn.style.display !== rd) this.replayBtn.style.display = rd;
+    const rl = replaying ? 'CAM' : 'REPLAY';
+    if (this.replayBtn.textContent !== rl) this.replayBtn.textContent = rl;
     // Mini Rally: no rep to reset (the pause menu restarts it)
     const resetD = g.modeId === 'rally' ? 'none' : '';
     if (this.resetBtn.style.display !== resetD) this.resetBtn.style.display = resetD;

@@ -1671,6 +1671,26 @@ export const FX = {
   replaySlow: 0.32,
   replayPre: 0.7,
   replayPost: 0.55,
+  /**
+   * The replay buffer (s): a whole Mini Rally point fits, serve to ball down (a rally ends by itself
+   * at 25 s, `LONG RALLY`). About 9 MB for twelve athletes.
+   */
+  replaySeconds: 32,
+  /** R held this long (s, real time) replays the whole point; let go sooner, the last attempt */
+  replayHold: 0.4,
+  /**
+   * The whole point (Mini Rally): from `pre` s before the serve's toss to the ball down, at real
+   * speed, slowing to `replaySlow` within `slowHold` s of an attack, a block, a dig or the ball
+   * landing, and back up to speed over `slowRamp` s, as TV slows a rally down for its big touches.
+   */
+  replayPoint: { pre: 0.6, slowHold: 0.3, slowRamp: 0.6 },
+  /**
+   * The whole point's TV view: a broadcast camera in the stands on the long side (`x` m out, `y` m
+   * up), panning along the court with the ball (`follow` of its z), its aim easing after the ball at
+   * `ease`/s with `fov`; and for each attack a cut to the close angle beside the hitter (the one R
+   * uses) from `attackPre` s before the hit to `attackPost` s after it.
+   */
+  replayTv: { x: 13, y: 6.5, follow: 0.55, ease: 4, fov: 46, attackPre: 0.6, attackPost: 0.9 },
   /** a miss is replayed from further back than a highlight: the plant, the jump and the ball coming in (s) */
   replayMissPre: 1.3,
   /** and for this long after it: the ball going down (s) */

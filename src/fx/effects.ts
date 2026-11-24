@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { BALL, FX, type Settings } from '../config';
-import { clamp, clamp01, lerp, smooth01 } from '../core/mathx';
+import { clamp, clamp01, damp, lerp, smooth01 } from '../core/mathx';
 import type { Emitter } from '../core/events';
 import type { Input } from '../core/input';
-import type { CameraRig } from '../camera/cameraRig';
+import type { CameraRig, FollowTarget } from '../camera/cameraRig';
 import type { AthleteView } from '../character/athleteView';
 import type { Athlete } from '../game/athlete';
-import type { BallEntity } from '../game/ballEntity';
+import type { BallEntity, TouchKind } from '../game/ballEntity';
 import type { ContactEvent, ContactSystem } from '../game/contact';
 import type { GameEvents } from '../game/gameEvents';
 import type { Mode, ModeId } from '../game/modes/mode';
@@ -32,6 +32,11 @@ interface Decal {
   t: number;
 }
 
+/** what a replay is watched through: the TV's camera, behind your player, your own eyes */
+export type ReplayView = 'tv' | 'behind' | 'eyes';
+const VIEWS: readonly ReplayView[] = ['tv', 'behind', 'eyes'];
+const VIEW_NAME: Record<ReplayView, string> = { tv: 'TV', behind: 'BEHIND YOU', eyes: 'YOUR EYES' };
+
 /**
  * What the effects read of the game, and the two things they may change: the hit-stop they ask for
  * and the camera they borrow for a replay. The app's `Game` is one; the effects do not import it.
@@ -50,7 +55,7 @@ export interface EffectsHost {
   readonly me: Athlete;
   readonly views: ReadonlyMap<Athlete, AthleteView>;
   readonly contact: ContactSystem;
-  readonly mode: Pick<Mode, 'ballDead' | 'userBall'> | null;
+  readonly mode: Pick<Mode, 'ballDead' | 'userBall' | 'pointStart'> | null;
   readonly modeId: ModeId;
   readonly inMenu: boolean;
   readonly paused: boolean;
@@ -72,7 +77,7 @@ export class Effects {
   readonly dust: SpritePool;
   readonly glow: SpritePool;
   readonly trail = new Trail(30);
-  readonly replay = new Replay(8, 60);
+  readonly replay = new Replay(FX.replaySeconds);
   /** the user's attempts at the ball, good and bad; the last one is replayable with R while the ball is dead */
   readonly attempts = new AttemptTracker();
   /** when the ball first hit the floor since its last touch (before that touch: it is still up) */
@@ -87,11 +92,28 @@ export class Effects {
   private replayFrom = 0;
   private replayTo = 0;
   replaying = false;
+  /** the camera the replay is watched through: R cycles it, V goes to your eyes and back */
+  replayView: ReplayView = 'tv';
+  private viewBeforeEyes: ReplayView = 'tv';
+  /** the replay on screen is the whole point (R held), not the last attempt */
+  private whole = false;
+  /** the whole point's attacks, each cut to close up on the TV: when and where it was hit */
+  private attacks: { t: number; at: THREE.Vector3 }[] = [];
+  private cut: { t: number; at: THREE.Vector3 } | null = null;
+  private tvLook = new THREE.Vector3();
+  /** the TV's broadcast camera jumps to the ball (a fresh view, or straight after a cut) instead of easing after it */
+  private tvSnap = true;
+  /** where the user's eye was and where they looked at the moment replayed (a replay channel fills it in) */
+  readonly replayCam = { eye: new THREE.Vector3(), yaw: 0, pitch: 0 };
+  /** the live aim, kept while a replay borrows the camera's yaw and pitch */
+  private liveAim = { yaw: 0, pitch: 0 };
+  private follow: FollowTarget = { root: new THREE.Vector3(), eye: new THREE.Vector3(), sprint: 0, height: 1.95, side: 1 };
   private cineA = new THREE.Vector3();
   private cineB = new THREE.Vector3();
   private cineLookA = new THREE.Vector3();
   private letterbox: HTMLDivElement;
   private replayTag: HTMLDivElement;
+  private viewTag: HTMLElement;
   private flashes: { m: THREE.Sprite; t: number; follow: THREE.Vector3 | null }[] = [];
   /** shock rings in the air around a Perfect spike's path */
   private airRings: Ring[] = [];
@@ -188,9 +210,11 @@ export class Effects {
     this.letterbox.className = 'letterbox';
     this.replayTag = document.createElement('div');
     this.replayTag.className = 'replay-tag';
-    // (a phone has no keys: any touch ends the replay)
+    // (a phone has no keys: REPLAY changes the view, any other touch ends the replay)
     this.replayTag.innerHTML =
-      '<span>●</span> REPLAY <small class="only-kb">any key to skip</small><small class="only-tc">tap to skip</small>';
+      '<span>●</span> REPLAY <b class="replay-view"></b>' +
+      '<small class="only-kb">R view · V your eyes · any other key to skip</small><small class="only-tc">REPLAY: view · tap to skip</small>';
+    this.viewTag = this.replayTag.querySelector('.replay-view')!;
     parent.append(this.letterbox, this.replayTag);
 
     this.replay.onEvent = (e) => this.playEvent(e, true);
@@ -202,6 +226,7 @@ export class Effects {
     const ev = g.events;
     ev.on('contact', (e) => this.onContact(e));
     ev.on('aiContact', (e) => {
+      this.noteTouch(e.kind, g.ball.pos);
       this.trail.intensity = 0;
       this.trail.fade();
       this.pendingImpact = null;
@@ -279,6 +304,7 @@ export class Effects {
     const p = e.point;
     // every go at the ball can be watched again: a clean contact, a poor one, a swing that found nothing
     if (user && !g.inMenu) this.attempts.contact(g.simTime, e.kind, e.grade, p, e.athlete.pos, g.ball.pos);
+    if (e.grade !== 'Miss') this.noteTouch(e.kind, p);
     // a new touch ends the previous ball's trail (attacks re-ignite their own) and
     // cancels the previous attack's floor-impact package (a blocked/dug Perfect spike
     // must not crack the floor wherever the ball later drops)
@@ -370,6 +396,13 @@ export class Effects {
         if (e.perfect && user) this.glowAt(p, 0.14, new THREE.Color(1.0, 0.95, 0.7));
         break;
     }
+  }
+
+  /** every touch goes on the record: the whole point slows down for an attack, a block or a dig, and cuts close for an attack */
+  private noteTouch(kind: TouchKind, at: { x: number; y: number; z: number }): void {
+    const attack = kind === 'spike' || kind === 'tip' || kind === 'serve';
+    const slow = attack || kind === 'block' || kind === 'dig';
+    this.replay.addEvent(this.g.simTime, 'touch', { x: at.x, y: at.y, z: at.z, slow: slow ? 1 : 0, attack: attack ? 1 : 0 });
   }
 
   /** a block's sound, hand flashes and spray, live or from the replay (the shake and the crowd are live only) */
@@ -743,6 +776,8 @@ export class Effects {
     const b = g.ball;
     if (this.downT >= b.lastLaunchT) return;
     this.downT = g.simTime;
+    // the whole point slows down as the ball lands
+    this.replay.addEvent(g.simTime, 'down', { x, z });
     if (g.inMenu) return;
     const lt = b.lastTouch;
     this.attempts.ballDown(g.simTime, x, z, g.me.pos, {
@@ -801,13 +836,100 @@ export class Effects {
   private begin(hasImpact: boolean, ballAt?: THREE.Vector3): boolean {
     if (!this.replay.start(this.replayFrom, this.replayTo)) return false;
     this.replay.contact.copy(this.replay.focus);
+    this.whole = false;
+    this.enter();
+    this.setupCine(hasImpact, ballAt);
+    return true;
+  }
+
+  /** can a held R replay the whole point right now? (Mini Rally, between points, its serve still in the buffer) */
+  pointAvailable(): boolean {
+    const g = this.g;
+    const t = g.mode?.pointStart() ?? null;
+    if (t === null || this.replaying || this.replayAt > 0 || g.inMenu || g.paused || !this.ballDead()) return false;
+    return t >= this.replay.oldestT && this.replay.newestT > t + 1;
+  }
+
+  /**
+   * R held: the whole point, from the serve's toss to the ball down, at real speed that slows down
+   * for the attacks, blocks, digs and the ball landing (`FX.replayPoint`); the TV cuts close for each attack.
+   */
+  startPointReplay(): boolean {
+    if (!this.pointAvailable()) return false;
+    const r = this.replay;
+    const from = this.g.mode!.pointStart()! - FX.replayPoint.pre;
+    const to = r.newestT;
+    const marks: number[] = [];
+    this.attacks = [];
+    for (const e of r.events) {
+      if (e.t < from || e.t > to) continue;
+      if (e.kind === 'down' || (e.kind === 'touch' && e.data.slow > 0.5)) marks.push(e.t);
+      if (e.kind === 'touch' && e.data.attack > 0.5) this.attacks.push({ t: e.t, at: new THREE.Vector3(e.data.x, e.data.y, e.data.z) });
+    }
+    if (!r.start(from, to, marks)) return false;
+    this.whole = true;
+    this.enter();
+    return true;
+  }
+
+  /** a replay is on: only keys pressed from now on count, the live floor marks go, it opens on the TV */
+  private enter(): void {
+    const rig = this.g.rig;
     // "any key skips": only keys pressed from now on count. Movement keys are read as held and
     // their press edges are never consumed, so a stale W or Shift must not end it at once
     this.g.input.clearEdges();
     this.replaying = true;
-    this.setupCine(hasImpact, ballAt);
+    this.liveAim.yaw = rig.yaw;
+    this.liveAim.pitch = rig.pitch;
+    this.viewBeforeEyes = 'tv';
+    this.setView('tv');
+    this.clearFloor();
+    this.trail.intensity = 0;
+    this.trail.fade();
     document.body.classList.add('replaying');
-    return true;
+  }
+
+  /** the live ball's marks on the floor go as a replay starts: the replayed ball leaves its own where it lands */
+  private clearFloor(): void {
+    for (const d of this.decals) d.mesh.visible = false;
+    for (const r of this.rings) {
+      r.t = 1;
+      r.mesh.visible = false;
+    }
+  }
+
+  /** R in a replay: the next view (TV, behind you, your eyes) */
+  cycleView(): void {
+    this.setView(VIEWS[(VIEWS.indexOf(this.replayView) + 1) % VIEWS.length]);
+  }
+
+  /** V in a replay: to your eyes, and back to the view you came from */
+  toggleEyes(): void {
+    this.setView(this.replayView === 'eyes' ? this.viewBeforeEyes : 'eyes');
+  }
+
+  private setView(v: ReplayView): void {
+    if (!this.replaying) return;
+    if (v === 'eyes' && this.replayView !== 'eyes') this.viewBeforeEyes = this.replayView;
+    this.replayView = v;
+    const rig = this.g.rig;
+    // (a camera mode of its own starts where it should, not eased in from the last view)
+    if (v === 'behind') rig.setMode('tp');
+    else if (v === 'eyes') rig.setMode('fp');
+    else {
+      rig.mode = 'cine';
+      this.cut = null;
+      this.tvSnap = true;
+    }
+    this.viewTag.textContent = VIEW_NAME[v];
+  }
+
+  /** the close angle on a hit at C: beside the hitter on the `sx` side, a step behind the net, `dist` m away */
+  private besideHitter(C: THREE.Vector3, sx: number, dist: number): void {
+    const sz = Math.sign(C.z) || 1;
+    this.cineA.set(clamp(C.x + sx * dist, -FX.replayMissMaxX, FX.replayMissMaxX), 1.75, C.z + sz * 1.6);
+    // frame the hitter's body and the contact point together
+    this.cineLookA.set(C.x, C.y - 1.0, C.z);
   }
 
   /** `ballAt` (a miss): where the ball was, so the camera stands on the player's other side with both in front of it */
@@ -818,7 +940,7 @@ export class Effects {
     // broadcast angle: beside the hitter towards the middle of the court, a step behind the net
     let sx = Math.abs(C.x) < 0.5 ? 1 : -Math.sign(C.x);
     const sz = Math.sign(C.z) || 1;
-    let dist = 5.0;
+    let dist = CLOSE_DIST;
     if (this.cineMiss) {
       dist = FX.replayMissDist;
       if (ballAt) {
@@ -828,17 +950,13 @@ export class Effects {
         dist += Math.hypot(dx, ballAt.z - C.z) * FX.replayMissSpan;
       }
     }
-    this.cineA.set(clamp(C.x + sx * dist, -FX.replayMissMaxX, FX.replayMissMaxX), 1.75, C.z + sz * 1.6);
-    // frame the hitter's body and the contact point together
-    this.cineLookA.set(C.x, C.y - 1.0, C.z);
+    this.besideHitter(C, sx, dist);
     if (hasImpact) {
       // then a low view from between the net and the impact, looking at the floor where it lands
       const ix = Math.abs(I.x) < 0.5 ? -sx : -Math.sign(I.x);
       const iz = Math.sign(I.z) || -sz;
       this.cineB.set(I.x + ix * 3.0, 1.15, I.z - iz * 2.4);
     } else this.cineB.copy(this.cineA); // no floor impact (a dig, a set, a block): one angle, track the ball
-    this.trail.intensity = 0;
-    this.trail.fade();
   }
 
   /**
@@ -855,11 +973,49 @@ export class Effects {
   /** run during a replay instead of the simulation; false when it ended */
   replayStep(dt: number): boolean {
     const g = this.g;
+    const live = this.replay.advance(dt, g.ballView.mesh);
+    const rig = g.rig;
+    // through your eyes your own head is out of the way, as it is live in first person
+    const mine = g.views.get(g.me);
+    if (mine) {
+      mine.setFirstPerson(this.replayView === 'eyes');
+      mine.applyHeadHidden();
+    }
+    if (this.replayView === 'tv') {
+      rig.mode = 'cine';
+      if (this.whole) this.tvPoint(dt);
+      else this.tvAttempt();
+    } else {
+      // behind you or through your eyes: the camera you had, aimed where you aimed
+      const c = this.replayCam;
+      rig.yaw = c.yaw;
+      rig.pitch = c.pitch;
+      rig.clampPitch();
+      rig.ballPos = g.ballView.mesh.visible ? g.ballView.mesh.position : null;
+    }
+    if (!live) this.endReplay();
+    return live;
+  }
+
+  /** what the camera follows in a replay seen behind you or through your eyes (null: the TV's camera needs none) */
+  replayFollow(): FollowTarget | null {
+    if (!this.replaying || this.replayView === 'tv') return null;
+    const g = this.g;
+    const f = this.follow;
+    const root = g.views.get(g.me)?.root.position;
+    if (root) f.root.copy(root);
+    f.eye.copy(this.replayCam.eye);
+    f.height = g.me.height;
+    f.side = g.me.side;
+    return f;
+  }
+
+  /** the last attempt on the TV: beside the hitter, then down to where the ball lands (a miss: on the player) */
+  private tvAttempt(): void {
+    const g = this.g;
     const r = this.replay;
-    const live = r.advance(dt, g.ballView.mesh);
     const rig = g.rig;
     const u = smooth01((r.cursor - r.contactT + 0.05) / Math.max(0.2, r.impactT - r.contactT + 0.1));
-    rig.mode = 'cine';
     rig.cinePos.lerpVectors(this.cineA, this.cineB, u);
     const body = this.cineMiss ? g.views.get(g.me)?.root.position : undefined;
     if (body) {
@@ -874,20 +1030,45 @@ export class Effects {
       rig.cineTarget.copy(this.cineLookA).lerp(r.focus, smooth01(u * 1.6));
     }
     // (a miss holds the opening field of view: there is no impact to widen for)
-    rig.cineFov = lerp(50, 56, body ? 0 : u);
-    if (!live) this.endReplay();
-    return live;
+    rig.cineFov = lerp(CLOSE_FOV, 56, body ? 0 : u);
+  }
+
+  /** the whole point on the TV: the broadcast camera in the stands, cut close for each attack */
+  private tvPoint(dt: number): void {
+    const rig = this.g.rig;
+    const r = this.replay;
+    const ball = this.g.ballView.mesh.position;
+    const T = FX.replayTv;
+    const a = this.attacks.find((k) => r.cursor >= k.t - T.attackPre && r.cursor <= k.t + T.attackPost) ?? null;
+    if (a) {
+      if (a !== this.cut) this.besideHitter(a.at, Math.abs(a.at.x) < 0.5 ? 1 : -Math.sign(a.at.x), CLOSE_DIST);
+      rig.cinePos.copy(this.cineA);
+      // the hitter's body and the contact, then the ball off the hand
+      rig.cineTarget.copy(this.cineLookA).lerp(ball, smooth01((r.cursor - a.t) / T.attackPost));
+      rig.cineFov = CLOSE_FOV;
+    } else {
+      // the broadcast camera pans along the court with the ball, its aim easing after it (a cut: at once)
+      this.tvLook.lerp(ball, this.cut || this.tvSnap ? 1 : damp(T.ease, dt));
+      rig.cinePos.set(T.x, T.y, this.tvLook.z * T.follow);
+      rig.cineTarget.copy(this.tvLook);
+      rig.cineFov = T.fov;
+    }
+    this.cut = a;
+    this.tvSnap = false;
   }
 
   endReplay(): void {
     const g = this.g;
     this.replay.stop();
     this.replaying = false;
+    this.whole = false;
     document.body.classList.remove('replaying');
+    // the replay borrowed the camera's aim for the views behind you and through your eyes
+    g.rig.yaw = this.liveAim.yaw;
+    g.rig.pitch = this.liveAim.pitch;
     g.rig.setMode(g.settings.firstPerson ? 'fp' : 'tp');
     g.ballView.mesh.visible = g.ball.active;
   }
-
   onModeStart(): void {
     this.replay.setViews([...this.g.views.values()]);
     this.replayAt = -1;
@@ -899,6 +1080,9 @@ export class Effects {
 }
 
 const _v = new THREE.Vector3();
+/** the close angle on a hit: this far from the hitter (m), with this field of view (degrees) */
+const CLOSE_DIST = 5.0;
+const CLOSE_FOV = 50;
 const _up = new THREE.Vector3(0, 1, 0);
 const _z = new THREE.Vector3(0, 0, 1);
 const _m1 = new THREE.Matrix4();

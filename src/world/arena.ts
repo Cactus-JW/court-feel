@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ARENA, BALL, COURT } from '../config';
+import { lerp } from '../core/mathx';
 import { antennaShape, makeRodPoints, type BallState } from '../physics/ball';
 import { FloorReflection, REFLECT_LAYER } from './floorReflection';
 import { mergeGeometries } from './geo';
@@ -53,6 +54,8 @@ export class Arena {
   /** each antenna (-x, +x) as the physics has it: how far each of its points from the net's top to the tip is moved */
   private antPts = [-1, 1].map(() => ({ value: Array.from({ length: BALL.antenna.samples + 1 }, () => new THREE.Vector3()) }));
   private antShape = makeRodPoints();
+  /** a replay is posing the antennae and the net's top: the live shake waits until the live scene is back */
+  private held = false;
   /** the floor and what is painted on it: not part of its own mirror image */
   private unmirrored: THREE.Object3D[] = [];
   private skyTex: THREE.Texture | null = null;
@@ -615,8 +618,40 @@ export class Arena {
     this.shake.hit(e);
   }
 
+  /** how many numbers `writeShape` keeps a frame */
+  get shapeSize(): number {
+    return this.antPts.length * this.antPts[0].value.length * 3 + this.netTopZ.value.length;
+  }
+
+  /** the antennae and the net's top as they are drawn now, into `out` from `o` (a replay records them) */
+  writeShape(out: Float32Array, o: number): void {
+    for (const ant of this.antPts) {
+      for (const p of ant.value) {
+        out[o++] = p.x;
+        out[o++] = p.y;
+        out[o++] = p.z;
+      }
+    }
+    for (const z of this.netTopZ.value) out[o++] = z;
+  }
+
+  /** a replay poses them `u` of the way from the frame at `a` to the frame at `b` */
+  readShape(d: Float32Array, a: number, b: number, u: number): void {
+    this.held = true;
+    for (const ant of this.antPts) {
+      for (const p of ant.value) {
+        p.set(lerp(d[a], d[b], u), lerp(d[a + 1], d[b + 1], u), lerp(d[a + 2], d[b + 2], u));
+        a += 3;
+        b += 3;
+      }
+    }
+    const top = this.netTopZ.value;
+    for (let i = 0; i < top.length; i++) top[i] = lerp(d[a + i], d[b + i], u);
+  }
+
   /** the antennae and the net's sides as the ball's physics has them now (`BALL.antenna`) */
   antennae(ball: BallState): void {
+    this.held = false;
     const seg = COURT.antennaAboveNet / BALL.antenna.samples;
     for (const [k, sx] of [-1, 1].entries()) {
       antennaShape(ball, sx, this.netTop, this.antShape);
@@ -645,7 +680,7 @@ export class Arena {
   update(dt: number): void {
     this.time += dt;
     this.netTime.value = this.time;
-    if (this.shake.moving || this.netTopZ.value.some((z) => z !== 0)) {
+    if (!this.held && (this.shake.moving || this.netTopZ.value.some((z) => z !== 0))) {
       this.shake.step(dt);
       const n = ARENA.netTop.samples;
       for (let i = 0; i < n; i++) this.netTopZ.value[i] = this.shake.top(COURT.postX * ((2 * i) / (n - 1) - 1));

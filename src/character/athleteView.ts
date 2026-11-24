@@ -204,6 +204,11 @@ export class AthleteView {
     this.hideHead = fp;
   }
 
+  /** a replay posed this body with its head on: hide it again when it is seen from inside (your eyes) */
+  applyHeadHidden(): void {
+    this.rig.bones.head.scale.setScalar(this.hideHead ? 0.001 : 1);
+  }
+
   setOpacity(o: number): void {
     if (Math.abs(o - this.opacity) < 0.01) return;
     this.opacity = o;

@@ -232,7 +232,7 @@ Settings → **Spike timing collar** turns it off (on by default).
 | E | Bump / pass / dig (press early so the platform is ready; hold it) |
 | Q | Serve toss (Serve Drill; Free Play too). **Hold** it: the longer the hold, the higher the toss (and for a jump float or a jump serve, the further ahead, for a longer run-up), tossed when you let go (a tap is the lowest; the ring around the crosshair fills to the highest at 0.8 s). It is the toss of the serve you picked with 1 / 2 / 3. Then serve it with the spike's controls: run in (Shift + W) and jump (Space) for a jump float or a jump serve, hold and release Left mouse to hit |
 | V | Toggle first / third person instantly, any time (even mid-rally) |
-| R | Replay your last attempt in slow motion once the ball is dead: a clean contact, a poor one, a swing or a block that found no ball, or a ball that was yours and dropped untouched. Any key skips it; the game carries on where it was. |
+| R | Replay your last attempt in slow motion once the ball is dead: a clean contact, a poor one, a swing or a block that found no ball, or a ball that was yours and dropped untouched. **Hold** R (Mini Rally) for the whole point, serve to ball down. In a replay R changes the view (TV, behind you, your eyes) and V goes to your eyes and back; any other key skips it, and the game carries on where it was. |
 | N | Reset / skip the current rep (Mini Rally: re-serve) |
 | 1 to 5 | Spike Drill and Mini Rally, as a hitter: your route for the next ball (the outside's High, Hut, Go, 3, 2; the middle's 1, Push, Shoot, Back 1; the opposite's Back, Fast, Back 2, Back 1, X — see "Calls, plays and the dump"). Serve Drill: 1 / 2 / 3 is your serve (standing float, jump float, jump serve) |
 | C (hitter) | Spike Drill and Mini Rally, as a hitter: the route panel. Your half of the court from above with every route's run and where it is hit, its tempo, and the play your setter has called with your team-mates' routes in it. C again closes it; the game does not stop for it. |
@@ -266,7 +266,7 @@ Hold the phone sideways.
 | **TOSS** | Serve toss (Serve Drill, Free Play). Hold it longer for a higher toss. |
 | Top bar | One thin bar along the top edge. Right: pause, the score (Mini Rally, with a gold dot on the serving side), reset rep (the drills) and REPLAY when your last attempt can be watched again; the camera is the pause menu's View. Left: one chip per route (Spike Drill, Mini Rally, as a hitter) and ROUTES for the route panel (drag on it to scroll, tap a route to call it; ROUTES again closes it), or, when you set, one chip per hitter with the call they run (tap a hitter to pick, again for their next set; PLAY calls a play until the pass: hold it, slide onto a play on the wheel and let go, or tap PLAY, then touch a play and let go; Setter Drill: ROW for the front row, DUMP; Mini Rally: HELP). Each call is in its hitter's colour, as on the call cards, and the one that is on is underlined. Also the opposing block toggle (Spike Drill), your serve (Serve Drill) or feed types (Free Play). |
 | Button sizes | The buttons stay in the same places; your position sizes them. A setter's SET is bigger and HIT smaller, a middle's BLOCK bigger and PASS smaller, a libero's PASS bigger and HIT and JUMP smaller. |
-| On a phone | Only the court, the buttons and the top bar: no title, speed, streak, camera name or drill intro line, and the set bar without its checklist. A drill's score sentence is a small line under the bar, the grade, the drill's message and a banner stack without covering each other (the grade, the banner and the calls over the players are small, so a rally stays in view), and the play wheel opens below the bar, scaled to fit. A replay says *tap to skip* at the bottom centre. Key hints start off (Settings → Key hints). The field of view is a phone's own, 62° (Settings → Camera): a phone held sideways then sees about as wide as a 16:9 monitor at 72°. |
+| On a phone | Only the court, the buttons and the top bar: no title, speed, streak, camera name or drill intro line, and the set bar without its checklist. A drill's score sentence is a small line under the bar, the grade, the drill's message and a banner stack without covering each other (the grade, the banner and the calls over the players are small, so a rally stays in view), and the play wheel opens below the bar, scaled to fit. A replay says *tap to skip* at the bottom centre; REPLAY becomes CAM, which changes the view, and holding REPLAY plays the whole point in the Mini Rally. Key hints start off (Settings → Key hints). The field of view is a phone's own, 62° (Settings → Camera): a phone held sideways then sees about as wide as a 16:9 monitor at 72°. |
 
 Haptics (Android) tick at full charge and on a graded contact. Tunables are in
 `TOUCH` in `src/config.ts` (stick radius, run threshold, look scale, the
@@ -915,8 +915,28 @@ on touch), and R plays your most recent go at the ball.
   Rally, the set after your pass in Serve Receive) or one coming back off
   the block in a drill.
 
-The simulation is frozen while it plays, so nothing is missed: any key (or a
-touch) skips, and the drill or rally continues exactly where it was, with the
+**The whole point** (Mini Rally): hold R (or REPLAY) between points and the
+rally plays back from the serve's toss to the ball down. It runs at real
+speed and slows down for each attack, block and dig and for the ball landing,
+the way TV shows a rally, and the TV view cuts to the close angle beside the
+hitter for every attack.
+
+**Three views**, in every replay: R cycles them, and V goes to your eyes and
+back (on touch, CAM cycles them).
+
+* **TV**: the broadcast camera (the close angle beside the hitter, then down
+  to the floor; for the whole point, the stands' view with a cut for each attack).
+* **Behind you**: the third-person camera behind your player, aimed where you aimed.
+* **Your eyes**: what you saw, from your eye, looking where you looked, even
+  if you played in third person: whether you watched the ball onto the hand or
+  looked up at the block.
+
+The replay plays the world back too: the antennae and the net's top shake as
+the replayed ball hits them, and the mark a hard spike leaves on the floor
+appears when the replayed ball lands, not before.
+
+The simulation is frozen while it plays, so nothing is missed: any other key
+(or a touch) skips, and the drill or rally continues exactly where it was, with the
 same score and rep. With the
 Spike Drill's block on (B), the replay shows it too: the blockers' read and
 jump, the touch on their hands and the block shadow from your contact point.
