@@ -1669,8 +1669,48 @@ export const FX = {
   crackLife: 7,
   replayEnabled: true,
   replaySlow: 0.32,
+  /**
+   * A replayed sound's playback rate while the replay runs at `replaySlow`: pitched down with the
+   * picture (the rate the slow-motion replay always had). At real speed it plays at 1, and in
+   * between it follows the replay's speed, so a dig at real speed or REAL SPEED (S) is not pitched down.
+   */
+  replaySoundSlow: 0.55,
+  /** the close angle on a hit (TV, and the last attempt's replay): this far from the hitter (m), with this field of view (degrees) */
+  replayClose: { dist: 5.0, fov: 50 },
   replayPre: 0.7,
   replayPost: 0.55,
+  /**
+   * The replay buffer (s): a whole Mini Rally point fits, serve to ball down (a rally ends by itself
+   * at 25 s, `LONG RALLY`). Sized for 70 frames a second, the most `Replay.record` keeps: about 10 MB for
+   * twelve athletes.
+   */
+  replaySeconds: 32,
+  /** R held this long (s, real time) replays the whole point; let go sooner, the last attempt */
+  replayHold: 0.4,
+  /**
+   * The whole point (Mini Rally): from `pre` s before the serve's toss (the TV on the server from the
+   * first frame: opening earlier, it panned over from the other side of the net) to the ball down, at real
+   * speed, slowing to `replaySlow` only for the hits (a spike, a serve) within `slowHold` s of the
+   * contact, and back up to speed over `slowRamp` s. Slowing for every dig and landing too made a
+   * 7 s rally take 23 s to watch (the player's call: slow for the hits only, and short).
+   */
+  replayPoint: { pre: 0.1, slowHold: 0.12, slowRamp: 0.3 },
+  /**
+   * The whole point's TV view: a broadcast camera just past the boards on the long side (`x` m out,
+   * `y` m up), panning along the court with the ball (`follow` of its z), with `fov`; and for each
+   * attack the close angle beside the hitter (the one R uses) from `attackPre` s before the hit to
+   * `attackPost` s after it. The camera glides from one spot to the next at `glide`/s and its aim eases
+   * after the ball at `ease`/s: cutting straight there jumped it 13 to 22 m across the hall in a frame.
+   */
+  replayTv: { x: 10.5, y: 4.5, follow: 0.55, glide: 5, ease: 6, fov: 50, attackPre: 0.6, attackPost: 0.8 },
+  /**
+   * Your eyes in a replay: from your recorded eye, following the ball like a head turning on a neck,
+   * critically damped at `rate` rad/s and never faster than `maxTurn` rad/s (a quick head turn is
+   * 200 to 400 degrees a second), so a hard spike gets a moment ahead of it. Exactly where you looked
+   * left the ball out of the frame about half the time (the eyes drop on the approach); the player
+   * picked this over eyes that keep the ball centred with quick catch-up turns.
+   */
+  replayEyes: { rate: 9, maxTurn: 6 },
   /** a miss is replayed from further back than a highlight: the plant, the jump and the ball coming in (s) */
   replayMissPre: 1.3,
   /** and for this long after it: the ball going down (s) */

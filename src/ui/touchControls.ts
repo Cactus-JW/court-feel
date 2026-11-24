@@ -93,7 +93,7 @@ export interface TouchHost {
   readonly input: Input;
   readonly events: Pick<Emitter<GameEvents>, 'on'>;
   readonly hud: Pick<Hud, 'keyLabels' | 'collarSweet' | 'touch' | 'scoreShort' | 'callView'>;
-  readonly fx: Pick<Effects, 'audio' | 'replaying' | 'endReplay'>;
+  readonly fx: Pick<Effects, 'audio' | 'replaying' | 'endReplay' | 'pointAvailable'>;
   readonly tutorial: Pick<Tutorial, 'active' | 'teaching' | 'serving' | 'quiet' | 'stuck' | 'requestSkip'>;
   readonly settings: Settings;
   readonly simTime: number;
@@ -477,9 +477,11 @@ export class TouchControls {
     } catch {
       /* already captured */
     }
-    // a tap that skips a replay is only the skip, as a key is (`SkipFingers`); captured, so its lift comes back here
-    if (this.skipFingers.down(e.pointerId)) return;
-    const onButton = !!this.buttonAt(e.clientX, e.clientY);
+    // a replay: REPLAY (now CAM) changes the view; any other touch ends it and is only the skip, as a key is
+    // (`SkipFingers`); captured, so its lift comes back here
+    const at = this.buttonAt(e.clientX, e.clientY);
+    if (at !== 'replay' && this.skipFingers.down(e.pointerId)) return;
+    const onButton = !!at;
     // the open route panel is under this layer too: a finger on it scrolls it or calls the route it taps. Not in the
     // air or loading a jump: then the whole right half is HIT, panel or not
     const air = this.g.me.state === 'air' || this.g.me.state === 'load';
@@ -579,10 +581,13 @@ export class TouchControls {
     const wantsSet = g.contact.wantsSet(me);
     const want = wantsSet ? 'SET' : 'BLOCK';
     if (blockLabel.textContent !== want) blockLabel.textContent = want;
-    // the last attempt can be replayed once the ball is dead
-    const replay = g.replayAvailable() && !g.fx.replaying;
+    // the last attempt (a tap) or the whole point (held) can be replayed once the ball is dead; in a replay it is CAM
+    const replaying = g.fx.replaying;
+    const replay = replaying || g.replayAvailable() || g.fx.pointAvailable();
     const rd = replay ? '' : 'none';
     if (this.replayBtn.style.display !== rd) this.replayBtn.style.display = rd;
+    const rl = replaying ? 'CAM' : 'REPLAY';
+    if (this.replayBtn.textContent !== rl) this.replayBtn.textContent = rl;
     // Mini Rally: no rep to reset (the pause menu restarts it)
     const resetD = g.modeId === 'rally' ? 'none' : '';
     if (this.resetBtn.style.display !== resetD) this.resetBtn.style.display = resetD;

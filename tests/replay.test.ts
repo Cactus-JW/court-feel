@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { Athlete } from '../src/game/athlete';
 import { AthleteView } from '../src/character/athleteView';
 import { makeKit } from '../src/character/kits';
+import { FX } from '../src/config';
 import { Replay } from '../src/fx/replay';
+import { headlessGame } from './headlessGame';
 
 const DT = 1 / 60;
 
@@ -28,7 +30,7 @@ describe('replay', () => {
    * replay must record and pose them too, not leave them frozen where they stand live.
    */
   function recordWithLateBlocker() {
-    const r = new Replay(4, 60);
+    const r = new Replay(4);
     const ball = new THREE.Object3D();
     const me = makeView(-3);
     r.setViews([me]);
@@ -95,5 +97,126 @@ describe('replay', () => {
     r.setViews([me]);
     expect(r.playing).toBe(false);
     expect(blocker.root.visible).toBe(true);
+  });
+});
+
+describe('the whole point (R held)', () => {
+  /** a second of play with nothing but a ball, recorded at 60 frames a second */
+  function recorded(seconds: number) {
+    const r = new Replay(seconds + 1);
+    const ball = new THREE.Object3D();
+    r.setViews([]);
+    for (let t = 0; t < seconds; t += DT) {
+      ball.position.set(0, 1, t);
+      r.record(t, ball, true);
+    }
+    return { r, ball };
+  }
+
+  it('plays at real speed between the touches and slows to the replay speed at each of them, as TV does', () => {
+    const { r } = recorded(10);
+    expect(r.start(0, 9.9, [2, 6])).toBe(true);
+    const P = FX.replayPoint;
+    // on the touch, and just around it: slow
+    expect(r.speedAt(2)).toBeCloseTo(FX.replaySlow, 6);
+    expect(r.speedAt(6 - P.slowHold)).toBeCloseTo(FX.replaySlow, 6);
+    // between them: real speed
+    expect(r.speedAt(4)).toBeCloseTo(1, 6);
+    expect(r.speedAt(2 + P.slowHold + P.slowRamp)).toBeCloseTo(1, 6);
+    // and it eases from one to the other, never jumping
+    let last = r.speedAt(2);
+    for (let t = 2; t <= 4; t += 0.01) {
+      const s = r.speedAt(t);
+      expect(s).toBeGreaterThanOrEqual(last - 1e-9);
+      expect(s - last).toBeLessThan(0.05);
+      last = s;
+    }
+  });
+
+  it('a replay without touches to slow for (the last attempt) is slow all the way', () => {
+    const { r } = recorded(4);
+    expect(r.start(0.5, 3.5)).toBe(true);
+    for (const t of [0.5, 1.7, 3.4]) expect(r.speedAt(t)).toBe(FX.replaySlow);
+  });
+
+  it('with slow-mo off a replay plays at real speed, the hits and the last attempt too', () => {
+    const { r } = recorded(10);
+    r.realSpeed = true;
+    expect(r.start(0, 9.9, [2, 6])).toBe(true);
+    for (const t of [2, 4, 6]) expect(r.speedAt(t)).toBe(1);
+    expect(r.start(0.5, 3.5)).toBe(true);
+    expect(r.speedAt(1.7)).toBe(1);
+  });
+
+  it('a 25 s rally and its serve fit in the buffer (a rally ends by itself at 25 s)', () => {
+    const r = new Replay(FX.replaySeconds);
+    expect(r.seconds).toBeGreaterThanOrEqual(25 + FX.replayPoint.pre + 2);
+  });
+
+  it('the buffer holds all its seconds on a 70 Hz display too (it keeps a frame every 1/70 s at most)', () => {
+    const r = new Replay(FX.replaySeconds);
+    const ball = new THREE.Object3D();
+    r.setViews([]);
+    // a display just under 70 Hz: every frame is kept
+    const dt = 1 / 69.9;
+    for (let t = 0; t < FX.replaySeconds + 5; t += dt) r.record(t, ball, true);
+    expect(r.newestT - r.oldestT).toBeGreaterThanOrEqual(FX.replaySeconds - 2 * dt);
+  });
+});
+
+describe('what else a replay plays back (the antennae, the net, where you looked)', () => {
+  it('a channel is posed as it was recorded at the moment replayed, between frames too', () => {
+    const r = new Replay(4);
+    const ball = new THREE.Object3D();
+    // something that swings, like an antenna the ball hit: two numbers a frame
+    let live = [0, 0];
+    const posed = [NaN, NaN];
+    r.addChannel({
+      size: 2,
+      write: (o, i) => {
+        o[i] = live[0];
+        o[i + 1] = live[1];
+      },
+      read: (d, a, b, u) => {
+        posed[0] = d[a] + (d[b] - d[a]) * u;
+        posed[1] = d[a + 1] + (d[b + 1] - d[a + 1]) * u;
+      },
+    });
+    r.setViews([]);
+    const swing = (t: number) => [Math.sin(t * 9) * Math.exp(-t), t];
+    for (let t = 0; t < 3; t += DT) {
+      live = swing(t);
+      r.record(t, ball, true);
+    }
+    // the live scene has settled by the time the replay is watched
+    live = [0, 0];
+    expect(r.start(0.5, 2.9)).toBe(true);
+    for (const c of [0.8, 1.234, 2.5]) {
+      expect(advanceTo(r, ball, c)).toBe(true);
+      const want = swing(r.cursor);
+      expect(posed[1]).toBeCloseTo(want[1], 2);
+      expect(posed[0]).toBeCloseTo(want[0], 1);
+    }
+  });
+});
+
+describe('the Mini Rally point', () => {
+  it("starts with the serve's toss, and is still the last point once the rally is over", () => {
+    const h = headlessGame('rally', 'OH');
+    expect(h.mode.pointStart()).toBeNull();
+    let toss: number | null = null;
+    for (let i = 0; i < 60 * 20 && toss === null; i++) {
+      h.frame();
+      toss = h.mode.pointStart();
+    }
+    expect(toss).not.toBeNull();
+    // the toss is the first flight of the point: nothing else had launched the ball since the serve was called
+    expect(toss!).toBeLessThanOrEqual(h.sim.ball.lastLaunchT);
+    expect(h.sim.simTime - toss!).toBeLessThan(0.1);
+    // the point plays on and ends: until the next toss it is the point just played
+    const outcomes = h.outcomes.length;
+    for (let i = 0; i < 60 * 30 && h.outcomes.length === outcomes; i++) h.frame();
+    expect(h.outcomes.length).toBeGreaterThan(outcomes);
+    expect(h.mode.pointStart()).toBe(toss);
   });
 });
