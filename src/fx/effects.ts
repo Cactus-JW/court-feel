@@ -404,7 +404,7 @@ export class Effects {
     }
   }
 
-  /** every touch goes on the record: the whole point slows down for an attack, a block or a dig, and cuts close for an attack */
+  /** every touch goes on the record: the whole point slows down for a hit (a spike, a serve) and cuts close for an attack */
   private noteTouch(kind: TouchKind, at: { x: number; y: number; z: number }): void {
     const attack = kind === 'spike' || kind === 'tip' || kind === 'serve';
     // the hits: a spike, a serve (a tip is a touch, not a hit)
@@ -414,7 +414,7 @@ export class Effects {
 
   /** a block's sound, hand flashes and spray, live or from the replay (the shake and the crowd are live only) */
   private blockFx(at: THREE.Vector3, stuff: boolean, v: AthleteView | undefined, fpSelf: boolean, fromReplay: boolean): void {
-    this.audio.block(stuff, fromReplay ? 0.55 : 1);
+    this.audio.block(stuff, this.soundRate(fromReplay));
     if (v) {
       // your own hands in first person are right at the lens: a small, cooler flash
       const size = fpSelf ? 0.12 : stuff ? 0.75 : 0.45;
@@ -429,6 +429,12 @@ export class Effects {
     if (stuff) this.trail.ignite(0, 0.7, fromReplay ? at : this.g.ball.rpos);
   }
 
+  /** a sound's playback rate: 1 live; in a replay it follows the replay's speed, pitched down only where the picture is slow */
+  private soundRate(fromReplay: boolean): number {
+    if (!fromReplay) return 1;
+    return lerp(FX.replaySoundSlow, 1, clamp01((this.replay.speed - FX.replaySlow) / (1 - FX.replaySlow)));
+  }
+
   /** visual events, live or from the replay */
   private playEvent(e: ReplayEvent, fromReplay: boolean): void {
     const d = e.data;
@@ -437,7 +443,7 @@ export class Effects {
       const q = d.q;
       const perfect = d.perfect > 0.5;
       const at = new THREE.Vector3(d.x, d.y, d.z);
-      const rate = fromReplay ? 0.55 : 1;
+      const rate = this.soundRate(fromReplay);
       // the sound follows how hard the ball was actually hit (and how close it is)
       const speed = Math.hypot(d.vx, d.vy, d.vz);
       const near = fromReplay ? 1 : Math.max(0, Math.min(1, 1.35 - at.distanceTo(g.rig.camera.position) / 16));
@@ -464,7 +470,7 @@ export class Effects {
     } else if (e.kind === 'impact') {
       const q = d.q;
       const perfect = d.perfect > 0.5;
-      const rate = fromReplay ? 0.55 : 1;
+      const rate = this.soundRate(fromReplay);
       // how hard it comes down follows the attack's speed, continuously (a full-power spike = 1)
       const pw = AudioEngine.powerFromSpeed(d.speed);
       this.audio.floor(d.speed * (0.8 + q), pw, rate);
@@ -783,8 +789,6 @@ export class Effects {
     const b = g.ball;
     if (this.downT >= b.lastLaunchT) return;
     this.downT = g.simTime;
-    // the whole point slows down as the ball lands
-    this.replay.addEvent(g.simTime, 'down', { x, z });
     if (g.inMenu) return;
     const lt = b.lastTouch;
     this.attempts.ballDown(g.simTime, x, z, g.me.pos, {
@@ -1006,7 +1010,7 @@ export class Effects {
     // broadcast angle: beside the hitter towards the middle of the court, a step behind the net
     let sx = Math.abs(C.x) < 0.5 ? 1 : -Math.sign(C.x);
     const sz = Math.sign(C.z) || 1;
-    let dist = CLOSE_DIST;
+    let dist = FX.replayClose.dist;
     if (this.cineMiss) {
       dist = FX.replayMissDist;
       if (ballAt) {
@@ -1097,7 +1101,7 @@ export class Effects {
       rig.cineTarget.copy(this.cineLookA).lerp(r.focus, smooth01(u * 1.6));
     }
     // (a miss holds the opening field of view: there is no impact to widen for)
-    rig.cineFov = lerp(CLOSE_FOV, 56, body ? 0 : u);
+    rig.cineFov = lerp(FX.replayClose.fov, 56, body ? 0 : u);
   }
 
   /** the whole point on the TV: the broadcast camera in the stands, cut close for each attack */
@@ -1108,11 +1112,11 @@ export class Effects {
     const T = FX.replayTv;
     const a = this.attacks.find((k) => r.cursor >= k.from && r.cursor <= k.t + T.attackPost) ?? null;
     if (a) {
-      if (a !== this.cut) this.besideHitter(a.at, Math.abs(a.at.x) < 0.5 ? 1 : -Math.sign(a.at.x), CLOSE_DIST);
+      if (a !== this.cut) this.besideHitter(a.at, Math.abs(a.at.x) < 0.5 ? 1 : -Math.sign(a.at.x), FX.replayClose.dist);
       _v.copy(this.cineA);
       // the hitter's body and the contact, then the ball off the hand
       _look.copy(this.cineLookA).lerp(ball, smooth01((r.cursor - a.t) / T.attackPost));
-      rig.cineFov = CLOSE_FOV;
+      rig.cineFov = FX.replayClose.fov;
     } else {
       // the broadcast camera pans along the court with the ball
       _v.set(T.x, T.y, ball.z * T.follow);
@@ -1151,9 +1155,6 @@ export class Effects {
 }
 
 const _v = new THREE.Vector3();
-/** the close angle on a hit: this far from the hitter (m), with this field of view (degrees) */
-const CLOSE_DIST = 5.0;
-const CLOSE_FOV = 50;
 const _look = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _z = new THREE.Vector3(0, 0, 1);

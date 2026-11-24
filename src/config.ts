@@ -1669,11 +1669,20 @@ export const FX = {
   crackLife: 7,
   replayEnabled: true,
   replaySlow: 0.32,
+  /**
+   * A replayed sound's playback rate while the replay runs at `replaySlow`: pitched down with the
+   * picture (the rate the slow-motion replay always had). At real speed it plays at 1, and in
+   * between it follows the replay's speed, so a dig at real speed or REAL SPEED (S) is not pitched down.
+   */
+  replaySoundSlow: 0.55,
+  /** the close angle on a hit (TV, and the last attempt's replay): this far from the hitter (m), with this field of view (degrees) */
+  replayClose: { dist: 5.0, fov: 50 },
   replayPre: 0.7,
   replayPost: 0.55,
   /**
    * The replay buffer (s): a whole Mini Rally point fits, serve to ball down (a rally ends by itself
-   * at 25 s, `LONG RALLY`). About 9 MB for twelve athletes.
+   * at 25 s, `LONG RALLY`). Sized for 70 frames a second, the most `Replay.record` keeps: about 10 MB for
+   * twelve athletes.
    */
   replaySeconds: 32,
   /** R held this long (s, real time) replays the whole point; let go sooner, the last attempt */

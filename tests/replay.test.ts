@@ -152,6 +152,16 @@ describe('the whole point (R held)', () => {
     const r = new Replay(FX.replaySeconds);
     expect(r.seconds).toBeGreaterThanOrEqual(25 + FX.replayPoint.pre + 2);
   });
+
+  it('the buffer holds all its seconds on a 70 Hz display too (it keeps a frame every 1/70 s at most)', () => {
+    const r = new Replay(FX.replaySeconds);
+    const ball = new THREE.Object3D();
+    r.setViews([]);
+    // a display just under 70 Hz: every frame is kept
+    const dt = 1 / 69.9;
+    for (let t = 0; t < FX.replaySeconds + 5; t += dt) r.record(t, ball, true);
+    expect(r.newestT - r.oldestT).toBeGreaterThanOrEqual(FX.replaySeconds - 2 * dt);
+  });
 });
 
 describe('what else a replay plays back (the antennae, the net, where you looked)', () => {

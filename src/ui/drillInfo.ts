@@ -287,6 +287,10 @@ export const ALL_CONTROLS: { kb: KeyGroup[]; touch: KeyGroup[] } = {
       title: 'Game',
       rows: [
         { k: 'Top right', a: 'Pause, the score (● by the side that serves), reset the rep, REPLAY (camera: pause menu, View)' },
+        {
+          k: 'REPLAY',
+          a: 'Your last attempt. Hold: the whole point (Mini Rally). In a replay it reads CAM: change the view; tap the court to skip',
+        },
         { k: 'TOSS', a: 'Serve toss: hold longer for a higher toss (Serve Drill, Free Play)' },
       ],
     },

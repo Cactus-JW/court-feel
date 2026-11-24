@@ -23,8 +23,8 @@ import type { AthleteView } from '../character/athleteView';
  */
 const BONES = BONE_ORDER.length;
 const PER_ATHLETE = 4 + 3 + BONES * 4; // root xyz + yaw, hips position, bone quats
-/** frames a second the buffer is sized for (`record` keeps at most one every 1/70 s) */
-const RECORD_FPS = 60;
+/** frames a second the buffer is sized for: the most `record` keeps (one every 1/RECORD_FPS s), so `seconds` holds on any display */
+const RECORD_FPS = 70;
 
 export interface ReplayEvent {
   t: number;
@@ -122,7 +122,7 @@ export class Replay {
 
   record(t: number, ballMesh: THREE.Object3D, ballVisible: boolean): void {
     if (this.playing) return;
-    if (this.count > 0 && t - this.times[this.head] < 1 / 70) return;
+    if (this.count > 0 && t - this.times[this.head] < 1 / RECORD_FPS) return;
     this.head = (this.head + 1) % this.frames;
     this.count = Math.min(this.frames, this.count + 1);
     const f = this.head;

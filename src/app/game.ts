@@ -21,7 +21,7 @@ import {
 import { Emitter } from '../core/events';
 import type { GameEvents } from '../game/gameEvents';
 import { Input } from '../core/input';
-import { clamp01, damp, lerp, Rng } from '../core/mathx';
+import { angleLerp, clamp01, damp, lerp, Rng } from '../core/mathx';
 import { CameraRig, type FollowTarget } from '../camera/cameraRig';
 import { BODY_LIGHT } from '../character/bodyMaterial';
 import { Arena } from '../world/arena';
@@ -337,7 +337,8 @@ export class Game implements AiHost {
       },
       read: (d, a, b, u) => {
         cam.eye.set(lerp(d[a], d[b], u), lerp(d[a + 1], d[b + 1], u), lerp(d[a + 2], d[b + 2], u));
-        cam.yaw = lerp(d[a + 3], d[b + 3], u);
+        // (the autopilots write a wrapped yaw: across ±π a plain lerp would turn the long way round)
+        cam.yaw = angleLerp(d[a + 3], d[b + 3], u);
         cam.pitch = lerp(d[a + 4], d[b + 4], u);
       },
     });
@@ -881,8 +882,9 @@ export class Game implements AiHost {
 
   private tick(dt: number, draw: boolean): void {
     if (this.fx.replaying) {
-      // slow-motion replay: the simulation is frozen. R changes the view, V goes to your eyes, S turns
-      // slow-mo off and on, any other key skips
+      // a replay: the simulation is frozen. R changes the view, V goes to your eyes, S turns
+      // slow-mo off and on, any other key skips (an R held as it started is not a tap when it lets go)
+      this.rHeld = -1;
       this.input.takeMouse();
       if (!this.inMenu && this.input.consumePress('KeyR')) this.fx.cycleView();
       else if (!this.inMenu && this.input.consumePress('KeyV')) this.fx.toggleEyes();
@@ -999,6 +1001,10 @@ export class Game implements AiHost {
     if (this.input.consumePress('F3')) {
       this.debug.toggle();
       this.gizmos.setVisible(this.debug.visible);
+    }
+    if (this.paused || this.inMenu) {
+      // an R pressed before the pause or the menu is not let go as a tap on the way back
+      this.rHeld = -1;
     }
     if (this.paused) {
       this.input.takeMouse();
@@ -1236,11 +1242,6 @@ export class Game implements AiHost {
       v.update(animDt, tr);
     }
     this.ballView.update(realDt, this.simTime, this.env);
-    // the buffer holds live play (plus a short tail for the ball settling) only: a dead ball
-    // does not push the last highlight out of it. A ball in the air always counts (the toss
-    // and wind-up of a serve come before the rally goes live)
-    if (!this.fx.ballDead() || this.ball.active) this.recordUntil = tr + 1.0;
-    if (tr <= this.recordUntil) this.fx.replay.record(tr, this.ballView.mesh, this.ballView.mesh.visible);
     this.fx.update(animDt);
     this.rig.ballPos = this.ball.active ? this.ball.rpos : null;
     if (this.ball.active && this.debug.visible) this.gizmos.updatePath(this.ball.ensurePrediction(this.env, this.simTime), this.simTime);
@@ -1294,6 +1295,12 @@ export class Game implements AiHost {
       v.setOpacity(inBody ? clamp01((d - 0.35) / 0.5) * 0.8 + 0.2 : 1);
     }
     this.arena.update(realDt);
+    // the buffer holds live play (plus a short tail for the ball settling) only: a dead ball
+    // does not push the last highlight out of it. A ball in the air always counts (the toss
+    // and wind-up of a serve come before the rally goes live). Recorded once the eye and the
+    // net's shape are this frame's, so the channels are not a frame behind the bodies
+    if (!this.fx.ballDead() || this.ball.active) this.recordUntil = tr + 1.0;
+    if (tr <= this.recordUntil) this.fx.replay.record(tr, this.ballView.mesh, this.ballView.mesh.visible);
     this.updateAimReticle(realDt);
     this.hud.update(realDt);
     if (!this.routeView()) this.routesOpen = false;
