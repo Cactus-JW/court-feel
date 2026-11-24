@@ -9,6 +9,7 @@ On a phone or tablet the game shows on-screen controls: a joystick under the lef
 - `touch-stick` moves the athlete with the left-thumb stick, and runs the approach when pushed out to the ring.
 - `touch-jump` loads a jump while JUMP is held and takes off on release.
 - `touch-hit` winds up while a finger is down on the right half in the air, aims by dragging, and swings on release.
+- `touch-replay` hides the stick and the buttons during a replay, and a touch skips the replay and presses nothing.
 - `touch-top-row` calls a set or a route, calls a play on the wheel, toggles the opposing block and pauses.
 - `touch-setting` chooses Auto, On or Off for `Touch controls`, in the Controls tab of Settings.
 
@@ -44,7 +45,8 @@ Preconditions:
 
 ## Gotchas
 
-- `REPLAY` (`.touch [data-btn="replay"]`) is shown only while the last attempt can be replayed (`g.replayAvailable()`), misses included. The hint then ends `REPLAY last attempt`. Press it with `court touch start 4 '.touch [data-btn="replay"]'` and `court touch end 4`; any later touch skips the replay.
+- `REPLAY` (`.touch [data-btn="replay"]`) is shown only while the last attempt can be replayed (`g.replayAvailable()`), misses included. The hint then ends `REPLAY last attempt`. Press it with `court touch start 4 '.touch [data-btn="replay"]'` and `court touch end 4`. While the replay plays, the stick and the hold buttons fade out and the `REPLAY · tap to skip` tag comes in once they have gone. Any later touch skips the replay and does nothing else, wherever it lands: a touch on the hidden TOSS or JUMP neither tosses nor jumps (`g.input` sees no press), and the finger moves nothing until it lifts. The next touch is play again.
+- When the set marker over a hitter (`.set-to`) would rise into the top bar, the score line, or the drill's message or call line while they show, it stops just under them. It rises higher only beside a message, never into the bar.
 - `court tap` works on menu controls only. The pad's buttons take no pointer events of their own (the pad reads every touch by position), so `court tap .t-jump` times out. Use `court touch start <id> <selector>` and `court touch end <id>`.
 - The set-call chips and the other top-row buttons for a drill are built on the first frame after it starts. On the manual clock, run the recipe's `court shot` (or a `court step`) before touching them, or `court touch start` finds no chip.
 - Touch ids are fingers. A finger stays down across commands until its `end`. `court open` lifts them all. Reuse an id only after its `end`.
