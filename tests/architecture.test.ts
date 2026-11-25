@@ -67,8 +67,14 @@ describe('architecture: every import points down', () => {
   });
 
   it('a brain knows the game only as AiHost: nothing under src/ai imports the Game', () => {
+    // The layer rule above says the same, but an entry in the known list can excuse it there. Not
+    // here. The file is named, so its name is checked first: were `Game` to move, a stale name
+    // would pass whatever the brains import.
+    const game = 'src/app/game.ts';
+    const declaresGame = SRC.includes(game) && /^export class Game\b/m.test(read(game));
+    expect(declaresGame, `${game} does not declare the Game: name the file that does`).toBe(true);
     for (const file of SRC.filter((f) => layerOf(f) === 'ai')) {
-      expect(importsOf(file).files, `${file} imports the Game`).not.toContain('src/game/game.ts');
+      expect(importsOf(file).files, `${file} imports the Game`).not.toContain(game);
     }
   });
 
