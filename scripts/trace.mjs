@@ -1,4 +1,5 @@
-// Trace comparison: does a refactor play exactly like the code it started from?
+// The trace: does this checkout give the same play every run, and does a refactor play exactly like
+// the code it started from?
 //
 //   npm run trace                    play this checkout twice and check that both runs are the same
 //   npm run trace:compare            compare this checkout with the commit it branched from on origin/main
@@ -22,10 +23,13 @@
 // the same play. That is the promise a second player rests on (docs/adr/0011): the play is decided
 // by where it starts and what the players' hands ask, and by nothing else.
 //
-// What it does not cover: the menus, touch input, effects and sound.
+// What it does not cover: the menus, touch input, effects and sound. And not the picture itself:
+// no frame is painted, so what only the GPU decides is not seen. The outline of the block's shadow
+// was drawn at a different depth on every draw (#108), and two runs of that build are the same here.
 //
 // Nothing is stored in the repo. A feature that changes the play on purpose has nothing to
-// re-record: this is run for a `refactor`, which must change nothing (docs/adr/0010).
+// re-record: CI plays every pull request twice (`npm run trace`), and compares with main only a
+// `refactor`, which must change nothing (docs/adr/0010).
 //
 // TRACE_SECONDS sets the simulated seconds per drill (60), TRACE_DISPLAY_SECONDS those watched for the
 // display (30), TRACE_LESSON_SECONDS those of each lesson (75). Output: scripts/out/trace/. Exit code 1 on a difference.
@@ -54,6 +58,8 @@ const RUNS = [
   { mode: 'spike', pos: 'OPP', bot: 'sloppy' },
   // the slow-mo assist bends the clock: the same reps must take the same frames
   { mode: 'spike', pos: 'OH', bot: 'good', slowmo: true },
+  // their block on (B pressed twice: a double): two blockers in the play, and the block's shadow among the floor markers
+  { mode: 'spike', pos: 'OH', bot: 'good', block: 2 },
   { mode: 'block', pos: 'MB', bot: 'good' },
   { mode: 'receive', pos: 'L', bot: 'good' },
   { mode: 'setter', pos: 'S', bot: 'good' },
@@ -139,7 +145,7 @@ function holdTheClock() {
  * `window.__court` only, so the same reader works on both builds of a comparison. When a refactor
  * moves one of these fields, this function is where both shapes are read.
  */
-function playOne({ mode, pos, bot, slowmo = false, seconds, seed, replay = null }) {
+function playOne({ mode, pos, bot, slowmo = false, block = 0, seconds, seed, replay = null }) {
   const g = window.__court;
   // a replay stops the clock until someone watches it: there is no one here
   g.settings.replays = false;
@@ -222,7 +228,16 @@ function playOne({ mode, pos, bot, slowmo = false, seconds, seed, replay = null 
   const frames = Math.round(seconds * 60);
   let folded = 0;
   for (let f = 1; f <= frames; f++) {
-    g.simulate(1 / 60);
+    if (f <= block) {
+      // Their block is asked for as a player asks: B, once a frame, on a whole frame of the game
+      // (`play`): a drill acts on its command keys there, and `simulate` leaves that part of a frame
+      // out. Played back, nothing is pressed: the B is in the logged hands.
+      if (!replay) g.input.down('KeyB');
+      g.play(1 / 60);
+      g.input.up('KeyB');
+      // a run that says it has a block and plays without one would pass for the wrong reason
+      if (f === block && g.mode.blockLevel !== block) throw new Error(`their block did not come on: it is at level ${g.mode.blockLevel}`);
+    } else g.simulate(1 / 60);
     const state = read();
     fold(state);
     for (; folded < events.length; folded++) for (const ch of events[folded]) mix(ch.charCodeAt(0) & 0xff);
@@ -243,7 +258,7 @@ function playOne({ mode, pos, bot, slowmo = false, seconds, seed, replay = null 
  * from, which is the same on every machine. Like `playOne`, it reads the game through
  * `window.__court` only, and is where both shapes are read when a refactor moves something.
  */
-function watchOne({ mode, pos, bot, slowmo = false, lesson = null, seconds, seed }) {
+function watchOne({ mode, pos, bot, slowmo = false, block = 0, lesson = null, seconds, seed }) {
   const g = window.__court;
   g.settings.replays = false;
   g.settings.firstPerson = false;
@@ -334,7 +349,10 @@ function watchOne({ mode, pos, bot, slowmo = false, lesson = null, seconds, seed
   const frames = Math.round(seconds * 60);
   for (let f = 1; f <= frames; f++) {
     if (lesson) lessonHands(f - 1);
+    if (f <= block) g.input.down('KeyB');
     g.play(1 / 60);
+    if (f <= block) g.input.up('KeyB');
+    if (f === block && g.mode.blockLevel !== block) throw new Error(`their block did not come on: it is at level ${g.mode.blockLevel}`);
     pose(g.rig.camera);
     const ball = ballMesh();
     num(Number(ball.visible));
@@ -413,7 +431,10 @@ async function openPage(browser, url, label) {
   return { page, errors, close: () => context.close() };
 }
 
-const nameOf = (run) => (run.lesson ? `lesson/${run.lesson}` : `${run.mode}/${run.pos}/${run.bot}${run.slowmo ? '/slow-mo assist' : ''}`);
+const nameOf = (run) =>
+  run.lesson
+    ? `lesson/${run.lesson}`
+    : `${run.mode}/${run.pos}/${run.bot}${run.slowmo ? '/slow-mo assist' : ''}${run.block ? `/${['single', 'double'][run.block - 1]} block` : ''}`;
 
 /** play every drill in a built app and return the traces. `replayHands`: also play each again from its logged hands */
 async function record(dist, label, replayHands = false) {

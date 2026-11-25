@@ -2,27 +2,30 @@
 # Vercel's Git integration: every PR gets a preview deployment and merges to main go to the dev
 # site. Production ships on a version tag (release.yml).
 #
-# Two jobs run in parallel:
+# Three jobs run in parallel:
 #   check - typecheck, lint, formatting, unit tests, production build (about a minute)
 #   e2e   - the game in headless Chromium: every drill played by the autopilots, touch
 #           controls, robustness probes and a resource soak (scripts/e2e.mjs). Screenshots
 #           and report.json are uploaded as the "e2e-report" artifact.
-# Make both required checks on main (Settings > Branches > branch protection rule).
+#   trace - every drill played twice by a seeded autopilot on the manual clock: both runs give
+#           the same play, drawn and shown the same, and every drill gives it again from its
+#           logged hands alone (scripts/trace.mjs, `npm run trace`).
+# Make check and e2e required checks on main (Settings > Branches > branch protection rule).
+# trace runs on every pull request too, so it can be made one.
 #
 # On a pull request, check also runs the architecture rules as they are on the branch the pull
 # request goes into, and fails when the known lists grow (scripts/rules-from-base.mjs): a change
 # is judged by rules it did not write. .github/CODEOWNERS lists the files that judge every change.
 #
-# A third job runs for a refactor only (a pull request whose title starts with "refactor",
-# anything into or out of the refactor branch, and pushes to that branch):
-#   trace - the change plays exactly like the commit it left main at (scripts/trace.mjs).
-#           It cannot be a required check on main: it is skipped for every other pull request.
+# For a refactor (a pull request whose title starts with "refactor"), trace has two more steps:
+# the change has to play exactly like the commit it left main at (`npm run trace:compare`). The
+# title is the one the pull request had when the run started: after a change of title, push again.
 name: CI
 
 on:
   pull_request:
   push:
-    branches: [main, refactor/simulation-on-its-own]
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -93,19 +96,16 @@ jobs:
           if-no-files-found: ignore
 
   trace:
-    name: Same play as main (refactors)
-    if: >-
-      github.ref == 'refs/heads/refactor/simulation-on-its-own' ||
-      (github.event_name == 'pull_request' && (
-        startsWith(github.event.pull_request.title, 'refactor') ||
-        github.base_ref == 'refactor/simulation-on-its-own' ||
-        github.head_ref == 'refactor/simulation-on-its-own'))
+    name: Trace (the same play every run)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # a refactor must change nothing for the player: it is also compared with main
+      REFACTOR: ${{ github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'refactor') }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # the comparison needs the commit this change left main at
+          # a refactor's comparison needs the commit this change left main at
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -114,22 +114,26 @@ jobs:
       - run: npm ci
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps --only-shell chromium
-      - name: Play every drill here and on main, and compare every frame
+      - name: Play every drill twice, then each again from its logged hands
+        run: npm run trace
+      - name: For a refactor, play every drill here and on main, and compare every frame
+        if: env.REFACTOR == 'true'
         run: npm run trace:compare
-      - name: The same comparison with the trace tool as it is on the branch this goes into
-        # only when this pull request changes the tool: a change to the comparison cannot be what makes it pass
+      - name: The same with the trace tool as it is on the branch this goes into
+        # only when this pull request changes the tool: a change to the trace cannot be what makes it pass
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_REF"
           if git cat-file -e FETCH_HEAD:scripts/trace.mjs 2>/dev/null && ! git diff --quiet FETCH_HEAD -- scripts/trace.mjs; then
             git show FETCH_HEAD:scripts/trace.mjs > scripts/trace.mjs
-            npm run trace:compare
+            npm run trace
+            if [ "$REFACTOR" = true ]; then npm run trace:compare; fi
           else
             echo "scripts/trace.mjs is the same as on $BASE_REF"
           fi
         env:
           BASE_REF: ${{ github.base_ref }}
-      - name: Upload the two traces
+      - name: Upload the traces
         if: failure()
         uses: actions/upload-artifact@v4
         with:
