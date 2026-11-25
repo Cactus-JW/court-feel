@@ -145,6 +145,7 @@ npm run dev        # http://localhost:5173
 npm run build      # typecheck + static build in dist/ (open with any static server, e.g. npm run preview)
 npm run check      # typecheck, lint, formatting and unit tests: run this before pushing
 npm run e2e        # end-to-end check in headless Chromium (see Testing)
+npm run trace      # does this checkout give the same play every run? (see Testing)
 npm run trace:compare   # for a refactor: does it play exactly like main? (see Testing)
 npm run format     # format the code with Prettier
 ```
@@ -1127,11 +1128,12 @@ in `SETTING_RANGES` in `src/config.ts`.
 The principle behind these checks, and where a new rule should live, is in
 [docs/verification.md](docs/verification.md).
 
-CI (`.github/workflows/ci.yml`) runs two jobs on every pull request and on
-`main`: **check** (typecheck, ESLint, Prettier, unit tests, production build)
-and **e2e** (below). Both should be required checks for merging into `main`.
-A third job, **trace**, runs for a `refactor` pull request and on the refactor
-branch: the change has to play exactly like `main` (`npm run trace:compare`, below).
+CI (`.github/workflows/ci.yml`) runs three jobs on every pull request and on
+`main`: **check** (typecheck, ESLint, Prettier, unit tests, production build),
+**e2e** and **trace** (both below). Check and e2e should be required checks for
+merging into `main`. **trace** plays every drill twice and the two runs have to
+be the same (`npm run trace`). For a `refactor` pull request it goes on to
+compare with `main`: the change has to play exactly like it (`npm run trace:compare`).
 On a pull request, **check** also runs the architecture rules as they are on the
 branch it goes into and fails when the known lists grow
 (`scripts/rules-from-base.mjs`), so a change cannot pass by loosening its own checks.
@@ -1234,8 +1236,11 @@ branch it goes into and fails when the known lists grow
   and outcome. It **fails** on the first difference and prints the drill, the
   moment and the values. Nothing is stored, so a feature that changes the play
   on purpose has nothing to re-record. `npm run trace:compare -- <ref>` compares
-  with another commit, `npm run trace` plays this checkout twice to show a run
-  is repeatable, and `TRACE_SECONDS` sets the seconds per drill (60). It then
+  with another commit, and `TRACE_SECONDS` sets the seconds per drill (60).
+  `npm run trace` plays this checkout twice and compares the two runs the same
+  way: the same start has to give the same play. CI runs it on every pull
+  request, and it takes a minute or two. Among the drills is the Spike Drill
+  with a double block on (B, pressed as a player presses it). The trace then
   plays the drills again frame by frame with the animation on and compares what
   is drawn and shown: every call the HUD gets, the camera, and where the ball,
   the athletes (every joint) and the drill's floor markers are. That is the data
@@ -1246,7 +1251,8 @@ branch it goes into and fails when the known lists grow
   and no key pressed, and has to give the same play: nothing reaches the
   simulation from a player except their logged intent. It proves what the
   autopilots and the scripted hands play: the menus, the touch controls, effects
-  and sound are not in it.
+  and sound are not in it. Nor is the picture itself: no frame is painted, so a
+  difference that only the GPU makes is not seen.
 * `tests/properties.test.ts` (part of `npm test`) states facts that must hold for
   every input and tries each on hundreds of seeded ones (`tests/forAll.ts`), for
   the bugs nobody wrote a case for: for any launch the ball lands where the
