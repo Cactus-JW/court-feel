@@ -27,5 +27,5 @@ The code gets there in steps, each one a `refactor` with nothing changed for
 the player. Two tests hold the ground as it is won. One reads the imports
 under `src/` and names those that still break this rule; that list only gets
 shorter. The other plays every drill from a seed with an autopilot and
-compares the result with a recorded trace, so a step that changes the play
-fails.
+compares the result with the same drills played on the commit the step left
+`main` at, so a step that changes the play fails.

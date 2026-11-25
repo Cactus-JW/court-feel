@@ -78,10 +78,10 @@ Ask these in order and stop at the first yes.
   is handed an intent.
 - **Numbers live in config** (`tests/architecture.numbers.test.ts`). The count of
   numbers each file in physics, the simulation, the brains and the drills holds
-  of its own is written down (`tests/architecture.numbers.json`, about 1,200 in
-  38 files) and only goes down. A new one fails until it has a name in
-  `src/config.ts`. It does not move the ones already there: that is the work the
-  count is the measure of.
+  of its own is written down, file by file, in
+  `tests/architecture.numbers.json` and only goes down. A new one fails until
+  it has a name in `src/config.ts`. It does not move the ones already there:
+  that is the work the count is the measure of.
 - **Unit tests that state a real-court fact**, in the test's name.
 - **CI on every pull request.**
 
@@ -121,8 +121,8 @@ Ask these in order and stop at the first yes.
 
 ### 4. Prose
 
-- **[AGENTS.md](../AGENTS.md)**: the working guide. Three of its rules have no
-  check yet (below).
+- **[AGENTS.md](../AGENTS.md)**: the working guide. Its rules that have no check
+  yet are [listed below](#rules-with-no-check-yet).
 - **[Decision records](adr/README.md)**: why a call was made and what was
   turned down.
 - **How to work on a change**, in `AGENTS.md`: the approach before the code,

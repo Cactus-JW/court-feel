@@ -5,7 +5,7 @@ import known from './architecture.numbers.json';
 
 // Every tunable number lives in src/config.ts (AGENTS.md), so the feel can be tuned in one place
 // and a difficulty can change it without touching game code. The game code is not there yet: it
-// holds about 1,200 numbers of its own. This is the ratchet. Each file's count is written down
+// still holds numbers of its own. This is the ratchet. Each file's count is written down
 // (tests/architecture.numbers.json) and only goes down: a new number in physics, the simulation,
 // the brains or a drill fails here until it has a name in config, and a number that moved out has
 // to be taken off the count.

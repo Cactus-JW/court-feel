@@ -8,7 +8,7 @@ interface ImportMetaEnv {
 
 /** test and debugging hooks (the e2e drives the game through these) */
 interface Window {
-  __court?: import('./game/game').Game;
+  __court?: import('./app/game').Game;
   __menu?: import('./ui/menu').Menu;
   __touch?: import('./ui/touchControls').TouchControls;
   __errors?: import('./core/errors').ErrorReporter;
