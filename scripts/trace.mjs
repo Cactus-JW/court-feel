@@ -23,9 +23,18 @@
 // the same play. That is the promise a second player rests on (docs/adr/0011): the play is decided
 // by where it starts and what the players' hands ask, and by nothing else.
 //
-// What it does not cover: the menus, touch input, effects and sound. And not the picture itself:
-// no frame is painted, so what only the GPU decides is not seen. The outline of the block's shadow
-// was drawn at a different depth on every draw (#108), and two runs of that build are the same here.
+// And one frame is painted, for this checkout: the Spike Drill with a double block on is stopped
+// three seconds in, with their block's shadow on the floor, and that one frame is painted eight
+// times in a page of its own. Nothing moves between the paints, so it has to be one picture. More
+// than one means the GPU decided something the game did not. The outline of the block's shadow did
+// that: it was a line that asked for a polygon offset, and it got a different depth on every paint
+// (#108). Everything before this passes on that build, and this does not.
+//
+// What it does not cover: the menus, touch input, effects and sound. Of the picture itself it sees
+// that one frame of one drill, and only whether it is the same every time it is painted: not
+// whether it is the right picture, not any other drill or moment, and not whether two pages, two
+// machines or two builds paint the same one. Two pages do not: the sparks are placed by
+// `Math.random`, on purpose.
 //
 // Nothing is stored in the repo. A feature that changes the play on purpose has nothing to
 // re-record: CI plays every pull request twice (`npm run trace`), and compares with main only a
@@ -81,6 +90,15 @@ const LESSON_SECONDS = Number(process.env.TRACE_LESSON_SECONDS ?? 75);
 const LESSONS = ['spike', 'float', 'jumpFloat', 'jump'].map((lesson) => ({ lesson, seconds: LESSON_SECONDS }));
 /** simulated seconds of each drill that are watched for the display (the animation makes this pass the slow one) */
 const DISPLAY_SECONDS = Number(process.env.TRACE_DISPLAY_SECONDS ?? 30);
+/**
+ * The frame that is painted: the Spike Drill with a double block on, this many simulated seconds in.
+ * By then the first ball is up, their block's shadow is on the floor and the home setter stands
+ * between the camera and the shadow, which is where #108 showed. `paints`: how many times it is
+ * painted. Before #108, 8 paints of this frame gave 6 or 7 pictures, so 8 does not miss it.
+ */
+const FROZEN = { mode: 'spike', pos: 'OH', bot: 'good', block: 2, seconds: 3, paints: 8 };
+/** the software GPU every page of the trace runs on, the one CI has */
+const GPU = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 
 const git = (args, cwd = root) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
@@ -408,6 +426,56 @@ function watchOne({ mode, pos, bot, slowmo = false, block = 0, lesson = null, se
   return { samples, calls: shown };
 }
 
+/**
+ * Runs in the page: play one drill to a moment, stop there and paint that one frame several times.
+ * Nothing is simulated or animated between the paints (`renderNow(0)`: no time passes), so every
+ * paint is handed the same scene. It returns the different pictures, as PNGs, and which paint gave
+ * which. One picture is the only right answer.
+ */
+function paintOne({ mode, pos, bot, block = 0, seconds, paints, seed }) {
+  const g = window.__court;
+  g.settings.replays = false;
+  g.settings.firstPerson = false;
+  g.settings.slowmoAssist = false;
+  g.rng.reseed(seed);
+  g.startMode(mode, pos);
+  window.__menu.showStart(false);
+  g.enableBot(bot);
+  const frames = Math.round(seconds * 60);
+  for (let f = 1; f <= frames; f++) {
+    if (f <= block) g.input.down('KeyB');
+    g.play(1 / 60);
+    if (f <= block) g.input.up('KeyB');
+    if (f === block && g.mode.blockLevel !== block) throw new Error(`their block did not come on: it is at level ${g.mode.blockLevel}`);
+  }
+  const canvas = g.renderer.domElement;
+  const paint = () => {
+    g.renderNow(0);
+    // read in the same task as the paint: the browser has not taken the frame away yet
+    return canvas.toDataURL('image/png');
+  };
+  const pictures = [];
+  const gave = [];
+  for (let k = 0; k < paints; k++) {
+    const png = paint();
+    let at = pictures.indexOf(png);
+    if (at < 0) at = pictures.push(png) - 1;
+    gave.push(at + 1);
+  }
+  // Is their block's shadow in the picture at all? A frame without it, or a canvas that reads back
+  // blank, is one picture every time and would pass for the wrong reason. The shadow's patch and
+  // its outline are the floor markers with a draw range of their own: with them hidden, the frame
+  // has to be another picture.
+  const shadow = (g.mode.objects ?? []).filter((o) => o.visible && o.geometry && Number.isFinite(o.geometry.drawRange.count));
+  if (!shadow.length || shadow.some((o) => !o.geometry.drawRange.count))
+    throw new Error("their block's shadow is not on the floor at this frame");
+  for (const o of shadow) o.visible = false;
+  const without = paint();
+  for (const o of shadow) o.visible = true;
+  if (pictures.includes(without)) throw new Error("their block's shadow is not in the picture: the frame is the same with it hidden");
+  return { pictures, gave };
+}
+
 /** a fresh page of a built app, on the manual clock, in a browser context of its own (nothing stored) */
 async function openPage(browser, url, label) {
   const context = await browser.newContext({ viewport: { width: 640, height: 360 } });
@@ -439,7 +507,7 @@ const nameOf = (run) =>
 /** play every drill in a built app and return the traces. `replayHands`: also play each again from its logged hands */
 async function record(dist, label, replayHands = false) {
   const server = await serve(dist);
-  const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const browser = await chromium.launch({ args: GPU });
   const t0 = Date.now();
   try {
     const { page, errors, close } = await openPage(browser, server.url, label);
@@ -592,6 +660,42 @@ const replayNote = (runs) => {
 
 const save = (name, runs) => fs.writeFileSync(path.join(out, `${name}.json`), JSON.stringify(runs));
 
+/**
+ * Paint one frozen frame of a built app several times (`FROZEN`) and return what is wrong as lines
+ * to print: none when every paint gave the same picture. It has a browser and a page of its own, so
+ * nothing it does (the first paint compiles every shader) reaches the runs before it. When the
+ * pictures differ they are written to scripts/out/trace/ to be looked at.
+ */
+async function frozenFrame(dist) {
+  const name = nameOf(FROZEN);
+  for (const f of fs.readdirSync(out)) if (/^frozen-frame-\d+\.png$/.test(f)) fs.rmSync(path.join(out, f));
+  const server = await serve(dist);
+  const browser = await chromium.launch({ args: GPU });
+  const t0 = Date.now();
+  try {
+    const { page, errors } = await openPage(browser, server.url, 'the frozen frame');
+    const { pictures, gave } = await page.evaluate(paintOne, { ...FROZEN, seed: SEED });
+    if (errors.length) throw new Error(`${name} threw in the page while its frame was painted: ${errors[0]}`);
+    const n = pictures.length;
+    console.log(
+      `frozen frame: ${name}, ${FROZEN.seconds} s in, painted ${FROZEN.paints} times: ${n} ${n === 1 ? 'picture' : 'pictures'}, in ${((Date.now() - t0) / 1000).toFixed(0)} s`,
+    );
+    if (n === 1) return [];
+    pictures.forEach((png, i) => fs.writeFileSync(path.join(out, `frozen-frame-${i + 1}.png`), Buffer.from(png.split(',')[1], 'base64')));
+    return [
+      `${name}: one frozen frame, ${FROZEN.seconds} s into the drill, painted ${FROZEN.paints} times in one page, gave ${n} different pictures`,
+      '    nothing moved between the paints, so the GPU decided something the game did not: look for a depth, an order or an offset that is left open',
+      `    paint by paint, the pictures were ${gave.join(', ')}: scripts/out/trace/frozen-frame-1.png to frozen-frame-${n}.png`,
+    ];
+  } finally {
+    await browser.close();
+    server.close();
+  }
+}
+
+/** the end of the last line, after the frozen frame came out as one picture */
+const FROZEN_NOTE = `; one frozen frame of ${nameOf(FROZEN)}, painted ${FROZEN.paints} times, is one picture`;
+
 /** check out a commit beside this one and build it. It uses this checkout's node_modules when the lockfile is the same. */
 function buildRef(ref) {
   const dir = path.join(out, 'base');
@@ -628,9 +732,10 @@ if (command === 'compare') {
   save('head', head);
   lines = difference(base, head, sha, 'this checkout');
   if (!lines.length) lines = replayDifference(head);
+  if (!lines.length) lines = await frozenFrame(headDist);
   if (!lines.length)
     console.log(
-      `same play: every drill gives the same states, contacts and outcomes as ${sha}, and is drawn and shown the same${replayNote(head)}`,
+      `same play: every drill gives the same states, contacts and outcomes as ${sha}, and is drawn and shown the same${replayNote(head)}${FROZEN_NOTE}`,
     );
 } else if (command === 'self') {
   const first = await record(headDist, 'first run', true);
@@ -638,9 +743,10 @@ if (command === 'compare') {
   save('head', first);
   lines = difference(first, second, 'first run', 'second run');
   if (!lines.length) lines = replayDifference(first);
+  if (!lines.length) lines = await frozenFrame(headDist);
   if (!lines.length)
     console.log(
-      `repeatable: two runs of this checkout give the same states, contacts and outcomes, and are drawn and shown the same${replayNote(first)}`,
+      `repeatable: two runs of this checkout give the same states, contacts and outcomes, and are drawn and shown the same${replayNote(first)}${FROZEN_NOTE}`,
     );
 } else {
   console.error(`unknown command '${command}': use 'self' or 'compare [ref]'`);

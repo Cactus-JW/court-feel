@@ -1251,8 +1251,14 @@ branch it goes into and fails when the known lists grow
   and no key pressed, and has to give the same play: nothing reaches the
   simulation from a player except their logged intent. It proves what the
   autopilots and the scripted hands play: the menus, the touch controls, effects
-  and sound are not in it. Nor is the picture itself: no frame is painted, so a
-  difference that only the GPU makes is not seen.
+  and sound are not in it. Of the picture itself it checks one thing, for this
+  checkout: the Spike Drill with a double block on is stopped three seconds in
+  and that one frame is painted eight times in a page of its own. Nothing moves
+  between the paints, so it has to be one picture. More than one means the GPU
+  decided something the game did not, as it did with the outline of the block's
+  shadow (#108), and the pictures are written to `scripts/out/trace/` (in CI: the
+  `trace` artifact). It adds about 8 seconds. It does not say the picture is the
+  right one, and no other drill or moment is painted.
 * `tests/properties.test.ts` (part of `npm test`) states facts that must hold for
   every input and tries each on hundreds of seeded ones (`tests/forAll.ts`), for
   the bugs nobody wrote a case for: for any launch the ball lands where the
