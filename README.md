@@ -354,7 +354,14 @@ screen show them. Only your player uses them; AI players keep the defaults.
    starts at the net in front of their middle; read the set, shuffle, hands up,
    time the jump. The hitter your position blocks in a match (outside: their
    opposite, opposite: their outside, middle: their middle) gets the most sets.
-   Stuffs, soft blocks and touches score.
+   Stuffs, soft blocks and touches score. The ball comes off your hands the
+   way it met them: into the palms of hands pressed over the net it is driven
+   back down (a stuff), off the fingertips it goes up and on into your court
+   (a soft block), off the outer edge of your outside hand it glances away and
+   out (a block-out), and a soft ball pushed into firm hands drops back to the
+   hitter's side for their cover. Jump late and your hands are still coming
+   up under the ball; early and they are coming down: either way the ball
+   meets them lower, at the fingers, and stuffs give way to touches.
    Their middle runs a quick on every ball: to stop it, jump with them
    (commit) — if the set goes outside, you were fooled by the decoy.
 4. **Serve Receive / Dig** — float serves and attacks come at you; pass to the
@@ -734,8 +741,9 @@ set, or steps towards a pin on a set in the middle. The pin blockers block as on
 any set, so your hitter has one block to beat, and bounces it: a full swing as
 steep as the net allows, past the block's hands, down inside or just behind
 their 3 m line. A perfect set lets them hide the shot until the hand, so the
-diggers start late, and no block stuffs it; a late block (hands still coming up)
-only sends it off the fingers and wide. (Out of system a high ball to a pin
+diggers start late, and their block is beaten: its hands go up but are not
+set (not pressed over, not braced), so it never stuffs it; whatever it touches
+comes off the hands soft. (Out of system a high ball to a pin
 is the exception: see "Calls, plays and the dump".) A **good** set (the white band) is a little off
 its spot (up to about 0.4 m): your hitter still looks for an open spot, but the
 defence reads it as usual and often there is none. **Early** and **late** pushes
@@ -855,8 +863,8 @@ it: there is one place that ball can go, so their middle reads it and closes the
 block next to the pin blocker. A green one is still a perfect ball to swing at:
 your hitter takes a full, well-timed swing against two blockers, most of them
 score, some are dug, and none is stuffed (the block can touch an attack off a
-green set, it comes off the hands soft or wide, never straight back down, and off
-a late or early block always wide).
+green set, but its hands are not set: it comes off them soft, never driven back
+down).
 
 **The dump** (Setter Drill, front row: G, then 5). A back-row setter may not
 attack a ball above the net, and with three hitters at the net you are back
@@ -1092,7 +1100,8 @@ Every tunable number is in **[`src/config.ts`](src/config.ts)**:
 | `TIMING` | Perfect/Good windows, swing time and stretch, tap threshold, wind-up time to full charge (`chargeFull`), pass/dig lead times, the set (how long the ball loads in the hands, `setLoad`; how long it can be held; how an early or late catch costs the touch; the feet ready time), block height thresholds, the Setter Drill's pace (`setterDrill`: how long the result stays up, when the next pass leaves), input buffer |
 | `SET_LEVELS` | The set difficulty levels: the green window (best and worst touch), the good multiple, the clean catch, whether hands up early are free (`handsEarly`, Easy) (the slow-mo is the same on every level, in `ASSIST`) |
 | `TOUCH` | Touch controls: stick radius and dead zone, run threshold (with hysteresis), aim scale and button dead zone, air-is-HIT, roll-to-HIT, block-jumps |
-| `CONTACT` | The setter's dump (`dump`: how near the net, where it lands, how high over the tape) and how hard a fast set off the net is (`setTouch.oosFast`); A stuff kept up comes off the arms anywhere (`covered.stuff`) while a recycled ball keeps its shape; an AI hitter's mistimed swing still meets the ball (`aiSwingShift`); Reach radii, spike/tip/serve speeds and spin, power at minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`), what a dive does with the ball (`diveOut`: one arm's extra reach, how high and which way a ball met at full stretch goes, how much under control reads Good), how hard a pass can be (`passPower`) and how much of a fast third ball sent over goes the way it bounces (`overControl`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`), a hit off the outer edge of the hands is tooled (`toolEdge`, `toolEdgeP`), a jump serve met early loses its topspin (`serveEarlySpin`; the player's three serves are under `SERVE`), the user's spike tooled more often (`userToolEdge`, `userToolEdgeP`), the side dig, the dive and the overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`), a soft ball recycled off a well-formed block (`recycleSpeed`, `recycleP`, `recyclePLate`) and the AI hitter's push into the hands (`pushSpeed`, `pushDrop`), how a ball off their block comes off the cover's arms (`covered`: how much of it the coverer controls, by the ball's speed, the platform's timing, its edge, moving feet and reaching; the rest pops up near them), the AI's serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape; `floatSafe`, `floatSafeTries`, `floatSafeCut`, `floatSafeMin` for its float), how much a float floats by the grade of its contact (`floatClean`), what shrinks the set window (`setTouch`; each kind of set's share of a high ball's green, `setTouch.window`; a jump set's balance, `airDrift` and `offTop`) and how a set misses (spread, short / long, apex) |
+| `BLOCK` | The block's hands: how big a hand is with the fingers spread and the gap between the thumbs, how far the arms press over the net with the jump (`press`, `wrist`, the torso's `lean`, from `pressFrom` of the jump; never under the tape, `tapeClear`), how far the hands turn to the attacker (`face`) and a pin blocker's outside hand turns in (`turnIn`, `pinTurn`), the aim assist's wider hands (`assistWiden`); how the ball comes off them: the arm's mass behind the palm, the fingers, the little finger's edge and a forearm (`massPalm`, `massTip`, `fingers`, `edge`, `massArm`), the ball's restitution by impact speed and what the hand keeps of it (`ballRest`, `restPalm`, `restTip`, `restArm`), the skin's grip (`friction`), hands put up on the floor (`floorFirm`), one block as one touch (`chain`), two hands taking a ball together (`together`); what a touch is called (`stuffSpeed`); the AI's hands (`ai`: how firm, how far the outside hand turns in, against your attack, and off your green set) |
+| `CONTACT` | The setter's dump (`dump`: how near the net, where it lands, how high over the tape) and how hard a fast set off the net is (`setTouch.oosFast`); A stuff kept up comes off the arms anywhere (`covered.stuff`) while a recycled ball keeps its shape; an AI hitter's mistimed swing still meets the ball (`aiSwingShift`); Reach radii, spike/tip/serve speeds and spin, power at minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`), what a dive does with the ball (`diveOut`: one arm's extra reach, how high and which way a ball met at full stretch goes, how much under control reads Good), how hard a pass can be (`passPower`) and how much of a fast third ball sent over goes the way it bounces (`overControl`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`) and how wide one blocker's hands are as the AI reads them (`blockHalfWidth`, from `BLOCK`), a jump serve met early loses its topspin (`serveEarlySpin`; the player's three serves are under `SERVE`), the side dig, the dive and the overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`), the AI hitter's push into the hands (`pushSpeed`, `pushDrop`), how a ball off their block comes off the cover's arms (`covered`: how much of it the coverer controls, by the ball's speed, the platform's timing, its edge, moving feet and reaching; the rest pops up near them), the AI's serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape; `floatSafe`, `floatSafeTries`, `floatSafeCut`, `floatSafeMin` for its float), how much a float floats by the grade of its contact (`floatClean`), what shrinks the set window (`setTouch`; each kind of set's share of a high ball's green, `setTouch.window`; a jump set's balance, `airDrift` and `offTop`) and how a set misses (spread, short / long, apex) |
 | `SERVE` | The player's three serves: each one's toss (how far ahead, how high) and where the Serve Drill stands you (`back`), the jump float's speed and the run-up that gives it (`jumpFloatSpeed`, `floatRun`), a jump serve hit off the floor (`standingSpin`), the foot fault (`foot`), no hitting a toss on its way up (`tossRising`), how the hold on Q sets the toss's height (`hold`) and how much further ahead a higher jump toss comes down (each serve's `ahead`). `SERVE_DRILL`: the drill's start spot and its timings |
 | `ASSIST` | How slow the game runs while the play wheel is open (`playWheelSlow`); how much wider your set's windows are set by feel, with the ring and bar off (`setByFeel`); Default aim assist, air magnet strength, reach bonus, the set's footwork (`setStep`: how near the spot your body takes the last steps, how it arrives), slow-mo assist, the set slow-mo (when it starts, how slow for the catch and while the ball loads) |
 | `TUTORIAL` | The first-run lesson and the serve lessons: their speeds (together, slow motion), how early cues show, how long the coach's lines stay, tries per rep, where the coach aims a serve and when a float's draw cue comes |
@@ -1182,7 +1191,7 @@ branch it goes into and fails when the known lists grow
   X crosses; the wheel's slices), your own plays (one set for each hitter; a saved
   play is called like any other; two front-row hitters never on one spot;
   stored plays are checked), out of system a green high ball to a pin does not
-  fool their middle, a block touches a green attack but never stuffs it (a late one only sends it wide), a pin hitter going inside (which runs are, the faster take-off
+  fool their middle, a block touches a green attack but never stuffs it, a pin hitter going inside (which runs are, the faster take-off
   and the longer flight, the start near the pin start), the dump and the front row, their middle
   going up with a hitter you did not set, the bounce (steep, in, clear of the
   block's hands), runs across the court looping in, a hitter who can't make

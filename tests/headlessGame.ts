@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { DEFAULT_SETTINGS, type PositionId, type ServeKind, type Settings } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import type { ContactEvent } from '../src/game/contact';
+import type { Outcome } from '../src/game/judge';
 import { takeKey } from '../src/game/intent';
 import { NO_MARKERS } from '../src/game/modes/markers';
 import type { DrillHost, DrillHud, Mode, ModeId } from '../src/game/modes/mode';
@@ -50,10 +51,13 @@ const NO_LESSON: DrillHost['tutorial'] = {
  * with no renderer, no DOM, no HUD and no camera. It is what `Game` is to a drill (`DrillHost`),
  * cut down to what the play needs. The player's hands do nothing unless a test feeds the seat.
  */
-export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
+export function headlessGame(id: ModeId, pos: PositionId, seed = 2024, opts: { autoUser?: boolean } = {}) {
   const said: string[] = [];
   const touches: string[] = [];
   const outcomes: string[] = [];
+  /** every touch and every point as the game heard them, with the time, for probes that read more than a line of text */
+  const contacts: { t: number; ev: ContactEvent }[] = [];
+  const results: { t: number; o: Outcome }[] = [];
   let mode: Mode | null = null;
   let walkBack: { x: number; z: number; yaw: number } | null = null;
 
@@ -65,10 +69,14 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
       // as the game does: a clean touch arms the judge, and the drill hears of every touch
       if (ev.grade !== 'Miss' && ev.speed > 0) sim.judge.arm(sim.ball);
       touches.push(`${sim.simTime.toFixed(4)} ${ev.athlete.role}${ev.athlete.side === 1 ? 'H' : 'A'} ${ev.kind} ${ev.grade}`);
+      contacts.push({ t: sim.simTime, ev });
       mode?.onContact(ev);
     },
     aiContact: (a, kind) => touches.push(`${sim.simTime.toFixed(4)} ${a.role}${a.side === 1 ? 'H' : 'A'} ${kind} ai`),
-    outcome: (o) => outcomes.push(`${sim.simTime.toFixed(4)} ${o.kind} ${o.side}`),
+    outcome: (o) => {
+      outcomes.push(`${sim.simTime.toFixed(4)} ${o.kind} ${o.side}`);
+      results.push({ t: sim.simTime, o });
+    },
   });
   sim.rng.reseed(seed);
   const me = new Athlete(pos, 1);
@@ -117,7 +125,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     set serveKind(kind: ServeKind) {
       seat.serveKind = kind;
     },
-    autoUser: false,
+    autoUser: opts.autoUser === true,
     placeUser: (x, z, yaw) => {
       walkBack = null;
       seat.athlete.place(x, z, yaw);
@@ -154,6 +162,8 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     said,
     touches,
     outcomes,
+    contacts,
+    results,
     /** play one frame: the walk back is taken, the drill's frame runs, and the simulation steps twice (120 Hz under 60 fps) */
     frame(): void {
       if (walkBack) {
