@@ -9,7 +9,8 @@
 #           and report.json are uploaded as the "e2e-report" artifact.
 #   trace - every drill played twice by a seeded autopilot on the manual clock: both runs give
 #           the same play, drawn and shown the same, and every drill gives it again from its
-#           logged hands alone (scripts/trace.mjs, `npm run trace`).
+#           logged hands alone. Then one frozen frame is painted eight times and has to be one
+#           picture (scripts/trace.mjs, `npm run trace`).
 # Make check and e2e required checks on main (Settings > Branches > branch protection rule).
 # trace runs on every pull request too, so it can be made one.
 #
@@ -141,5 +142,6 @@ jobs:
           path: |
             scripts/out/trace/base.json
             scripts/out/trace/head.json
+            scripts/out/trace/frozen-frame-*.png
           retention-days: 14
           if-no-files-found: ignore
