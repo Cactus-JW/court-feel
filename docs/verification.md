@@ -116,6 +116,13 @@ Ask these in order and stop at the first yes.
   step at a time. A rare bug fails at the step it happens.
 - **The end-to-end run** (`npm run e2e`): every drill in a real browser through
   the real input path.
+- **The block sweep** (`npm run block-sweep`): a measurement, not a pass or a
+  fail. It sends attacks at a blocker through the real block, across hitters,
+  angles, speeds, jump timing and where along the hands the ball crosses the
+  net, and writes what the block did with each (`scripts/out/block-sweep/`):
+  how wide it is by angle, what a touch turns into by timing and by where on
+  the hands, where stuffs and block-outs go. Run it before and after a change
+  to the block and compare the two.
 - **Driving the app.** The `verify-court-feel` skill lets an agent run the game
   and look, before it says a change works.
 

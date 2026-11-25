@@ -540,17 +540,19 @@ export type SetTier = 'high' | 'hut' | 'quick' | 'backQuick' | 'backQuickOpp' | 
  * - `thickness`: of a hand (m); the ball meets its surface, not its middle.
  * - `reachTop`: the fingertips over the standing reach with the arms straight up (m), as the
  *   standing reach is measured to the middle finger's first joint.
- * - `press` (rad): the arms lean forward from the shoulders over the net at a full press, and the
- *   wrists turn the hands down a further `wrist` (rad), so the palms face the hitter's floor, about
- *   23 degrees off vertical; the torso leans in with it, `lean` m at the shoulders, which is most
- *   of the reach over the net (about 14 cm for a middle standing 0.45 m off it: the shoulders roll
- *   over to about the tape). Not more: a spike
- *   comes down at 15-25 degrees, so it meets a palm tilted `press` + `wrist` at that much plus the
- *   tilt off square, and past about 40 degrees a ball aimed at a 20 cm palm meets the fingertips
- *   first (tried: 34 degrees of tilt sent hard spikes into the middle of the hands off the tips).
- *   A press costs height: a pressed hand is a few cm lower than an arm straight up, which is why a
- *   hitter can go over a block that penetrates and not over one that only reaches (JSSM 10:452, the
- *   swing block: more height and more penetration).
+ * - `press` (rad): the arms lean forward from the shoulders over the net at a full press (about 23
+ *   degrees off vertical) and the wrists bend back a little (`wrist`, rad, < 0: back), so the palms
+ *   face the hitter's floor at about 20 degrees off vertical; the shoulders come forward `lean` m
+ *   with it (the torso leaning in about 15 degrees, and the shrug of a reach). Together they put the
+ *   fingertips about 10 cm over the net for a middle standing 0.45 m off it, for about 7 cm of height.
+ *   The palms stay near upright: a spike comes down at 15-25 degrees, so it meets a palm tilted that
+ *   much plus the tilt off square, and past about 40 degrees a ball aimed at a 20 cm palm meets the
+ *   fingertips first (tried: 34 degrees of tilt sent hard spikes into the middle of the hands off the
+ *   tips). Tried and turned down: a 0.3 m lean (a 30-degree lean no blocker holds, and the drawn body
+ *   could not follow it: in first person the hands went out of sight above), and arms 29 degrees
+ *   over (9.5 cm of height lost: fewer stuffs, as many spikes went over the fingertips). A press costs
+ *   height, which is why a hitter can go over a block that penetrates and not over one that only
+ *   reaches (JSSM 10:452, the swing block: more height and more penetration).
  * - `pressFrom`: the press comes with the jump: none below this share of the jump's height, all of
  *   it at the top. A late blocker's hands are still going up, square to the net; an early one's are
  *   coming down.
@@ -628,9 +630,9 @@ export const BLOCK = {
   thumbGap: 0.1,
   thickness: 0.03,
   reachTop: 0.04,
-  press: 0.3,
-  wrist: 0.1,
-  lean: 0.3,
+  press: 0.4,
+  wrist: -0.05,
+  lean: 0.22,
   pressFrom: 0.4,
   tapeClear: 0.05,
   face: 0.5,
@@ -2613,20 +2615,26 @@ export const AI = {
    * Against a closed block (every usual shot into the hands), and off a bad pass whenever a block
    * is up, an AI pin hitter wipes it off the outside hand (weight `toolShot`) or rolls it over
    * (`rollShot`). Out of system the high ball goes into a full block, and coaches teach hitters to
-   * use it: high hands and off the block (USA Volleyball, "Tips for tooling the block").
+   * use it: high hands and off the block (USA Volleyball, "Tips for tooling the block"). The tool
+   * goes through the net `toolEdge` of the hand's half-width (`CONTACT.blockHalfWidth`) out from the
+   * middle of the block: just past the outside hand's edge, so the ball glances off it (`BLOCK`;
+   * aimed inside the hand, at 0.85 as under the old dice table, it is stuffed or dropped).
    */
   toolShot: 1.0,
+  toolEdge: 1.15,
   rollShot: 0.3,
   /**
    * ...or plays it softly into the inside blocker's hands (weight `recycleShot`), so it comes back
-   * off the block for the cover to pick up and attack again (recycling: `CONTACT.recycleSpeed`).
+   * off the block for the cover to pick up and attack again (recycling: what firm hands do with a
+   * soft ball, `BLOCK`).
    */
   recycleShot: 0.8,
   /**
    * An AI hitter under the ball (its swing would be graded Early) never sends a light ball sailing
    * out past the end line: a light ball is a choice (MatusGib, 2026-11-14). `adjust` of the time it
    * feels it and plays the ball off-speed, its timing error cut to x `timing` (a soft touch needs
-   * little timing): pushed at the outer edge (`wipeEdge` of the hand's half-width) of the outside
+   * little timing): pushed at the outer edge (`wipeEdge` of the hand's half-width: just past it, so
+   * it glances off, `AI.toolEdge`) of the outside
    * hand of a block within `blockNear` m in front (weight `wipe`: off it and out, aimed `wipeZ` m
    * past the net), tipped short over the block (`tip`, aimed `tipZ` m past it), or rolled (`roll`)
    * to whichever of the deep corners (`deep` m off the net; `lineIn` m in from the sideline down the
@@ -2641,7 +2649,7 @@ export const AI = {
     wipe: 1.0,
     tip: 0.6,
     roll: 1.2,
-    wipeEdge: 0.85,
+    wipeEdge: 1.15,
     wipeZ: 0.2,
     tipZ: 2.0,
     lineIn: 0.8,
