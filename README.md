@@ -1137,6 +1137,11 @@ compare with `main`: the change has to play exactly like it (`npm run trace:comp
 On a pull request, **check** also runs the architecture rules as they are on the
 branch it goes into and fails when the known lists grow
 (`scripts/rules-from-base.mjs`), so a change cannot pass by loosening its own checks.
+A `feat` or a `fix` is then asked for the check it brings (`scripts/brings-a-check.mjs`):
+its description says how the change is held, and a change to the play comes with a
+test that fails on the code of the branch it goes into (`scripts/red-on-base.mjs`),
+a new trace run, or a line `Unchecked: <reason>` that says why no check can hold it
+([what it asks, and what it cannot tell](docs/verification.md#a-change-to-the-play-brings-a-check-or-says-why-not)).
 
 * `npm test` — the Vitest suite in `tests/`: set apex, spike landing point, topspin dip,
   net/tape/antenna collisions (a clipped serve carries on over, a square hit drops by
@@ -1366,7 +1371,7 @@ src/app/               the one place that builds every part: the game shell and 
                        the play runs, the quality governor, the autopilots, stored settings, quick-start links
 src/main.ts            the page: menus, pause, errors
 tests/                 unit tests, the architecture rules (tests/architecture.*) and their lists
-scripts/               e2e, the trace comparison, the check that judges a pull request by its base branch
+scripts/               e2e, the trace comparison, the checks that judge a pull request by its base branch
 docs/                  decision records (docs/adr), how the checks are arranged (docs/verification.md),
                        the README screenshots (real frames from the game)
 .github/               CI, issue forms (feel report, bug, idea) and the pull request template

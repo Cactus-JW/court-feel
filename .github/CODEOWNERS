@@ -7,6 +7,10 @@
 
 /tests/architecture.*          @LemonPhase
 /scripts/rules-from-base.mjs   @LemonPhase
+/scripts/brings-a-check.*      @LemonPhase
+/scripts/red-on-base.*         @LemonPhase
+/tests/bringsACheck.test.ts    @LemonPhase
+/tests/redOnBase.test.ts       @LemonPhase
 /scripts/trace.mjs             @LemonPhase
 /scripts/e2e.mjs               @LemonPhase
 /.github/                      @LemonPhase

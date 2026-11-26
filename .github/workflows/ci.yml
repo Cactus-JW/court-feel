@@ -42,8 +42,15 @@ jobs:
     name: Typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      # the last step before the build reads the pull request's title and description as they are now
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          # the pull request merged into its base (HEAD), and the commit it goes into (HEAD^1)
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -66,6 +73,21 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           ALLOW_KNOWN_GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'known-list-may-grow') && '1' || '0' }}
+      - name: A feat or a fix brings a check that is red on the base, or says why not
+        # The description of a feat or a fix says how the change is held, and a change to the play comes with a
+        # test that fails on the base branch's code (scripts/red-on-base.mjs), a trace run, or a line
+        # `Unchecked: <reason>` in the description (scripts/brings-a-check.mjs, docs/verification.md). Any other
+        # title is asked nothing. It runs when an earlier step failed too, so one run shows everything to fix,
+        # and it reads the title and the description as they are now: after editing them, run the job again.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        run: |
+          # the gate that does the judging is the base branch's too, where it has one
+          if git cat-file -e HEAD^1:scripts/brings-a-check.mjs 2>/dev/null; then
+            git checkout -q HEAD^1 -- scripts/brings-a-check.mjs scripts/brings-a-check.rule.mjs scripts/red-on-base.mjs
+          fi
+          node scripts/brings-a-check.mjs HEAD^1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       # typecheck already ran above; `npm run build` would repeat it
       - run: npx vite build
 

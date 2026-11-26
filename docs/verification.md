@@ -247,12 +247,61 @@ Say these out loud in a pull request when they apply.
 - **Passing tests do not prove a change to what the player sees.** Drive the
   app.
 
+## A change to the play brings a check, or says why not
+
+The rule: a change that alters the feel, or adds something a player can feel,
+adds or updates the check that holds it, and if no check can hold it the pull
+request says why. It was prose, and review was its only reader. Now the `check`
+job holds it (`scripts/brings-a-check.mjs`), for a pull request whose title
+starts with `feat` or `fix`:
+
+- **It says how it is held.** Its description has the template's sections "How
+  it is held" and "What no check holds", each with more in it than the
+  template's comment.
+- **It touches the play** (physics, the simulation, the brains, the drills, the
+  input door, the gameplay sections of config). Then one of the tests it adds or
+  changes fails on the code of the branch it goes into, or it changes the
+  trace's runs, or a line `Unchecked: <reason>` stands under "What no check
+  holds". `scripts/red-on-base.mjs` is what tries the tests: this checkout, with
+  `src/` as it is on the base. A test of a function the base does not have
+  cannot run there, and that is red too. So is a test that does not end there:
+  the run is stopped after two minutes and the file is named, because a fix for
+  a loop that never ends comes with the test that states it.
+- **It touches only what is shown and heard** (the HUD, the menus, effects,
+  sound, the camera, the world, the look and sound sections of config). Then a
+  test, the end-to-end run, a `verify-court-feel` feature file or a trace run
+  changed with it, or the same line stands.
+
+Which path is in which tier is one table (`TIERS` in
+`scripts/brings-a-check.rule.mjs`), and a part of config or a folder of `src/`
+that nobody has listed is the play. The decision is a pure function of the
+title, the changed paths, the tests that are red on the base and the
+description, and `tests/bringsACheck.test.ts` holds it case by case. Like the
+architecture rules, the gate that judges a pull request is the base branch's.
+Every failure says what to do and ends with how to have the gate look again: a
+push, when a test or a run mends it, or the command that runs the job again,
+when the description does (an edit to a description starts no run).
+
+What it cannot tell:
+
+- **Whether the test states the fact.** For the play, any test that fails on
+  the base passes it: one that only calls a new function is red there. For what
+  is shown and heard, any changed test passes it, an empty one too. What a test
+  holds is still found by breaking the line it is there for.
+- **Whether the reason is a good one.** `Unchecked: no time` passes, on purpose:
+  the reason is then written where the owner sees it, in the description and in
+  the job's summary, and not left unsaid.
+- **Whether a trace run was added.** A run taken out of the list changes the
+  list too.
+- **Anything about another title.** A change to the play that is called a
+  `chore`, or has no type at all, is asked nothing here.
+- **What a line is.** It goes by path, so a comment changed in a file of the
+  play is a change to the play.
+
 ## Rules with no check yet
 
-These live in prose only, so they are the ones most likely to be broken.
-
-| Rule | Where it should go |
-|---|---|
-| A changed mechanic comes with a test that states the real-court fact | Review, helped by the "test first" rule |
-
-When one of these gets a check, move it up this page.
+A rule that lives in prose only is the one most likely to be broken. List it
+here with the layer it should move to, and move it up this page when it gets a
+check. The last one listed, that a changed mechanic comes with a test that
+states the real-court fact, is held by the gate above as far as a check can
+hold it.
