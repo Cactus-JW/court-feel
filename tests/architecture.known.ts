@@ -30,7 +30,4 @@ export const KNOWN_HAND_MADE: readonly string[] = [];
 export const KNOWN_CLOCK: readonly string[] = [];
 
 /** simulation files (the simulation, the brains, the drills) that read a number of the display or the app from config, as 'file reads NAME (its file of config)' (tests/architecture.config.test.ts) */
-export const KNOWN_CONFIG_READS: readonly string[] = [
-  'src/game/modes/mode.ts reads Settings (app.ts)',
-  'src/game/modes/receiveDrill.ts reads FX (display.ts)',
-];
+export const KNOWN_CONFIG_READS: readonly string[] = ['src/game/modes/receiveDrill.ts reads FX (display.ts)'];
