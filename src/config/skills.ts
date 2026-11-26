@@ -1,4 +1,58 @@
 // The skills: the timing windows, what a touch does to the ball, the serves, the plays, what assist does for the body. Owner: the simulation.
+//
+// What each section controls:
+//
+// `TIMING`: Perfect/Good windows, swing time and stretch, tap threshold, wind-up time to full
+// charge (`chargeFull`), pass/dig lead times, the set (how long the ball loads in the hands,
+// `setLoad`; how long it can be held; how an early or late catch costs the touch; the feet ready
+// time), block height thresholds, the Setter Drill's pace (`setterDrill`: how long the result stays
+// up, when the next pass leaves), input buffer
+//
+// `SET_LEVELS`: The set difficulty levels: the green window (best and worst touch), the good
+// multiple, the clean catch, whether hands up early are free (`handsEarly`, Easy) (the slow-mo is
+// the same on every level, in `ASSIST`)
+//
+// `CONTACT`: The setter's dump (`dump`: how near the net, where it lands, how high over the tape)
+// and how hard a fast set off the net is (`setTouch.oosFast`); A stuff kept up comes off the arms
+// anywhere (`covered.stuff`) while a recycled ball keeps its shape; an AI hitter's mistimed swing
+// still meets the ball (`aiSwingShift`); Reach radii, spike/tip/serve speeds and spin, power at
+// minimum charge (`chargePowerMin`), pass error by grade and how much it grows with ball speed and
+// a moving passer (`passSpeedErr`, `passMoveErr`), the lunge at a hard-driven ball (`digLunge`),
+// what a dive does with the ball (`diveOut`: one arm's extra reach, how high and which way a ball
+// met at full stretch goes, how much under control reads Good), how hard a pass can be
+// (`passPower`) and how much of a fast third ball sent over goes the way it bounces
+// (`overControl`), shanks (`shank`, `shankGood`, `shankSpeed`, `shankTurn`; an AI dig of the user's
+// hard spike `userSpikeShank`), how much lower a block reaching sideways is (`blockReachDrop`), a
+// hit off the outer edge of the hands is tooled (`toolEdge`, `toolEdgeP`), a jump serve met early
+// loses its topspin (`serveEarlySpin`; the player's three serves are under `SERVE`), the user's
+// spike tooled more often (`userToolEdge`, `userToolEdgeP`), the side dig, the dive and the
+// overhand first ball (`sideReach`, `sideErr`, `diveLow`, `diveErr`, `handsErr`, `handsMaxSpeed`),
+// a soft ball recycled off a well-formed block (`recycleSpeed`, `recycleP`, `recyclePLate`) and the
+// AI hitter's push into the hands (`pushSpeed`, `pushDrop`), how a ball off their block comes off
+// the cover's arms (`covered`: how much of it the coverer controls, by the ball's speed, the
+// platform's timing, its edge, moving feet and reaching; the rest pops up near them), the AI's
+// serves always in (`serveSafe`, and `serveSafeApex` for one its aim cannot get over the tape;
+// `floatSafe`, `floatSafeTries`, `floatSafeCut`, `floatSafeMin` for its float), how much a float
+// floats by the grade of its contact (`floatClean`), what shrinks the set window (`setTouch`; each
+// kind of set's share of a high ball's green, `setTouch.window`; a jump set's balance, `airDrift`
+// and `offTop`) and how a set misses (spread, short / long, apex)
+//
+// `SERVE`: The player's three serves: each one's toss (how far ahead, how high) and where the Serve
+// Drill stands you (`back`), the jump float's speed and the run-up that gives it (`jumpFloatSpeed`,
+// `floatRun`), a jump serve hit off the floor (`standingSpin`), the foot fault (`foot`), no hitting
+// a toss on its way up (`tossRising`), how the hold on Q sets the toss's height (`hold`) and how
+// much further ahead a higher jump toss comes down (each serve's `ahead`). `SERVE_DRILL`: the
+// drill's start spot and its timings
+//
+// `ASSIST`: How slow the game runs while the play wheel is open (`playWheelSlow`); how much wider
+// your set's windows are set by feel, with the ring and bar off (`setByFeel`); Default aim assist,
+// the aim assist of an athlete nobody plays (`ai`: a little more reach for an AI player's swing,
+// pass and block), air magnet strength, reach bonus, the set's footwork (`setStep`: how near the
+// spot your body takes the last steps, how it arrives), slow-mo assist, the set slow-mo (when it
+// starts, how slow for the catch and while the ball loads)
+//
+// `PLAYBOOK`: The play designer: how far apart two front-row hitters' sets must be hit, and the
+// longest name
 
 export const TIMING = {
   /** input buffer for actions pressed slightly early */

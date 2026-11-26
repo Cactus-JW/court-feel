@@ -1,4 +1,14 @@
 // The ball in the air and against the floor, the net, the tape and the antennae. Owner: physics.
+//
+// What each section controls:
+//
+// `BALL`: Drag, Magnus scale, restitution and friction for the floor; the net's top (`tape`: its
+// mass and spring each way, grip, the band) and the antenna rod (`antenna`: the fibreglass, its
+// bends and how fast they die, how hard the ball's skin presses on it, the grip, the side of the
+// net it is strapped to); the float (`float`: how hard a no-spin ball breaks, how long it flies
+// true between breaks and how long a break lasts, how often it breaks downward, the critical speed
+// under which it dies, and how old everyone's read of a floating ball is); the soft net (`netGive`,
+// `netStiffness`, `netDampingRatio`, `netReturn`, `netRestitution`, `netGrip`)
 
 export const BALL = {
   radius: 0.105,

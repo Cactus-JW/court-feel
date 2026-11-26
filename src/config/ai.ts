@@ -1,4 +1,59 @@
 // How the AI players read, decide and err. Owner: the brains.
+//
+// What each section controls:
+//
+// `AI`: How long a jump set with the dump on holds their middle (`middle.dumpHold`); A pin hitter
+// going inside: how far off square the run is, how much speed is kept through the plant and how
+// much of it goes into the ball (`insideRun`); Your green set: who their middle bites on
+// (`greenBite`, `greenBlockGuess`) and your hitter's bounce (`greenBounce`); how much an AI
+// hitter's run across the court curves (`approach`); how late a hitter can still be asked for a
+// fast set out of system (`oosAsk`); How often the pipe's hitter looks for the open spot
+// (`pipe.open`), the 3 m line kept clear by a back-row hitter's take-off and the libero's hand set
+// (`backRow`), where a scramble's ups go (`up`, `diveUp`), no approach for a set out of reach
+// (`approachMiss`), no overhand free ball from deep (`freeOver.bumpFrom`); Reaction time and skill
+// of hitters, blockers, defenders, setter accuracy; the Mini Rally middle blocker (`middle`: its
+// reaction and read of the set, how often it commits on the quick or cheats to a pin, how close it
+// closes on the pin blocker, how late it still jumps and how far it reaches sideways) and pin
+// blockers (`wing`: how late a pin still goes up, how far out it goes at the antenna); how much
+// room team-mates give each other (`giveWay`) and when the defence split-steps (`splitStep`); who
+// the setter sets (`setWeight`) and how often the pipe (`pipe`); an overpass (`overpass`), an AI
+// hitter misreading the user's block (`userBlockMisread`), who takes a ball (`pick`: first there
+// takes it, the seam goes to the libero or you, the setter only when nobody else is close, a second
+// ball the libero gets to is the libero's, and in defence (their attack, a tip, a free ball, a ball
+// off a block) every ball it gets its platform to in time (`AI.digReach` from its feet):
+// `liberoDig`; serve receive by lanes; no HELP call on a ball that is down `dive` s before anyone
+// arrives); a block only from the net (`blockNet`), what players without the ball do in each of the
+// ten situations (`sit`: the back row moving along the net with the ball, pin blockers fronting
+// their hitters, the serve-receive transition and back-up, following the pass, waiting deeper out
+// of system, closing on a scramble, each player's own offset for the rally), arriving on the
+// hitter's contact instead of early (`pace`), turning to run a ball down (`chase`); where an AI
+// free ball over goes (`freeOver`: a deep corner or short, wherever they aren't); perimeter defence
+// read spots and reaction times (`defence`), early transition and the front row's transition off
+// the net after a block (`transition`, `approachOff`: no quick from the net) and covering our
+// hitter in the real 3-2 spots (`cover`: when, the middle at the net, the setter on the 3 m line,
+// the back row behind and deep, how fast a coverer reads a ball off the block); when the setter
+// calls the pass (`setterRead`), how far off the net is out of system (`outOfSystem`) and how much
+// higher an out-of-system set goes (`outOfSystemApex`); the AI's serves (`serve`: jump share,
+// run-up, toss, error, where they aim); the attack: swing timing error (`attackErr`), the open spot
+// (`openShot*`, `digReach`, `digTop`, `blockReachBand`), where a quick goes (`quickShot`), how
+// often the setter goes to the middle (`quickWeight`), fast sets to the pins (`tempo`), tool, roll
+// and recycle shots (`toolShot`, `rollShot`, `recycleShot`), what a hitter under the ball does
+// instead of a weak swing (`offSpeed`: a wipe off the block, a tip, a roll to the open court, or a
+// hard swing through it); a backup's set off a hard ball (`backupSet`: the libero's or anyone's,
+// how hard it is by time, distance and the run under it, how much it misses, the one barely reached
+// that is bumped instead; never a set to the user), what an AI dive does with the ball (`diveUp`: a
+// bit up, toward the middle) and when a free ball is aimed (`freeOver.aimSpeed`), a setter too late
+// for the hands digging it (`lateSet`); how far out a ball must land before a receiver lets it go
+// (`outJudge`) and how much a hard ball rushes an AI passer's timing (`passPressure`); first balls
+// overhand (`overhand`), dives (`dive`, `stretch`: a last-ditch dive at a ball just past the hands;
+// `anyway`, `anywayFar`: now and then a dive at one out of reach; `react`: none before a reaction
+// to the touch; `back`, `chase`, `quick`: backwards only at the end of a chase, at a ball that
+// isn't fast) and a second player running at a ball the first may not reach (`scramble`); your
+// green set as a point (their middle's wrong guess, the wings' late read, the diggers' late start:
+// `greenSet*`, `greenBlockGuess`) and how much harder your bad set is to hit (`badSetErr`,
+// `badSetTip`); when a hitter backing off the net is ready for a called tempo run
+// (`transitionReady`, `transitionLatest`); how often an AI setter runs a play from the wheel, on a
+// free ball and off a perfect serve-receive pass (`plays`)
 
 export const AI = {
   reactionTime: 0.18,

@@ -1,4 +1,20 @@
 // Each drill's own numbers, and the lessons'. Owner: the drills.
+//
+// What each section controls:
+//
+// `BLOCK_DRILL`, `FREE_PLAY`, `MINI_RALLY`, `RECEIVE_DRILL`, `SERVE_DRILL`, `SETTER_DRILL`,
+// `SPIKE_DRILL`: Each drill's own numbers, under the same keys where a drill has them: who is on
+// court and where (`cast`), the ball the drill sends (`feed`), how long each part of a rep lasts
+// (`timing`), what a rep scores (`points`), how much each result lifts the crowd (`crowd`), how
+// long the drill's lines stay up (`say`) and how far off the start spot you may end a rep before
+// you are walked back (`slack`). `COACH_TOSS`: the coach's toss to the setter, one toss for the
+// Spike, Block and Receive drills. `RUN_UP_GO`: how fast the run-up guide's GO pulse dies away
+// (Spike and Serve drills). `SET_PICK`: the ring at the spot your set goes to and the line for a
+// call that comes too late (Setter drill and Mini Rally)
+//
+// `TUTORIAL`: The first-run lesson and the serve lessons: their speeds (together, slow motion), how
+// early cues show, how long the coach's lines stay, tries per rep, where the coach aims a serve and
+// when a float's draw cue comes
 
 /**
  * The Serve drill (src/game/modes/serveDrill.ts). The server starts `x` m right of the middle of

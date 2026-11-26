@@ -94,6 +94,19 @@ Ask these in order and stop at the first yes.
   that may listen for keys, the mouse, the pointer or touch, with the reason for
   each, and fails when another file starts to. Nothing in the simulation may: it
   is handed an intent.
+- **Each layer reads the numbers it owns** (`tests/architecture.config.test.ts`,
+  [decision record 0014](adr/0014-config-is-one-folder-with-a-file-for-each-owner.md)).
+  Config is a folder with a file for each owner. The test fails when a file
+  outside the folder imports one inside it (config has one door, its index),
+  when a config file imports one listed after it in the index or is left out
+  of it, when physics reads more of config than the court and the ball, when
+  the simulation, the brains or a drill reads a number of the display or the
+  app, and when a config file reads a clock, rolls dice or touches the page.
+  The files of the simulation that still read one are on a known list that
+  only gets shorter. It goes by the names a file imports
+  from config, so it does not see a number handed on by the code that read it:
+  a drill reads the app's settings through its host (`DrillHost.settings`),
+  and the test sees that as one import of the type.
 - **Numbers live in config** (`tests/architecture.numbers.test.ts`). The count of
   numbers each file in physics, the simulation, the brains and the drills holds
   of its own is written down, file by file, in
