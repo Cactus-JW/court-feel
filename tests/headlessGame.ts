@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DEFAULT_SETTINGS, type PositionId, type ServeKind, type Settings } from '../src/config';
+import { ASSIST, DEFAULT_SETTINGS, type PositionId, type ServeKind, type Settings } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import type { ContactEvent } from '../src/game/contact';
 import { takeKey } from '../src/game/intent';
@@ -59,7 +59,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
 
   const sim = new Simulation({
     ...NO_HOOKS,
-    aimAssist: (a) => (a.isUser ? DEFAULT_SETTINGS.aimAssist : 0.3),
+    aimAssist: (a) => (a.isUser ? DEFAULT_SETTINGS.aimAssist : ASSIST.ai),
     aimTargetFor: (a, out) => (a.isUser ? out.set(a.pos.x, 0, -a.side * 6) : out.copy(a.aiAim)),
     contact: (ev: ContactEvent) => {
       // as the game does: a clean touch arms the judge, and the drill hears of every touch

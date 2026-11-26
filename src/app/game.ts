@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  ASSIST,
   CAMERA,
   CHARACTER,
   COURT,
@@ -244,8 +245,8 @@ export class Game implements AiHost {
   ) {
     // first: the venue, the settings and the display below all read the simulation's ball and net
     this.sim = new Simulation({
-      aimAssist: (a) => (a.isUser ? this.settings.aimAssist : 0.3),
-      setAssist: (a) => (a.isUser ? this.settings.setAimAssist : 0.3),
+      aimAssist: (a) => (a.isUser ? this.settings.aimAssist : ASSIST.ai),
+      setAssist: (a) => (a.isUser ? this.settings.setAimAssist : ASSIST.ai),
       setByFeel: () => !this.settings.setRing,
       aimTargetFor: (a, out) => this.aimTargetFor(a, out),
       contact: (ev) => this.onContact(ev),
@@ -465,7 +466,7 @@ export class Game implements AiHost {
   /** the user's athlete jogs back to a drill spot between reps (no teleport, no black cut) */
   private ret: { x: number; z: number; yaw: number; t: number; maxT: number; userDriven: boolean } | null = null;
 
-  returnUser(x: number, z: number, yaw: number, maxT = 2.6): void {
+  returnUser(x: number, z: number, yaw: number, maxT = PLAYER.walkBack.maxT): void {
     this.ret = { x, z, yaw, t: 0, maxT, userDriven: false };
   }
 
@@ -478,17 +479,18 @@ export class Game implements AiHost {
     const r = this.ret;
     if (!r) return;
     const me = this.me;
+    const W = PLAYER.walkBack;
     r.t += dt;
     const d = Math.hypot(me.pos.x - r.x, me.pos.z - r.z);
     const keys = this.user.intent.steering;
     if (keys) r.userDriven = true;
-    if (d < 0.1 || (r.userDriven && d < 0.9)) {
+    if (d < W.near || (r.userDriven && d < W.nearSteered)) {
       this.ret = null;
       return;
     }
     if (r.t > r.maxT) {
       // still far (or the player wandered off): snap with a soft dip, not a black cut
-      if (!r.userDriven || r.t > r.maxT + 2) {
+      if (!r.userDriven || r.t > r.maxT + W.giveUp) {
         if (!r.userDriven) {
           this.hud.dip();
           this.placeUser(r.x, r.z, r.yaw);
@@ -497,12 +499,12 @@ export class Game implements AiHost {
       }
       return;
     }
-    if (keys || me.state !== 'ground' || Math.hypot(me.cmd.moveX, me.cmd.moveZ) > 0.05) return;
+    if (keys || me.state !== 'ground' || Math.hypot(me.cmd.moveX, me.cmd.moveZ) > W.idle) return;
     // jog back (body keeps facing where the camera looks: a backpedal when looking at the net)
-    const m = Math.min(1, d / 0.6);
+    const m = Math.min(1, d / W.ease);
     me.cmd.moveX = ((r.x - me.pos.x) / d) * m;
     me.cmd.moveZ = ((r.z - me.pos.z) / d) * m;
-    me.cmd.sprint = d > 2.5;
+    me.cmd.sprint = d > W.sprintFrom;
   }
 
   /** change the user's position stats (height, jump, etc; your custom body for that position from the settings) */
