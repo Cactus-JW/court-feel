@@ -7,9 +7,8 @@ import type { ContactEvent } from '../src/game/contact';
 import { Rng, yawFromDir } from '../src/core/mathx';
 import { makeBall, stepBall, type V3 } from '../src/physics/ball';
 import { solveFixedTime } from '../src/physics/solve';
-import { scene } from './scene';
+import { DT, scene } from './scene';
 
-const DT = 1 / SIM.hz;
 /** the defender's height (the platform and the forehead are where they are on this body) */
 const H = new Athlete('L', 1).height;
 const TARGET = { x: 1, y: 2.35, z: 0.9, apex: 4 };

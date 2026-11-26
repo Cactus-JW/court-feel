@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { AI, COURT, SIM, type PositionId } from '../src/config';
+import { AI, BALL, COURT, SIM, type PositionId } from '../src/config';
 import { wrapAngle, yawFromDir } from '../src/core/mathx';
 import type { Athlete } from '../src/game/athlete';
 import type { TouchKind } from '../src/game/ballEntity';
@@ -8,13 +8,11 @@ import { idleIntent } from '../src/game/intent';
 import type { MiniRally } from '../src/game/modes/miniRally';
 import { laneFor, SETTER_SPOT, setterTouchY } from '../src/game/plays';
 import { makeBall, stepBall, type V3 } from '../src/physics/ball';
-import { netYaw } from '../src/ai/brain';
 import { SetterBrain } from '../src/ai/setter';
 import { SLOTS, type Slot } from '../src/ai/team';
 import { headlessGame } from './headlessGame';
-import { scene } from './scene';
+import { DT, scene, type Formation } from './scene';
 
-const DT = 1 / SIM.hz;
 // (the book spots: each player's own habit, a little off them every rally, is tested on its own)
 AI.sit.personal = 0;
 const D = AI.defence;
@@ -36,16 +34,8 @@ function homeTeam(o: { you?: Slot; seed?: number; away?: { you?: Slot } } = {}) 
   const away = o.away ? s.team(-1, { user: o.away.you }) : null;
   /** one of theirs, who plays their touches: their outside, where its approach starts */
   const theirs = away ? away.players.get('OH1')! : s.athlete('OH', -1, { x: laneFor('OH', -1).sx, z: laneFor('OH', -1).sz });
-  /** a team (ours when not given) in a formation, its player in it too (a team places its own brains' bodies, never the player's) */
-  const place = (form: 'receive' | 'defense' | 'offense', of = team) => {
-    of.place(form);
-    const you = of.user;
-    if (!you || !of.userSlot) return;
-    const p = of.formSpot(form, of.userSlot);
-    you.place(p.x, p.z, netYaw(of.side));
-  };
-  place('defense');
-  if (away) place('defense', away);
+  /** a team (ours when not given) in a formation, its player on their book spot too */
+  const place = (form: Formation, of = team) => s.place(of, form);
   /** a touch: the ball leaves `from` for `to` with this apex */
   const touch = (kind: TouchKind, side: 1 | -1, from: V3, to: V3, apex: number, athlete: Athlete | null = theirs) => {
     s.send({ from, to, apex }, { athlete, kind, side });
@@ -60,7 +50,8 @@ function homeTeam(o: { you?: Slot; seed?: number; away?: { you?: Slot } } = {}) 
     const dz = to.z - from.z;
     const flat = Math.hypot(dx, dz);
     const t = flat / speed;
-    const vy = (to.y - from.y + 0.5 * 9.81 * t * t) / t;
+    // (solved with no drag, as these tests always sent it: the ball they were written against. It is sent as a velocity)
+    const vy = (to.y - from.y + 0.5 * BALL.gravity * t * t) / t;
     s.send({ from, v: { x: dx / t, y: vy, z: dz / t } }, { athlete: theirs, kind: 'spike', side: -1 });
   };
   /** play for `seconds`, calling `each` after every step */

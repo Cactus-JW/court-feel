@@ -11,9 +11,8 @@ import { clashes, SETTER_KEYS, SetterCalls, type SetPick, type SetterKey } from 
 import { wheelSlice } from '../src/ui/playWheel';
 import { catchQuality, gradeRelease, setMiss, setShape, setTouch, setWindow, type SetShape } from '../src/game/setTiming';
 import { solveApex } from '../src/physics/solve';
-import { scene } from './scene';
+import { DT, scene } from './scene';
 
-const DT = 1 / SIM.hz;
 const ENV = { netTop: COURT.netHeightMen };
 
 /** a high ball from the setter's spot, standing, in system */

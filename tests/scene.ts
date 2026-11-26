@@ -1,5 +1,6 @@
 import { SIM, type PositionId } from '../src/config';
 import { SLOT_ROLE, SLOTS, TeamAI, type Slot } from '../src/ai/team';
+import { netYaw } from '../src/ai/brain';
 import { Athlete } from '../src/game/athlete';
 import type { Touch } from '../src/game/ballEntity';
 import type { Brain } from '../src/game/brains';
@@ -8,7 +9,7 @@ import type { Outcome } from '../src/game/judge';
 import type { SeatHost } from '../src/game/seat';
 import { Simulation, type SimDrill, type SimulationHooks } from '../src/game/simulation';
 import type { V3 } from '../src/physics/ball';
-import { solveApex, solveFixedTime, solveSpeedToFloor } from '../src/physics/solve';
+import { solveApex, solveFixedTime } from '../src/physics/solve';
 import { brokenInvariants } from './invariants';
 import { NO_HOOKS } from './simHooks';
 
@@ -20,9 +21,31 @@ import { NO_HOOKS } from './simHooks';
 // Two things a scene may hold still, and only here, because a test of one fact has to keep the
 // rest out of the way: the dice (`dice`) and the touch (`touches`). Every test that asks for one
 // says in a comment what it isolates.
+//
+// A scene is the simulation, not the app. Three things differ from a game someone is playing, and
+// a test that needs one of them asks for it:
+//
+// - A player has every assist off: no aim assist, no set assist, no auto jump set. (An athlete
+//   nobody plays has the game's own, `ASSIST.ai`: the simulation gives it.) The app gives a new
+//   player the default settings, and so does `tests/headlessGame.ts`. A scene takes them through
+//   `hooks` (`aimAssist`, `setAssist`) and through the seat's host (`user: { autoJumpSet }`).
+// - `send` puts a ball in play and arms nothing: it is not a touch. The simulation arms the judge
+//   on a clean touch it resolves itself. A test of a call on a ball it sent arms the judge by hand
+//   (`sim.judge.arm(sim.ball)`), as a drill does when it feeds one.
+// - `step` and `run` play fixed steps, and no seat's frame runs between them. What the game does
+//   for a player once a frame is the seat's (`Seat.frame`): the controller that turns the intent
+//   they hold into what their athlete does, the last steps onto a set, the walk back between reps.
+//   A test of one of those plays frames, as the app does: `frame`. A test of a drill's own rules is
+//   built on `tests/headlessGame.ts`, which is a scene with a real drill and its host.
 
 /** one fixed step of the simulation (s) */
 export const DT = 1 / SIM.hz;
+
+/** the fixed steps in one frame: the simulation's 120 Hz under a screen's 60 */
+const STEPS_A_FRAME = 2;
+
+/** one frame (s) */
+export const FRAME = STEPS_A_FRAME * DT;
 
 const NO_SPIN: V3 = { x: 0, y: 0, z: 0 };
 
@@ -52,26 +75,21 @@ export interface SceneOptions {
   touches?: 'real' | 'none';
 }
 
-/** a ball to send: at a velocity, over an apex, in a fixed time, or as a spike to the floor */
-export type Flight =
-  | { from: V3; v: V3; w?: V3 }
-  | { from: V3; to: V3; apex: number; w?: V3 }
-  | { from: V3; to: V3; time: number; w?: V3 }
-  | { from: V3; floor: { x: number; z: number }; speed: number; spin?: number };
+/** a ball to send: at a velocity, over an apex, or in a fixed time */
+export type Flight = { from: V3; v: V3; w?: V3 } | { from: V3; to: V3; apex: number; w?: V3 } | { from: V3; to: V3; time: number; w?: V3 };
 
 /** the touch a sent ball came from. `t` is now when not given */
 export type SentBy = Omit<Touch, 't'> & { t?: number };
+
+/** where a team stands at the start of a rally */
+export type Formation = 'defense' | 'receive' | 'offense';
 
 export interface Scene {
   sim: Simulation;
   /** every touch the contact system resolved, with its time */
   touches: { t: number; ev: ContactEvent }[];
-  /** every touch a brain made without the contact system (the AI setter's set) */
-  aiTouches: { t: number; athlete: Athlete; kind: Touch['kind']; speed: number }[];
   /** what the judge called */
   outcomes: { t: number; o: Outcome }[];
-  /** the teams on the court, in the order they are stepped */
-  teams: TeamAI[];
   /**
    * An athlete on the court, facing the net unless `yaw` says otherwise. `user` gives them a seat
    * (the first one is `sim.me`), and may be what that seat's host answers (the player's settings:
@@ -87,9 +105,16 @@ export interface Scene {
   /**
    * Six athletes under a real TeamAI, stepped as the game steps it: after the ball and the judge,
    * home before away. `user` puts a player in that slot. `place` is the formation they start in
-   * ('defense' when not given). Two teams in one scene are each other's opponents.
+   * ('defense' when not given), the player on their book spot too. Two teams in one scene are each
+   * other's opponents.
    */
-  team(side: 1 | -1, o?: { user?: Slot; place?: 'defense' | 'receive' | 'offense'; serving?: boolean }): TeamAI;
+  team(side: 1 | -1, o?: { user?: Slot; place?: Formation; serving?: boolean }): TeamAI;
+  /**
+   * Put a team in a formation, as at the start of a rally, its player on their book spot too. (A
+   * `TeamAI` places the bodies its brains play and never the player's: in the game the drill puts
+   * the player there.)
+   */
+  place(team: TeamAI, form: Formation): void;
   /**
    * Send the ball, in play. `by` is the touch it came from; without it the ball's last touch is
    * left as it was. Returns the velocity it left with.
@@ -97,6 +122,12 @@ export interface Scene {
   send(ball: Flight, by?: SentBy): V3;
   /** play fixed steps, the invariants checked at each */
   step(n?: number): void;
+  /**
+   * Play frames, as the app does: every seat plays the intent it holds (`Seat.frame`: the
+   * controller, the last steps onto a set, the walk back), then the simulation steps twice.
+   * Feed a seat its player's hands by writing what it holds (`sim.seats[i].intent`).
+   */
+  frame(n?: number): void;
   /**
    * Play for `seconds` (a part of a step is played as a whole one), or until `until` is true after
    * a step. Returns whether it became true.
@@ -107,7 +138,6 @@ export interface Scene {
 /** a real simulation with nobody watching, and what a test needs to put on its court */
 export function scene(o: SceneOptions = {}): Scene {
   const touches: Scene['touches'] = [];
-  const aiTouches: Scene['aiTouches'] = [];
   const outcomes: Scene['outcomes'] = [];
   const teams: TeamAI[] = [];
   const hooks = o.hooks ?? {};
@@ -117,10 +147,6 @@ export function scene(o: SceneOptions = {}): Scene {
     contact: (ev) => {
       touches.push({ t: sim.simTime, ev });
       hooks.contact?.(ev);
-    },
-    aiContact: (athlete, kind, speed) => {
-      aiTouches.push({ t: sim.simTime, athlete, kind, speed });
-      hooks.aiContact?.(athlete, kind, speed);
     },
     outcome: (out) => {
       outcomes.push({ t: sim.simTime, o: out });
@@ -157,6 +183,15 @@ export function scene(o: SceneOptions = {}): Scene {
     return a;
   };
 
+  const place: Scene['place'] = (t, form) => {
+    t.place(form);
+    const you = t.user;
+    if (!you || !t.userSlot) return;
+    const spot = t.formSpot(form, t.userSlot);
+    // a player is put on a spot through their seat: their look turns with their body
+    sim.seatOf(you)!.place(spot.x, spot.z, netYaw(t.side));
+  };
+
   const team: Scene['team'] = (side, opts = {}) => {
     const t = new TeamAI(side, sim);
     for (const slot of SLOTS) {
@@ -164,7 +199,7 @@ export function scene(o: SceneOptions = {}): Scene {
       t.add(slot, athlete(SLOT_ROLE[slot], side, { x: 0, z: 0 }, { user: mine }), mine);
     }
     if (opts.serving) t.serving = true;
-    t.place(opts.place ?? 'defense');
+    place(t, opts.place ?? 'defense');
     for (const other of teams) {
       if (other.side === side) continue;
       t.opponents = other;
@@ -180,9 +215,8 @@ export function scene(o: SceneOptions = {}): Scene {
     const w = { x: 0, y: 0, z: 0 };
     if ('v' in ball) Object.assign(v, ball.v);
     else if ('apex' in ball) solveApex(ball.from, ball.to, ball.apex, ball.w ?? NO_SPIN, v);
-    else if ('time' in ball) solveFixedTime(ball.from, ball.to, ball.time, ball.w ?? NO_SPIN, v);
-    else solveSpeedToFloor(ball.from, ball.floor.x, ball.floor.z, ball.speed, ball.spin ?? 0, v, w, { x: 0, y: 0, z: 0 });
-    if ('w' in ball && ball.w) Object.assign(w, ball.w);
+    else solveFixedTime(ball.from, ball.to, ball.time, ball.w ?? NO_SPIN, v);
+    if (ball.w) Object.assign(w, ball.w);
     sim.ball.launch(ball.from, v, w, 0, sim.simTime);
     sim.ballLive = true;
     if (by) sim.ball.lastTouch = { ...by, t: by.t ?? sim.simTime };
@@ -206,5 +240,12 @@ export function scene(o: SceneOptions = {}): Scene {
     return false;
   };
 
-  return { sim, touches, aiTouches, outcomes, teams, athlete, team, send, step, run };
+  const frame: Scene['frame'] = (n = 1) => {
+    for (let i = 0; i < n; i++) {
+      for (const seat of sim.seats) seat.frame(FRAME);
+      step(STEPS_A_FRAME);
+    }
+  };
+
+  return { sim, touches, outcomes, athlete, team, place, send, step, frame, run };
 }

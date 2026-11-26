@@ -5,7 +5,7 @@ import { takeKey } from '../src/game/intent';
 import { NO_MARKERS } from '../src/game/modes/markers';
 import type { DrillHost, DrillHud, ModeId } from '../src/game/modes/mode';
 import { createMode } from '../src/game/modes/registry';
-import { scene } from './scene';
+import { FRAME, scene } from './scene';
 
 /** a HUD nobody reads: every line a drill writes is kept, so a test can ask what was said */
 function silentHud(said: string[]): DrillHud {
@@ -145,9 +145,8 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     outcomes,
     /** play one frame: the seat plays the intent it holds (and walks its player back between reps), the simulation steps twice (120 Hz under 60 fps) and the drill's frame runs */
     frame(): void {
-      seat.frame(1 / 60);
-      s.step(2);
-      mode.frame(1 / 60);
+      s.frame();
+      mode.frame(FRAME);
     },
   };
 }

@@ -27,9 +27,7 @@ import { makeKit } from '../src/character/kits';
 import { AudioEngine } from '../src/audio/audio';
 import { bodyStats, isCustomBody, resolveBody, sanitizeBodies, setBodyValue, spikeReach, topSpikeKmh, type Bodies } from '../src/game/body';
 import { loadSettings, saveSettings } from '../src/app/settings';
-import { scene, type Scene } from './scene';
-
-const DT = 1 / SIM.hz;
+import { DT, scene, type Scene } from './scene';
 
 /** run an athlete's full approach jump and return peak height and hang time */
 function jump(role: PositionId, approach: boolean, load: number, body?: Partial<BodyOverride>) {
