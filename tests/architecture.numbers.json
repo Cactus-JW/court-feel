@@ -1,5 +1,5 @@
 {
-  "comment": "How many numbers each file in physics, the simulation, the brains and the drills holds of its own (other than 0, 1, 2 and 0.5). tests/architecture.numbers.test.ts fails when a count here and the code disagree. The counts only go down: a number leaves a file when it gets a name in src/config.ts.",
+  "comment": "How many numbers each file in physics, the simulation, the brains and the drills holds of its own (other than 0, 1, 2 and 0.5). tests/architecture.numbers.test.ts fails when a count here and the code disagree. The counts only go down: a number leaves a file when it gets a name in its owner's file under src/config/.",
   "files": {
     "src/ai/blocker.ts": 36,
     "src/ai/brain.ts": 4,

@@ -34,7 +34,7 @@ describe('numbers live in config', () => {
     const grown = counts.filter((c) => c.n > c.was).map((c) => `${c.file}: ${c.n} numbers, ${c.was} listed`);
     expect(
       grown,
-      'give a new number a name in src/config.ts, with where it comes from. (A count may only be raised in a pull request of its own.)',
+      "give a new number a name in its owner's file under src/config/, with where it comes from. (A count may only be raised in a pull request of its own.)",
     ).toEqual([]);
   });
 
