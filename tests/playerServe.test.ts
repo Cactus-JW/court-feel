@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import * as THREE from 'three';
-import { COURT, SERVE, SERVE_KINDS, SIM, type ServeKind } from '../src/config';
-import { Athlete } from '../src/game/athlete';
-import { ContactSystem, tossFor, tossGroove, type ContactEvent, type ContactHost } from '../src/game/contact';
+import { COURT, SERVE, SERVE_KINDS, type ServeKind } from '../src/config';
+import { ContactSystem, tossFor, tossGroove, type ContactEvent } from '../src/game/contact';
 import { rateServe } from '../src/game/modes/serveDrill';
-import { makeBall, stepBall } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
+import { scene } from './scene';
 import { serveRun } from './serveRun';
 
 /** the player's serve from where the Serve drill stands them, with a full run-up and a clean (or `sd` off) swing */
@@ -151,10 +148,7 @@ describe('the foot fault (FIVB rule 12.4.3)', () => {
   });
 
   it('serving from outside the service zone (wide of the court) is a fault', () => {
-    const a = new Athlete('OH', 1);
-    a.isUser = true;
-    a.place(COURT.halfWidth + 0.3, COURT.halfLength + 1, 0);
-    const r = ownToss(a, 'float', 'down');
+    const r = ownToss({ x: COURT.halfWidth + 0.3, z: COURT.halfLength + 1 }, 'float', 'down');
     expect(r?.kind).toBe('serve');
     expect(r!.footFault).toBe(true);
   });
@@ -165,93 +159,36 @@ describe('the foot fault (FIVB rule 12.4.3)', () => {
 });
 
 /**
- * The player tosses (`kind`) and swings by hand: `when` is 'up' (0.1 s after the toss, the ball
- * still rising through the contact point) or 'down' (as it comes back down to it).
+ * The player, standing at `at`, tosses (`kind`) and swings by hand: `when` is 'up' (0.1 s after the
+ * toss, the ball still rising through the contact point) or 'down' (as it comes back down to it).
  */
-function ownToss(a: Athlete, kind: ServeKind, when: 'up' | 'down'): ContactEvent | null {
-  const DT = 1 / SIM.hz;
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let pv = -1;
-  const ball = {
-    state,
-    active: true,
-    lastTouch: null as unknown,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    speed: () => Math.hypot(state.v.x, state.v.y, state.v.z),
-    ensurePrediction(env: { netTop: number }, t: number) {
-      if (pv !== version) {
-        predictor.compute(state, env, t);
-        pv = version;
-      }
-      return predictor;
-    },
-    hit(v: object, w: object, knuckle = 0, _t = 0, seed = 0) {
-      Object.assign(state.v, v);
-      Object.assign(state.w, w);
-      state.knuckle = knuckle;
-      state.seed = seed;
-      state.kt = 0;
-      version++;
-    },
-    launch(p: object, v: object, w: object) {
-      Object.assign(state.p, p);
-      Object.assign(state.v, v);
-      Object.assign(state.w, w);
-      version++;
-    },
-  };
-  const events: ContactEvent[] = [];
-  const host = {
-    ball: ball as unknown as ContactHost['ball'],
-    simTime: 0,
-    env: { netTop: COURT.netHeightMen },
-    aimAssist: () => 0,
-    aimTargetFor: (_a: Athlete, out: THREE.Vector3) => out.set(0, 0, -6),
-    emitContact: (e: ContactEvent) => events.push(e),
-    rand: () => 0.5,
-    passTarget: () => ({ x: 0, y: 2.35, z: 0.9, apex: 4 }),
-    setOptions: () => [],
-    canServe: () => true,
-  } satisfies ContactHost;
-  const contact = new ContactSystem(host);
-  expect(contact.serveToss(a, kind)).toBe(true);
+function ownToss(at: { x: number; z: number }, kind: ServeKind, when: 'up' | 'down'): ContactEvent | null {
+  const s = scene({ hooks: { aimTargetFor: (_a, out) => out.set(0, 0, -6) } });
+  const { sim } = s;
+  const a = s.athlete('OH', 1, { ...at, yaw: 0 }, { user: true });
+  expect(sim.contact.serveToss(a, kind)).toBe(true);
   let swung = false;
-  for (let i = 0; i < SIM.hz * 3 && !events.length; i++) {
-    host.simTime += DT;
-    a.step(DT, host.simTime);
+  // (the hand comes in between two steps, as a press does in the game)
+  s.run(3, () => {
     if (!swung) {
-      const info = contact.ideal(a, host.simTime, 0.8);
-      const go = when === 'up' ? host.simTime >= 0.1 : !!info && host.simTime >= info.t - ContactSystem.swingLead(1);
+      const info = sim.contact.ideal(a, sim.simTime, 0.8);
+      const go = when === 'up' ? sim.simTime >= 0.1 : !!info && sim.simTime >= info.t - ContactSystem.swingLead(1);
       if (go) {
-        contact.startSwing(a);
+        sim.contact.startSwing(a);
         swung = true;
       }
     }
-    contact.step([a]);
-    stepBall(state, DT, host.env);
-  }
-  return events[0] ?? null;
+    return s.touches.length > 0;
+  });
+  return s.touches[0]?.ev ?? null;
 }
 
 describe('the toss', () => {
   it('is hit at its top or on its way down: a swing at a ball still on its way up is a swing too early', () => {
-    const a = new Athlete('OH', 1);
-    a.isUser = true;
-    a.place(0, COURT.halfLength + 1, 0);
-    const up = ownToss(a, 'float', 'up');
+    const up = ownToss({ x: 0, z: COURT.halfLength + 1 }, 'float', 'up');
     expect(up?.grade).toBe('Miss');
     expect(up?.note).toBe('Swung early');
-    const b = new Athlete('OH', 1);
-    b.isUser = true;
-    b.place(0, COURT.halfLength + 1, 0);
-    const down = ownToss(b, 'float', 'down');
+    const down = ownToss({ x: 0, z: COURT.halfLength + 1 }, 'float', 'down');
     expect(down?.kind).toBe('serve');
     expect(down?.grade).toBe('Perfect');
   });
@@ -268,33 +205,19 @@ describe('the toss', () => {
 describe('the toss button is held: the longer, the higher the toss', () => {
   /** how high a toss held `hold` s tops out, how long until it is back at the hand, and how far ahead */
   function toss(kind: ServeKind, hold: number) {
-    const a = new Athlete('OH', 1);
-    a.place(0, COURT.halfLength + 4, 0);
-    const state = makeBall();
-    const ball = {
-      state,
-      active: false,
-      lastTouch: null as unknown,
-      pos: state.p,
-      launch(p: object, v: object, w: object) {
-        Object.assign(state.p, p);
-        Object.assign(state.v, v);
-        Object.assign(state.w, w);
-      },
-    };
-    const host = { ball, simTime: 0, env: { netTop: COURT.netHeightMen }, canServe: () => true };
-    const contact = new ContactSystem(host as unknown as ContactHost);
-    expect(contact.serveToss(a, kind, tossFor(kind, hold))).toBe(true);
-    const y0 = state.p.y;
-    const z0 = state.p.z;
+    const s = scene();
+    const { sim } = s;
+    const ball = sim.ball;
+    const a = s.athlete('OH', 1, { x: 0, z: COURT.halfLength + 4, yaw: 0 });
+    expect(sim.contact.serveToss(a, kind, tossFor(kind, hold))).toBe(true);
+    const y0 = ball.pos.y;
+    const z0 = ball.pos.z;
     let apex = y0;
-    let t = 0;
-    do {
-      stepBall(state, 1 / SIM.hz, host.env);
-      t += 1 / SIM.hz;
-      apex = Math.max(apex, state.p.y);
-    } while (state.p.y > y0 && t < 5);
-    return { over: apex - a.standReach, t, ahead: z0 - state.p.z };
+    s.run(5, () => {
+      apex = Math.max(apex, ball.pos.y);
+      return ball.pos.y <= y0;
+    });
+    return { over: apex - a.standReach, t: sim.simTime, ahead: z0 - ball.pos.z };
   }
 
   it("a tap is the lowest toss, a long hold the highest, and about a third of a second is the serve's own", () => {

@@ -1,56 +1,8 @@
 import * as THREE from 'three';
 import { COURT, SERVE, SIM, type ServeKind } from '../src/config';
-import { Athlete } from '../src/game/athlete';
-import { ContactSystem, type ContactEvent, type ContactHost } from '../src/game/contact';
-import type { AiHost } from '../src/game/brains';
-import { makeBall, stepBall, type BallState } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
+import type { ContactEvent } from '../src/game/contact';
 import { ServerBrain } from '../src/ai/server';
-
-const DT = 1 / SIM.hz;
-
-/** the ball as the contact system and the serve brain see it */
-class Ball {
-  state: BallState = makeBall();
-  predictor = new BallPredictor(DT, SIM.predictHorizon);
-  version = 0;
-  private pv = -1;
-  lastTouch: any = null;
-  active = true;
-  get pos() {
-    return this.state.p;
-  }
-  get vel() {
-    return this.state.v;
-  }
-  speed() {
-    const v = this.state.v;
-    return Math.hypot(v.x, v.y, v.z);
-  }
-  ensurePrediction(env: { netTop: number }, t: number) {
-    if (this.pv !== this.version) {
-      this.predictor.compute(this.state, env, t);
-      this.pv = this.version;
-    }
-    return this.predictor;
-  }
-  hit(v: any, w: any, knuckle = 0, _t = 0, seed = 0) {
-    Object.assign(this.state.v, v);
-    Object.assign(this.state.w, w);
-    this.state.knuckle = knuckle;
-    this.state.seed = seed;
-    this.state.kt = 0;
-    this.version++;
-  }
-  launch(p: any, v: any, w: any) {
-    Object.assign(this.state.p, p);
-    Object.assign(this.state.v, v);
-    Object.assign(this.state.w, w);
-    this.state.knuckle = 0;
-    this.active = true;
-    this.version++;
-  }
-}
+import { scene } from './scene';
 
 export interface ServeRunOptions {
   /** which serve (the toss, the start, the run-up) */
@@ -69,7 +21,7 @@ export interface ServeRunOptions {
    */
   user?: { back: number };
   role?: 'OH' | 'OPP' | 'MB' | 'S' | 'L';
-  /** the contact system's dice (0.5 every time unless given: no spread on the aim) */
+  /** the rolls of the simulation's dice (0.5 every time unless given: no spread on the aim, the same float every serve) */
   rand?: () => number;
   /** a float's draw, in place of the one the contact made: which way it breaks, and when */
   seed?: number;
@@ -78,37 +30,29 @@ export interface ServeRunOptions {
 }
 
 /**
- * A serve from the home end line on the real contact system: the server brain's toss, run-up and
- * swing, then the served ball's flight to the floor.
+ * A serve from the home end line in a real simulation: the server brain's toss, run-up and swing,
+ * then the served ball's flight to the floor.
  */
 export function serveRun(o: ServeRunOptions = {}) {
-  const { kind = 'jump', sd = 0, aim = new THREE.Vector3(-3.5, 0, -7.5), user, role = 'OH', jump, toss, rand = () => 0.5 } = o;
-  const ball = new Ball();
-  const events: ContactEvent[] = [];
-  const host = {
-    ball: ball as any,
-    simTime: 0,
-    env: { netTop: COURT.netHeightMen },
-    aimAssist: () => 0,
-    aimTargetFor: (a: Athlete, out: THREE.Vector3) => out.copy(a.aiAim),
-    emitContact: (e: ContactEvent) => events.push(e),
-    rand,
-    passTarget: () => ({ x: 0, y: 2.35, z: 0.9, apex: 4 }),
-    setOptions: () => [],
-    canServe: () => true,
-  } satisfies ContactHost;
-  const contact = new ContactSystem(host);
-  const g = {
-    get simTime() {
-      return host.simTime;
+  const { kind = 'jump', sd = 0, aim = new THREE.Vector3(-3.5, 0, -7.5), user, role = 'OH', jump, toss, rand } = o;
+  let touched = false;
+  const s = scene({
+    // fixed dice: the server's timing is off by exactly `sd` and a mistimed aim has no spread, so a serve is its toss, its run-up and its swing alone
+    dice: { roll: rand ?? 0.5, noise: sd },
+    hooks: {
+      aimTargetFor: (who, out) => out.copy(who.aiAim),
+      // a float's draw and how much it floats, when the test gives them, are the ball's from the hand: before it flies a step
+      contact: () => {
+        if (touched) return;
+        touched = true;
+        if (o.seed !== undefined) s.sim.ball.state.seed = o.seed;
+        if (o.knuckle !== undefined) s.sim.ball.state.knuckle = o.knuckle;
+      },
     },
-    env: host.env,
-    ball,
-    contact,
-    rng: { next: () => 0.5, gauss: () => sd },
-  };
-  const a = new Athlete(role, 1);
-  a.isUser = !!user;
+  });
+  const { sim, touches } = s;
+  const ball = sim.ball;
+  const a = s.athlete(role, 1, { x: 0, z: 0, yaw: 0 }, { user: !!user });
   const brain = new ServerBrain(a);
   brain.serve(aim, -2.5, kind);
   if (user) {
@@ -119,6 +63,7 @@ export function serveRun(o: ServeRunOptions = {}) {
   if (jump !== undefined) brain.jump = jump;
   if (toss) brain.toss = toss;
   a.place(brain.spot.x, brain.spot.z, 0);
+  sim.setBrain(a, brain);
   const r = {
     tossT: NaN,
     hitT: NaN,
@@ -146,26 +91,17 @@ export function serveRun(o: ServeRunOptions = {}) {
     in: false,
   };
   for (let i = 0; i < SIM.hz * 8; i++) {
-    brain.step(DT, g as unknown as AiHost);
-    host.simTime += DT;
-    a.step(DT, host.simTime);
-    contact.step([a]);
-    if (!r.e && events.length) {
-      if (o.seed !== undefined) ball.state.seed = o.seed;
-      if (o.knuckle !== undefined) ball.state.knuckle = o.knuckle;
-    }
     const z0 = ball.pos.z;
-    stepBall(ball.state, DT, host.env);
-    if (Number.isNaN(r.tossT) && ball.lastTouch?.kind === 'feed') r.tossT = host.simTime;
-    const plan = (brain as unknown as { plan: { tStart: number; tPress: number } | null }).plan;
-    if (plan && Number.isNaN(r.runAt)) {
-      r.runAt = plan.tStart - r.tossT;
-      r.plantAt = plan.tPress - r.tossT;
-    }
+    s.step();
+    const now = sim.simTime;
+    if (Number.isNaN(r.tossT) && ball.lastTouch?.kind === 'feed') r.tossT = now;
+    // the run-up as the server's body shows it (the brain's plan is its own): the step they break into the run, and the step they plant
+    if (Number.isNaN(r.runAt) && !Number.isNaN(r.tossT) && a.cmd.sprint) r.runAt = now - r.tossT;
+    if (Number.isNaN(r.plantAt) && !Number.isNaN(r.tossT) && a.state === 'load') r.plantAt = now - r.tossT;
     if (a.state === 'load' && Number.isNaN(r.run)) r.run = a.loadApproach / a.stats.approachSpeed;
-    if (!r.e && events.length) {
-      r.e = events[0];
-      r.hitT = host.simTime;
+    if (!r.e && touches.length) {
+      r.e = touches[0].ev;
+      r.hitT = now;
       r.contactY = ball.pos.y;
       r.contactZ = ball.pos.z;
       r.jumpH = a.state === 'air' ? a.jumpH : 0;
@@ -179,7 +115,7 @@ export function serveRun(o: ServeRunOptions = {}) {
     if (r.e) {
       r.apex = Math.max(r.apex, ball.pos.y);
       if (z0 > 0 && ball.pos.z <= 0) r.overTape = ball.pos.y - COURT.netHeightMen;
-      if (Number.isNaN(r.flight) && ball.pos.z < 0 && ball.pos.y < 0.75) r.flight = host.simTime - r.hitT;
+      if (Number.isNaN(r.flight) && ball.pos.z < 0 && ball.pos.y < 0.75) r.flight = now - r.hitT;
       if (ball.pos.y < 0.3) {
         r.ball = { x: ball.pos.x, z: ball.pos.z };
         r.in = ball.pos.z < 0 && ball.pos.z > -COURT.halfLength && Math.abs(ball.pos.x) < COURT.halfWidth;
