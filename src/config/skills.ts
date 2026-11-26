@@ -184,6 +184,11 @@ export const CONTACT = {
   aiSwingShift: 0.04,
   passRadius: 0.55,
   setRadius: 0.48,
+  /**
+   * A button pressed with no ball near is not a rep: an action that never met the ball counts as
+   * an attempt only if the ball came this close to where it would have met it (m, about one step and a reach)
+   */
+  attemptRange: 3,
   /** how far ahead (s) a setter looks for the ball coming down onto the hands: a pass is in the air about 1-1.5 s */
   setLook: 1.6,
   /**

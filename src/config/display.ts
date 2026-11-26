@@ -492,11 +492,6 @@ export const FX = {
   replayMissLead: 1.5,
   /** the most of that lead that may be upwards (m): their feet stay in the frame under a high ball */
   replayMissLeadUp: 0.5,
-  /**
-   * A button pressed with no ball near is not a rep: an action that never met the ball counts as
-   * an attempt only if the ball came this close to where it would have met it (m, about one step and a reach)
-   */
-  attemptRange: 3,
   /** a press this soon after the player's own touch is a habit (a double click), not a new attempt (s) */
   attemptOwnGap: 1,
   bloomStrength: 0.85,
