@@ -14,7 +14,7 @@
 - **Skill:** is the player still graded on the volleyball skill, with every input going through `Input`?
 - **Honest physics:** does the ball still go where the contact sends it?
 - **Effects:** do they scale with the touch and keep the ball visible?
-- **Played:** how did you play it (drill, position, camera, device)? Who else tried the preview?
+- **Played:** how did you play it (drill, position, camera, device)? What is left for a person to play on the preview goes under "What no check holds".
 
 ## How it is held
 
