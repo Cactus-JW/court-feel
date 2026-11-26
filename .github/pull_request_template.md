@@ -16,11 +16,19 @@
 - **Effects:** do they scale with the touch and keep the ball visible?
 - **Played:** how did you play it (drill, position, camera, device)? Who else tried the preview?
 
+## How it is held
+
+<!-- For a feat or a fix (CI reads this section then, and fails while only this comment is in it). Each behaviour the change adds or alters, the check that holds it and the one-line break that turned that check red:
+"The ball leaves the hands at the angle it met them: tests/blockHands.test.ts, red with the angle forced to 0."
+A check is a unit test, a trace run, an end-to-end check or a verify-court-feel feature file. For a change to the play, CI runs the changed tests against the code on main and wants one of them to fail there: `node scripts/red-on-base.mjs origin/main` says which do. -->
+
+## What no check holds
+
+<!-- For a feat or a fix (CI reads this section too). What a person has to try, one line each: where (drill, position, camera, device) and what to look, listen or feel for. Write "Nothing" when every behaviour above is held.
+If a change to the play, or to what is shown and heard, comes with no check at all, say why on a line of its own that starts with `Unchecked:`. That line is what lets it pass, and it is where the owner reads what was left to a person. -->
+
 ## Checklist
 
-- [ ] `npm run check` and `npm run build` pass
-- [ ] Unit test for any physics, timing, contact or AI change
-- [ ] New tunables are in `src/config.ts`
 - [ ] README (and the start screen and in-game hints) updated if controls, modes, settings or config sections changed
 - [ ] The reason for a call someone would argue about again is in a doc comment next to the code, or in `docs/adr/` if it has no place there
 - [ ] Screenshots or a clip for anything visible, and `docs/screenshots/` retaken if one of those moments changed
