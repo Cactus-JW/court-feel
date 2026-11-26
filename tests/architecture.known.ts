@@ -28,7 +28,6 @@ export const KNOWN_HAND_MADE: readonly string[] = [
   'tests/defenceForms.test.ts',
   'tests/greenBite.test.ts',
   'tests/reception.test.ts',
-  'tests/setting.test.ts',
   'tests/teamDefence.test.ts',
 ];
 
