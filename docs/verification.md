@@ -228,8 +228,10 @@ Ask these in order and stop at the first yes.
 
 ### 5. Human review
 
-- **The feel.** A change to how the game plays is tried by a volleyball player
-  on its preview. No check can say whether a spike feels right.
+- **The feel.** No check can say whether a spike feels right. A change that
+  touches the game is its developer's to play on the preview, suggested and not
+  enforced, and an agent that hands one over ends its message with what to play
+  there. The play-test that gates is before a release: `main` is not production.
 - **Decisions**, and **changes to the checks**.
 
 ## The checks cannot be loosened by the change they judge
@@ -244,8 +246,12 @@ A check is worth nothing if the change it judges can rewrite it.
   shorter than it was: a refactor that moves a breach nearer to where it ends
   puts entries in and takes more out. Fix new code; do not list it.
 - **The files that judge every change** are listed in
-  [.github/CODEOWNERS](../.github/CODEOWNERS). A change to one of them is its
-  own pull request and the owner's to approve.
+  [.github/CODEOWNERS](../.github/CODEOWNERS). A change to one of them is the
+  owner's to approve. A check that a change needs (a new guard, a shorter list,
+  a lower count) rides with that change, in a commit of its own. Loosening one
+  (raising a count, lengthening a known list, weakening or removing a test) is
+  never part of the change it would let through: it is a
+  pull request of its own, for the owner to approve.
 - **A test is never skipped, weakened or deleted to get CI green.**
 
 ## What a passing run does not tell you

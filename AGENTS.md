@@ -24,16 +24,15 @@ Run `npm run trace:compare` for anything that is not a `feat` or a `fix`: it mus
 
 Passing tests do not prove a change to the game, its menus, HUD or controls. Drive the real app and capture evidence with the verification skill: read [.agents/skills/verify-court-feel/SKILL.md](.agents/skills/verify-court-feel/SKILL.md), then the feature map in its `features/` directory. When a change adds or alters user-facing behaviour, update the matching feature file in the same pull request.
 
-## Rules the tools do not enforce
+## The rules of the code
 
-- **Every tunable number lives in `src/config/`**, in its owner's file (`src/config/index.ts` lists them, and everything is imported from `config`, never from a file inside it) and in its section, with a doc comment when the name does not say what it is. No magic numbers in game code, so the feel can be tuned in one place. The numbers the simulation still holds of its own are counted for each file in `tests/architecture.numbers.json`, and the count only goes down: a new one fails `npm test`.
-- **`src/physics/` stays pure**: no three.js scene, no DOM, only `config`. That keeps it deterministic and testable.
-- **Every import points down** ([docs/adr/0010](docs/adr/0010-the-simulation-runs-on-its-own.md)): `config`, then `core` and `physics`, then the simulation (`game`, `ai`, the drills in `game/modes`), then everything a player sees or hears, then `main.ts`. `tests/architecture.test.ts` enforces it, and ESLint flags a bad import as you type. No two files import each other in a circle. What still breaks it is listed in `tests/architecture.known.ts`: fix new code, do not add it to the list.
-- **The simulation has no clock and no dice of its own**: no `Math.random`, `Date.now` or `performance.now` in `physics`, `game`, `ai` or the drills. Time is `simTime` and chance is the simulation's seeded `rng`, so the same start gives the same play.
-- **All input goes through `Input`** (`src/core/input.ts`). Keys, mouse, touch and the autopilots share that path, so timing windows are identical everywhere. Do not add a side door.
+`npm test` holds the first four, and its failure says what to do. No tool holds the last three: they rest on you.
+
+- **Every tunable number lives in `src/config/`**, in its owner's file and section (`src/config/index.ts` lists them), and is imported from `config`, never from a file inside it. No magic numbers in game code, so the feel can be tuned in one place. The test fails on a new number in a simulation file. The rest rests on you, and so does the doc comment: what the number is, when its name does not say, and where it comes from (the rules, a measurement, a video, a coach, your own play). If you bend reality to make something playable, say so and say why.
+- **Every import points down** ([docs/adr/0010](docs/adr/0010-the-simulation-runs-on-its-own.md)): `config`, then `core` and `physics`, then the simulation (`game`, `ai`, the drills in `game/modes`), then everything a player sees or hears, then `main.ts`. No two files import each other in a circle, and `src/physics/` stays pure: only `config`, no three.js scene, no DOM.
+- **The simulation has no clock and no dice of its own.** Time is `simTime` and chance is the simulation's seeded `rng`, so the same start gives the same play.
+- **All input goes through `Input`** (`src/core/input.ts`). Keys, mouse, touch and the autopilots share that path, so timing windows are identical everywhere.
 - **Assist may help the player's body, never the ball**, and it must be fully off at 0.
-- **A change to physics, timing, contacts or AI decisions comes with a unit test that states the real-court fact**, for example "the middle leaves the floor on the setter's touch".
-- **Say where a number comes from** (the rules, a measurement, a video, a coach, your own play) in its doc comment or in the pull request. If you bend reality to make something playable, say so and say why.
 - **Effects amplify, they never replace.** They scale with the quality and power of the touch, never hide the ball, and there are no full-screen flashes.
 - **Units and frame:** metres, seconds, kilograms, radians (km/h is for display only). Y is up, the net is the plane z = 0, the home team plays on +z facing -z, and facing -z the right hand is +x.
 
@@ -48,7 +47,7 @@ When you make a call that someone would otherwise argue about again, write the r
 Why the checks are arranged as they are, and where a new rule should live, is in [docs/verification.md](docs/verification.md): hold each rule in the cheapest layer that can hold it.
 
 - **Approach before code.** For a change to the simulation (physics, timing, contacts, AI, a drill's rules), say first what the real court does, which tests will state it and which files it touches. Code written to see whether an approach works is thrown away, not tidied up and kept.
-- **The test comes first.** Write the test that states the real-court fact and watch it fail. Then write the code that passes it. A test written after the code tends to describe the code. CI holds this for a `feat` or a `fix`: a change to the play brings a test that fails on `main`'s code (`node scripts/red-on-base.mjs origin/main` says which of yours do), a new trace run, or a line `Unchecked: <reason>` in the pull request ([docs/verification.md](docs/verification.md#a-change-to-the-play-brings-a-check-or-says-why-not)).
+- **The test comes first.** Write the test that states the real-court fact ("the middle leaves the floor on the setter's touch") and watch it fail. Then write the code that passes it. A test written after the code tends to describe the code. CI holds this for a `feat` or a `fix`: a change to the play brings a test that fails on `main`'s code (`node scripts/red-on-base.mjs origin/main` says which of yours do), a new trace run, or a line `Unchecked: <reason>` in the pull request ([docs/verification.md](docs/verification.md#a-change-to-the-play-brings-a-check-or-says-why-not)).
 - **Three failed attempts, then stop.** If a fix has not worked after three tries, stop and say what was tried, what each showed and what you would look at next. A fourth guess costs more than the question.
 - **A file that keeps growing is a prompt to look for a boundary**, not a failure. A large file with one job and a clear edge is fine. One that several features have to edit at once is where the next split belongs.
 
@@ -61,8 +60,8 @@ Why the checks are arranged as they are, and where a new rule should live, is in
 
 ## Git
 
-- Branch from `main`. One change per pull request. Fill in `.github/pull_request_template.md`.
-- Name the branch `<type>/<short-description>`, in lowercase with hyphens: `feat/setter-calls-the-pass`, `fix/crash-screen-input`. If your tool will only push to a branch it named itself (`claude/…`, `cursor/…`), keep that name.
+- Branch from `main`. A pull request is one task, a unit of work, of a sensible size: there is no fixed limit. Each commit is one concern, so it reads step by step. Fill in `.github/pull_request_template.md`.
+- Name every branch `<type>/<short-description>`, in lowercase with hyphens: `feat/setter-calls-the-pass`, `fix/crash-screen-input`. Rename one a tool named for you (`claude/…`, `cursor/…`) before you push it.
 - Commit and pull request titles are Conventional Commits, `type(area): what the player notices`, in plain words (CI fails a pull request whose title starts with none of the types below): `feat(rally): the setter calls the pass (HIGH! when out of system)`. For `feat`, `fix` and `perf` the description says what the player notices. For the other types it says what changes for the next contributor. Leave the area out when a change has no single one.
   - `feat`: something new the player can do, see, hear or feel.
   - `fix`: something that was wrong and is now right.
@@ -73,14 +72,14 @@ Why the checks are arranged as they are, and where a new rule should live, is in
   - `ci`: the GitHub workflows.
   - `chore`: tooling, dependencies, agent files and other housework.
 - Update a branch by rebasing it on `origin/main` and pushing with `--force-with-lease`. If the rebase or the force-push is not possible, merge `main` in and say so in the pull request.
-- A pull request is merged once CI is green, it has been reviewed and, for a change to the feel, a volleyball player has tried its Vercel preview.
-- GitHub deletes a branch when its pull request is merged. Start the next change on a new branch from `main`.
+- A pull request is merged once CI is green and it has been reviewed. GitHub then deletes its branch: start the next change on a new branch from `main`.
+- **Remind the person to play it.** `main` is not production, so the play-test that gates is before a release, not before a merge. On the Vercel preview it is suggested, not enforced, and the developer's to do. When you hand the person a change that touches the game (anything the browser runs, in a `perf` or a `refactor` too), end your message with what to play on the preview (which drill, position, camera or device) and what to look, listen or feel for, and put the same lines under "What no check holds". A change to docs, CI, tooling or tests needs none.
 
 ## Releasing
 
 - Merging to `main` updates the dev site, [court-feel-dev.jackzxq.dev](https://court-feel-dev.jackzxq.dev). The public site, [court-feel.jackzxq.dev](https://court-feel.jackzxq.dev), changes only when a version tag is pushed.
 - `vercel.json` tells search engines not to index the dev site. Vercel does that itself for preview URLs, but not for a custom domain assigned to a branch. If the dev domain changes, change it there too.
-- To release: bump `version` in `package.json` in a pull request (`npm version <x.y.z> --no-git-tag-version`), merge it, then tag that commit on `main` as `v<x.y.z>` and push the tag. [.github/workflows/release.yml](.github/workflows/release.yml) checks the tag, runs `npm run check` and the build, and fast-forwards the `release` branch, which Vercel deploys to production.
+- To release: play the dev site (this is the play-test that gates), then bump `version` in `package.json` in a pull request (`npm version <x.y.z> --no-git-tag-version`), merge it, then tag that commit on `main` as `v<x.y.z>` and push the tag. [.github/workflows/release.yml](.github/workflows/release.yml) checks the tag, runs `npm run check` and the build, and fast-forwards the `release` branch, which Vercel deploys to production.
 - `release` is moved by that workflow only. To take a bad release back, use Instant Rollback in Vercel, then fix `main` and tag again. After a rollback Vercel holds the next release until someone promotes it.
 
 ## Boundaries
@@ -88,7 +87,7 @@ Why the checks are arranged as they are, and where a new rule should live, is in
 - **Always:** run `npm run check` before committing, and verify user-facing changes in the app.
 - **Ask first:** anything that changes how the game plays (timing windows, physics constants, controls, AI decisions, a new drill or mechanic), a new dependency, and any art or audio asset. Assets need an MIT-compatible licence and an entry in [CREDITS.md](CREDITS.md).
 - **Never:** skip, weaken or delete a test to get CI green, or commit directly to `main` or `release`.
-- **The checks are not yours to loosen.** CI also runs the architecture rules as they are on the branch a pull request goes into, and fails when `tests/architecture.known.ts` grows (`scripts/rules-from-base.mjs`). The files that judge every change are listed in [.github/CODEOWNERS](.github/CODEOWNERS): a change to one of them is its own pull request, and the owner's to approve.
+- **The checks are not yours to loosen.** A check that a change needs (a new guard, a shorter list, a lower count) rides with that change, in a commit of its own. Loosening one (raising a count, lengthening a known list, weakening or removing a test) is never part of the change it would let through: it is a pull request of its own, for the owner to approve. CI holds part of this: it runs the architecture rules and the scripts that judge a pull request as they are on the branch it goes into, and fails when `tests/architecture.known.ts` grows. The owner's review holds the rest ([.github/CODEOWNERS](.github/CODEOWNERS)).
 
 ## Agent conventions
 

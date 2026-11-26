@@ -14,7 +14,7 @@
 - **Skill:** is the player still graded on the volleyball skill, with every input going through `Input`?
 - **Honest physics:** does the ball still go where the contact sends it?
 - **Effects:** do they scale with the touch and keep the ball visible?
-- **Played:** how did you play it (drill, position, camera, device)? Who else tried the preview?
+- **Played:** how did you play it (drill, position, camera, device)? What is left for a person to play on the preview goes under "What no check holds".
 
 ## How it is held
 
@@ -24,7 +24,7 @@ A check is a unit test, a trace run, an end-to-end check or a verify-court-feel 
 
 ## What no check holds
 
-<!-- For a feat or a fix (CI reads this section too). What a person has to try, one line each: where (drill, position, camera, device) and what to look, listen or feel for. Write "Nothing" when every behaviour above is held.
+<!-- For a feat or a fix (CI reads this section too), and for any other change that touches the game. What a person has to try, one line each: where (drill, position, camera, device) and what to look, listen or feel for. Write "Nothing" when every behaviour above is held.
 If a change to the play, or to what is shown and heard, comes with no check at all, say why on a line of its own that starts with `Unchecked:`. That line is what lets it pass, and it is where the owner reads what was left to a person. -->
 
 ## Checklist
