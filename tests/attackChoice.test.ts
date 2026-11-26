@@ -3,6 +3,7 @@ import { AI } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import { laneFor } from '../src/game/plays';
 import { HitterBrain } from '../src/ai/hitter';
+import { handsHalfSpan } from '../src/game/blockHands';
 
 /** shots an outside hitter (home side) picks over a sweep of the rng, against `blockers` */
 function shots(inSystem: boolean, blockers: Athlete[]) {
@@ -14,12 +15,15 @@ function shots(inSystem: boolean, blockers: Athlete[]) {
   const seen = new Set<string>();
   for (let i = 0; i < 200; i++) {
     const r = (i + 0.5) / 200;
-    const g = { rng: { next: () => r, gauss: () => 0 } } as any;
+    const g = { rng: { next: () => r, gauss: () => 0 }, contact: AI_BLOCK } as any;
     brain.chooseAim(g, -4.0);
     seen.add(brain.lastShot);
   }
   return seen;
 }
+
+/** the block as the game has it for an AI blocker (its aim assist, 0.3): where its outside edge is */
+const AI_BLOCK = { blockHalfSpan: () => handsHalfSpan(0.3) };
 
 /** a blocker on the far side at the net, x along it */
 function blocker(x: number) {
@@ -58,7 +62,7 @@ describe('attack shot choice (Mini Rally AI)', () => {
       const seen = new Map<string, { x: number; z: number }>();
       for (let i = 0; i < 100; i++) {
         const r = (i + 0.5) / 100;
-        const aim = brain.offSpeedAim({ rng: { next: () => r, gauss: () => 0 } } as any, -4.0);
+        const aim = brain.offSpeedAim({ rng: { next: () => r, gauss: () => 0 }, contact: AI_BLOCK } as any, -4.0);
         seen.set(brain.lastShot, { x: aim.x, z: aim.z });
       }
       return seen;

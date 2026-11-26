@@ -447,8 +447,9 @@ describe('out of system: a high ball to a pin fools nobody', () => {
     expect(green.vz < 0 || green.speed < BLOCK.stuffSpeed).toBe(true);
   });
 
-  it('a late block on an attack off your green set does not stuff it either', () => {
+  it('a late block on an attack off your green set can touch it, and does not stuff it either', () => {
     const green = block(true, true);
+    expect(green.touched).toBe(true);
     expect(green.note).not.toBe('Stuff!');
   });
 });
