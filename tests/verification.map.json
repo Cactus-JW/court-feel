@@ -1,0 +1,703 @@
+{
+  "about": [
+    "What holds each thing a player can choose, and each section of config. tests/verification.map.test.ts fails when something that exists is missing here, when a check named here does not exist, and when an entry names no check and gives no reason.",
+    "An entry says: \"unit\", unit test files by name (gameplay is tests/gameplay.test.ts); \"trace\", runs of the trace by the name it prints (scripts/trace.mjs); \"e2e\", a drill run of the end-to-end run (serve_OH_call2) or one of its phases (drills, keys, touch, probes, soak, perf, screenshots); \"skill\", verify-court-feel feature files, which are recipes run by hand and not checks; \"manual\", what no check holds and what a person looks for; \"note\", anything a reader should know about the checks named.",
+    "Name a check when it would notice the thing going wrong, not when it only passes it by. An entry can name checks and still say \"manual\": the checks hold part of it.",
+    "For a drill, the checks named are the ones that play it: their names say so. For a drill played as a position, a trace run is named only beside a count: how often the player's own athlete touches the ball in it, read from a recording. A run in which it never does is no check of the pair by itself (the Mini Rally as an opposite has such a run, and says \"manual\"). The unit tests named for a pair play the drill's own half, in most of them with the player standing still.",
+    "For a section of config, the first fill was measured on main at 298c73e (2026-11-26): the unit tests named went red when every number of the section moved by 20%, and the trace run named is the first one the comparison showed to differ when they moved by 2%. More runs may differ: the comparison explains only the first.",
+    "For a setting, \"unit\" is a test of what the setting switches. That its stored value is valid is tests/settings.test.ts for every setting, and is not repeated. A trace run whose note says \"Measured\" is the first run the comparison showed to differ when the setting's default was changed: that run would notice the setting going wrong at the value every run plays, and says nothing of its other values.",
+    "When you add a drill, a serve, a lesson, a setting, a graphics level, a venue or a section of config, add its entry here in the same pull request. \"manual\" with a true reason is a correct entry."
+  ],
+  "drill": {
+    "free": {
+      "unit": ["drills", "outWide"],
+      "trace": ["free/OH/good"],
+      "e2e": ["free_OH"]
+    },
+    "spike": {
+      "unit": ["drills", "outWide"],
+      "trace": [
+        "spike/OH/perfect",
+        "spike/MB/good",
+        "spike/OPP/sloppy",
+        "spike/OH/good/slow-mo assist",
+        "spike/OH/good/double block",
+        "keys/spike/OH/runs off and keeps jumping when walked back",
+        "keys/spike/OH/runs off and takes the stick when walked back",
+        "keys/spike/MB/runs off, takes the stick and keeps jumping when walked back",
+        "keys/spike/OH/runs off, keeps jumping and looks away when walked back"
+      ],
+      "e2e": [
+        "spike_OH",
+        "spike_OPP",
+        "spike_MB",
+        "spike_S",
+        "spike_L",
+        "spike_OH_call2",
+        "spike_OH_call3",
+        "spike_MB_call2",
+        "spike_MB_call3",
+        "spike_OPP_call2",
+        "spike_OPP_call3",
+        "keys"
+      ],
+      "skill": ["spike-drill"],
+      "note": "The \"keys\" phase of the end-to-end run plays the walk back between reps: not back in time, and the stick taken."
+    },
+    "block": {
+      "unit": ["drills"],
+      "trace": ["block/MB/good", "keys/block/MB/busy keys"],
+      "e2e": ["block_MB"]
+    },
+    "receive": {
+      "unit": ["drills"],
+      "trace": ["receive/L/good", "keys/receive/L/busy keys"],
+      "e2e": ["receive_L"]
+    },
+    "setter": {
+      "unit": ["drills", "outWide"],
+      "trace": [
+        "setter/S/good",
+        "keys/setter/S/hands off",
+        "keys/setter/S/hands off/auto jump set off",
+        "keys/setter/S/hands off/set aim assist 0",
+        "keys/setter/S/steps off as the ball arrives and sets it/auto jump set off",
+        "keys/setter/S/runs in late and sets the ball",
+        "keys/setter/S/light keys/paused for a while",
+        "keys/setter/S/runs off, keeps jumping and looks away when walked back"
+      ],
+      "e2e": ["setter_S", "keys"],
+      "note": "The \"keys\" phase of the end-to-end run plays it with the hands off: the last steps onto a pass, and the jump set."
+    },
+    "serve": {
+      "unit": ["drills", "outWide", "playerServe"],
+      "trace": ["serve/OH/good", "keys/serve/OH/busy keys"],
+      "e2e": ["serve_OH", "serve_OH_call2", "serve_OH_call3"],
+      "skill": ["serve-drill"]
+    },
+    "rally": {
+      "unit": ["drills", "rallyWheel", "replay", "teamDefence"],
+      "trace": [
+        "rally/OH/good",
+        "rally/OPP/good",
+        "rally/MB/good",
+        "rally/S/good",
+        "rally/L/good",
+        "keys/rally/S/runs under the ball and sets it",
+        "keys/rally/L/runs off and keeps jumping when walked back"
+      ],
+      "e2e": ["rally_MB", "rally_L", "keys"],
+      "skill": ["mini-rally"],
+      "note": "The \"keys\" phase of the end-to-end run plays a libero who is not back on their spot in time."
+    }
+  },
+  "drillAs": {
+    "free/OH": {
+      "unit": ["drills", "outWide"],
+      "trace": ["free/OH/good"],
+      "e2e": ["free_OH"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 8 times in free/OH/good (8 spikes)."
+    },
+    "free/OPP": {
+      "manual": "Nothing plays Free Play as an opposite: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "free/MB": {
+      "manual": "Nothing plays Free Play as a middle: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "free/S": {
+      "manual": "Nothing plays Free Play as a setter: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "free/L": {
+      "manual": "Nothing plays Free Play as a libero: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "spike/OH": {
+      "unit": ["drills", "outWide"],
+      "trace": [
+        "spike/OH/perfect",
+        "spike/OH/good/slow-mo assist",
+        "spike/OH/good/double block",
+        "keys/spike/OH/runs off and keeps jumping when walked back",
+        "keys/spike/OH/runs off and takes the stick when walked back",
+        "keys/spike/OH/runs off, keeps jumping and looks away when walked back"
+      ],
+      "e2e": ["spike_OH", "spike_OH_call2", "spike_OH_call3", "keys"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 9 times in spike/OH/perfect (9 spikes); 8 times in spike/OH/good/slow-mo assist (8 spikes); 8 times in spike/OH/good/double block (8 spikes). It never touches it in keys/spike/OH/runs off and keeps jumping when walked back, keys/spike/OH/runs off and takes the stick when walked back, keys/spike/OH/runs off, keeps jumping and looks away when walked back: those play what the game does for a person between touches (the walk back, the last steps onto a set with the hands off), not the ball."
+    },
+    "spike/OPP": {
+      "trace": ["spike/OPP/sloppy"],
+      "e2e": ["spike_OPP", "spike_OPP_call2", "spike_OPP_call3"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 8 times in spike/OPP/sloppy (8 spikes)."
+    },
+    "spike/MB": {
+      "unit": ["drills"],
+      "trace": ["spike/MB/good", "keys/spike/MB/runs off, takes the stick and keeps jumping when walked back"],
+      "e2e": ["spike_MB", "spike_MB_call2", "spike_MB_call3"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 10 times in spike/MB/good (10 spikes). It never touches it in keys/spike/MB/runs off, takes the stick and keeps jumping when walked back: those play what the game does for a person between touches (the walk back, the last steps onto a set with the hands off), not the ball."
+    },
+    "spike/S": {
+      "e2e": ["spike_S"]
+    },
+    "spike/L": {
+      "e2e": ["spike_L"]
+    },
+    "block/OH": {
+      "manual": "Nothing plays the Block Drill as an outside hitter: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "block/OPP": {
+      "manual": "Nothing plays the Block Drill as an opposite: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "block/MB": {
+      "unit": ["drills"],
+      "trace": ["block/MB/good", "keys/block/MB/busy keys"],
+      "e2e": ["block_MB"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 5 times in block/MB/good (5 blocks); 2 times in keys/block/MB/busy keys (1 serve, 1 pass)."
+    },
+    "block/S": {
+      "manual": "Nothing plays the Block Drill as a setter: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "block/L": {
+      "manual": "Nothing plays the Block Drill as a libero: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "receive/OH": {
+      "manual": "Nothing plays the Receive Drill as an outside hitter: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "receive/OPP": {
+      "manual": "Nothing plays the Receive Drill as an opposite: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "receive/MB": {
+      "manual": "Nothing plays the Receive Drill as a middle: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "receive/S": {
+      "manual": "Nothing plays the Receive Drill as a setter: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "receive/L": {
+      "unit": ["drills"],
+      "trace": ["receive/L/good", "keys/receive/L/busy keys"],
+      "e2e": ["receive_L"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 6 times in receive/L/good (4 passes, 2 digs); once in keys/receive/L/busy keys (1 dig)."
+    },
+    "setter/OH": {
+      "manual": "Nothing plays the Setter Drill as an outside hitter: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "setter/OPP": {
+      "manual": "Nothing plays the Setter Drill as an opposite: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "setter/MB": {
+      "manual": "Nothing plays the Setter Drill as a middle: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "setter/S": {
+      "unit": ["drills", "outWide"],
+      "trace": [
+        "setter/S/good",
+        "keys/setter/S/hands off",
+        "keys/setter/S/hands off/auto jump set off",
+        "keys/setter/S/hands off/set aim assist 0",
+        "keys/setter/S/steps off as the ball arrives and sets it/auto jump set off",
+        "keys/setter/S/runs in late and sets the ball",
+        "keys/setter/S/light keys/paused for a while",
+        "keys/setter/S/runs off, keeps jumping and looks away when walked back"
+      ],
+      "e2e": ["setter_S", "keys"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 8 times in setter/S/good (8 sets); 5 times in keys/setter/S/steps off as the ball arrives and sets it/auto jump set off (5 sets); 6 times in keys/setter/S/runs in late and sets the ball (6 sets); 3 times in keys/setter/S/light keys/paused for a while (3 sets). It never touches it in keys/setter/S/hands off, keys/setter/S/hands off/auto jump set off, keys/setter/S/hands off/set aim assist 0, keys/setter/S/runs off, keeps jumping and looks away when walked back: those play what the game does for a person between touches (the walk back, the last steps onto a set with the hands off), not the ball."
+    },
+    "setter/L": {
+      "manual": "Nothing plays the Setter Drill as a libero: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "serve/OH": {
+      "unit": ["drills", "outWide"],
+      "trace": ["serve/OH/good", "keys/serve/OH/busy keys"],
+      "e2e": ["serve_OH", "serve_OH_call2", "serve_OH_call3"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 12 times in serve/OH/good (12 serves); once in keys/serve/OH/busy keys (1 pass)."
+    },
+    "serve/OPP": {
+      "manual": "Nothing plays the Serve Drill as an opposite: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "serve/MB": {
+      "manual": "Nothing plays the Serve Drill as a middle: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "serve/S": {
+      "manual": "Nothing plays the Serve Drill as a setter: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "serve/L": {
+      "manual": "Nothing plays the Serve Drill as a libero: no unit test, no trace run, no end-to-end run. A person plays a few reps and sees that the drill feeds, scores and walks them back as it does for the positions that are played."
+    },
+    "rally/OH": {
+      "unit": ["drills", "replay", "teamDefence"],
+      "trace": ["rally/OH/good"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball once in rally/OH/good (1 spike)."
+    },
+    "rally/OPP": {
+      "manual": "No check plays the Mini Rally as an opposite. The trace has a run of it, rally/OPP/good, and in its 60 s the player's own athlete never touches the ball (read from a recording of main at 8b4c78e), so the run shows only that six play six with the player on the court. A person plays a few rallies as opposite and sees that they are set, and that their spike and their block count."
+    },
+    "rally/MB": {
+      "trace": ["rally/MB/good"],
+      "e2e": ["rally_MB"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 2 times in rally/MB/good (2 spikes)."
+    },
+    "rally/S": {
+      "unit": ["drills", "teamDefence"],
+      "trace": ["rally/S/good", "keys/rally/S/runs under the ball and sets it"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 4 times in rally/S/good (4 sets); 4 times in keys/rally/S/runs under the ball and sets it (4 sets)."
+    },
+    "rally/L": {
+      "unit": ["drills", "teamDefence"],
+      "trace": ["rally/L/good", "keys/rally/L/runs off and keeps jumping when walked back"],
+      "e2e": ["rally_L", "keys"],
+      "note": "Read from a recording of the trace (main at 8b4c78e), the player's own athlete touches the ball 4 times in rally/L/good (3 passes, 1 dig). It never touches it in keys/rally/L/runs off and keeps jumping when walked back: those play what the game does for a person between touches (the walk back, the last steps onto a set with the hands off), not the ball."
+    }
+  },
+  "serve": {
+    "float": {
+      "unit": ["float", "playerServe"],
+      "trace": ["serve/OH/good", "lesson/float", "keys/lesson/float"],
+      "e2e": ["serve_OH"],
+      "skill": ["serve-drill", "serve-lessons"],
+      "note": "The trace's Serve Drill run serves the float only: its autopilot never picks another serve."
+    },
+    "jumpFloat": {
+      "unit": ["playerServe"],
+      "trace": ["lesson/jumpFloat", "keys/lesson/jumpFloat/the rep started again"],
+      "e2e": ["serve_OH_call2"],
+      "skill": ["serve-drill", "serve-lessons"],
+      "manual": "In the trace it is served only in its lesson, by scripted hands that are not good ones. How the serve feels with a real toss, run and swing is a person's."
+    },
+    "jump": {
+      "unit": ["playerServe"],
+      "trace": ["lesson/jump", "keys/lesson/jump/the rep started again"],
+      "e2e": ["serve_OH_call3"],
+      "skill": ["serve-drill", "serve-lessons"],
+      "manual": "In the trace it is served only in its lesson, by scripted hands that are not good ones. How the serve feels with a real toss, run and swing is a person's."
+    }
+  },
+  "lesson": {
+    "spike": {
+      "unit": ["tutorial"],
+      "trace": ["lesson/spike", "keys/lesson/spike/the rep started again, and the stick held"],
+      "e2e": ["probes"],
+      "note": "The end-to-end run only sees that a first visit is offered the lesson and that Skip lands on the drills. The trace takes the lesson to its end with scripted hands."
+    },
+    "float": {
+      "unit": ["serveLesson"],
+      "trace": ["lesson/float", "keys/lesson/float"],
+      "skill": ["serve-lessons"]
+    },
+    "jumpFloat": {
+      "unit": ["serveLesson"],
+      "trace": ["lesson/jumpFloat", "keys/lesson/jumpFloat/the rep started again"],
+      "skill": ["serve-lessons"],
+      "note": "The scripted hands get to the last rep of this lesson, not to its end."
+    },
+    "jump": {
+      "unit": ["serveLesson"],
+      "trace": ["lesson/jump", "keys/lesson/jump/the rep started again"],
+      "skill": ["serve-lessons"],
+      "note": "The scripted hands get to the last rep of this lesson, not to its end."
+    }
+  },
+  "setting": {
+    "sensitivity": {
+      "trace": ["keys/spike/OH/runs off, keeps jumping and looks away when walked back"],
+      "skill": ["pause-settings", "touch-controls"],
+      "note": "Measured: with its default changed (1.0 to (1.0) * 0.6), this is the first run of the trace to play differently."
+    },
+    "fov": {
+      "trace": ["free/OH/good"],
+      "skill": ["pause-settings"],
+      "note": "Measured: with its default changed (CAMERA.fov to (CAMERA.fov) * 0.6), this is the first run of the trace that is drawn or shown differently (the play is the same)."
+    },
+    "touchFov": {
+      "manual": "How wide the view is on a phone. Its stored value is validated (settings). Nothing draws a phone at another width: a person looks, on a phone."
+    },
+    "invertY": {
+      "manual": "Looking up with the mouse pushed away. Nothing checks which way the view turns: a person moves the mouse."
+    },
+    "womenNet": {
+      "unit": ["physics"],
+      "trace": ["spike/OPP/sloppy"],
+      "skill": ["pause-settings"],
+      "manual": "No run plays on the women's net: every run is on the men's. A person switches it, looks at the net and hits a ball that clears 2.24 m and not 2.43 m.",
+      "note": "The unit test holds what the lower net lets over, with the height handed to the ball. Measured: with its default changed (false to true), this is the first run of the trace to play differently."
+    },
+    "slowmoAssist": {
+      "unit": ["pace"],
+      "trace": ["spike/OH/good/slow-mo assist", "keys/the start screen from page load"],
+      "note": "Measured: with its default changed (false to true), this is the first run of the trace to play differently."
+    },
+    "setSlowmo": {
+      "unit": ["pace"],
+      "trace": ["setter/S/good"],
+      "note": "Measured: with its default changed (true to false), this is the first run of the trace to play differently."
+    },
+    "autoJumpSet": {
+      "unit": ["drills", "jumpSet", "seatRules"],
+      "trace": [
+        "setter/S/good",
+        "keys/setter/S/hands off",
+        "keys/setter/S/hands off/auto jump set off",
+        "keys/setter/S/steps off as the ball arrives and sets it/auto jump set off"
+      ],
+      "e2e": ["keys"],
+      "note": "Measured: with its default changed (true to false), this is the first run of the trace to play differently."
+    },
+    "setRing": {
+      "unit": ["setting"],
+      "trace": ["setter/S/good"],
+      "note": "The unit test holds what setting by feel does to the timing windows (the ring off). That the ring is drawn when it is on is in no unit test. Measured: with its default changed (true to false), this is the first run of the trace to play differently."
+    },
+    "setArc": {
+      "manual": "The arc drawn over a set. No unit test draws it, and the trace played and drew the same with it off: a person looks in the Setter Drill with it on and with it off."
+    },
+    "setAimAssist": {
+      "unit": ["seatRules", "setAssist"],
+      "trace": ["setter/S/good", "keys/setter/S/hands off", "keys/setter/S/hands off/set aim assist 0"],
+      "e2e": ["keys"],
+      "note": "Measured: with its default changed (ASSIST.aim to 0), this is the first run of the trace to play differently."
+    },
+    "setLevel": {
+      "unit": ["jumpSet", "setting"],
+      "trace": ["setter/S/good"],
+      "note": "Measured: with its default changed ('easy' to 'hard'), this is the first run of the trace to play differently."
+    },
+    "keepSetPick": {
+      "unit": ["setting"],
+      "trace": ["setter/S/good"],
+      "note": "The unit test holds that the hitter picked stays picked for the next ball when the pick is kept. Measured: with its default changed (false to true), this is the first run of the trace to play differently."
+    },
+    "hitterSpots": {
+      "trace": ["setter/S/good"],
+      "note": "Measured: with its default changed (false to true), this is the first run of the trace that is drawn or shown differently (the play is the same)."
+    },
+    "aimAssist": {
+      "unit": ["scene"],
+      "trace": ["free/OH/good"],
+      "note": "The unit test holds the reach a whole aim assist adds to a player's spike. Measured: with its default changed (ASSIST.aim to 0), this is the first run of the trace to play differently."
+    },
+    "landingMarker": {
+      "manual": "The ring on the floor where the ball will land. No unit test draws it, and the trace played and drew the same with it off: a person looks in Free Play with it on and with it off."
+    },
+    "runUpGuide": {
+      "trace": ["spike/OH/perfect"],
+      "note": "Measured: with its default changed (true to false), this is the first run of the trace that is drawn or shown differently (the play is the same)."
+    },
+    "spikeCollar": {
+      "trace": ["spike/OH/perfect"],
+      "note": "Measured: with its default changed (true to false), this is the first run of the trace that is drawn or shown differently (the play is the same)."
+    },
+    "replays": {
+      "unit": ["attempt", "replay"],
+      "e2e": ["screenshots"],
+      "skill": ["pause-settings", "spike-drill"],
+      "manual": "A replay watched to its end, and how it looks: the trace switches replays off in every run, and the end-to-end run only sees that a Perfect spike starts one.",
+      "note": "The unit tests hold the recorder and what R replays."
+    },
+    "shake": {
+      "unit": ["gameplay"],
+      "trace": ["free/OH/good"],
+      "skill": ["pause-settings"],
+      "note": "Measured: with its default changed (1.0 to (1.0) * 0.6), this is the first run of the trace that is drawn or shown differently (the play is the same)."
+    },
+    "volume": {
+      "skill": ["pause-settings"],
+      "manual": "Sound: nothing in CI can hear it. Its stored value is validated (settings). A person listens at 0, at the default and at 1."
+    },
+    "firstPerson": {
+      "unit": ["intent"],
+      "e2e": ["screenshots"],
+      "skill": ["pause-settings", "spike-drill", "start-screen"],
+      "manual": "What first person looks like, and aiming with the view: the end-to-end run takes screenshots of it and compares them with nothing.",
+      "note": "The trace sets third person in every run. The end-to-end run spikes in first person, and the unit test holds that the view a player has chosen reaches the simulation with their hands."
+    },
+    "keyHints": {
+      "manual": "The line of key hints at the foot of the screen. Nothing checks that it is shown: the trace played and showed the same with it on. A person switches it on and reads it."
+    },
+    "touchControls": {
+      "unit": ["touch"],
+      "trace": ["free/OH/good"],
+      "e2e": ["touch"],
+      "skill": ["quick-start-links", "touch-controls"],
+      "manual": "A real phone: thumbs, heat, frame rate. The end-to-end run sends synthetic touches to an emulated screen.",
+      "note": "Measured: with its default changed ('auto' to 'on'), this is the first run of the trace that is drawn or shown differently (the play is the same)."
+    },
+    "touchSensitivity": {
+      "manual": "How fast the view turns under a thumb. Nothing checks it: the unit test of the touch pad is given a fixed look speed. A person turns the view on a phone at 0.3 and at 3."
+    },
+    "bodies": {
+      "unit": ["gameplay"],
+      "skill": ["pause-settings"],
+      "manual": "A custom body in a drill: no run of the trace or of the end-to-end run plays with one. A person sets a height and a jump in the Athlete sheet and sees the athlete and its reach change.",
+      "note": "The unit test holds what a custom body does: the jump, the reach, the spike power, and that stored values are clamped. A changed default could not be measured against the trace: a stored body replaces the default whole."
+    },
+    "venue": {
+      "trace": ["lesson/jump"],
+      "skill": ["pause-settings", "quick-start-links", "start-screen"],
+      "note": "What each venue is held by is under \"venue\". Measured: with its default changed ('hall' to 'seaside'), this is the first run of the trace that is drawn or shown differently (the play is the same)."
+    },
+    "hand": {
+      "unit": ["gameplay"],
+      "trace": ["free/OH/good"],
+      "skill": ["mini-rally", "pause-settings", "quick-start-links", "serve-drill", "serve-lessons", "spike-drill", "start-screen"],
+      "note": "The unit test holds the left-handed player: the contact point, the toss, the plant and the wind-up mirror. Measured: with its default changed ('right' to 'left'), this is the first run of the trace to play differently."
+    },
+    "graphics": {
+      "unit": ["quality"],
+      "skill": ["pause-settings"],
+      "note": "The unit test holds the governor behind Auto and that a level the player fixed turns it off. What each level is held by is under \"graphics\". The trace played the same with the level fixed at Low: nothing it compares is drawn."
+    }
+  },
+  "graphics": {
+    "veryLow": {
+      "unit": ["quality"],
+      "manual": "The unit test holds the level's numbers (each level draws at least as much as the one below, and nothing a phone cannot draw). Nothing draws the game at this level and looks at it: the trace and the end-to-end run draw at whatever Auto picks, and say nowhere which that was."
+    },
+    "low": {
+      "unit": ["quality"],
+      "manual": "The unit test holds the level's numbers (each level draws at least as much as the one below, and nothing a phone cannot draw). Nothing draws the game at this level and looks at it: the trace and the end-to-end run draw at whatever Auto picks, and say nowhere which that was."
+    },
+    "medium": {
+      "unit": ["quality"],
+      "manual": "The unit test holds the level's numbers (each level draws at least as much as the one below, and nothing a phone cannot draw). Nothing draws the game at this level and looks at it: the trace and the end-to-end run draw at whatever Auto picks, and say nowhere which that was."
+    },
+    "high": {
+      "unit": ["quality"],
+      "manual": "The unit test holds the level's numbers (each level draws at least as much as the one below, and nothing a phone cannot draw). Nothing draws the game at this level and looks at it: the trace and the end-to-end run draw at whatever Auto picks, and say nowhere which that was."
+    },
+    "veryHigh": {
+      "unit": ["quality"],
+      "manual": "The unit test holds the level's numbers (each level draws at least as much as the one below, and nothing a phone cannot draw). Nothing draws the game at this level and looks at it: the trace and the end-to-end run draw at whatever Auto picks, and say nowhere which that was."
+    }
+  },
+  "venue": {
+    "hall": {
+      "unit": ["settings"],
+      "trace": ["spike/OH/good/double block"],
+      "e2e": ["screenshots", "drills"],
+      "manual": "How the hall looks and how its crowd sounds.",
+      "note": "Every run of the trace and of the end-to-end run plays in the hall. The trace run named is the one frame that is painted. No check says the hall looks right: the screenshots are taken and compared with nothing."
+    },
+    "games": {
+      "unit": ["settings"],
+      "skill": ["quick-start-links", "start-screen"],
+      "manual": "No run plays here. The unit test holds only which venues have an open sky and which a silent crowd. A person looks at how it is drawn and lit and listens to its crowd."
+    },
+    "seaside": {
+      "unit": ["settings"],
+      "skill": ["quick-start-links", "start-screen"],
+      "manual": "No run plays here. The unit test holds only which venues have an open sky and which a silent crowd. A person looks at how it is drawn and lit and listens to its crowd; under an open sky the ball is predicted further, which no run plays either."
+    },
+    "afterhours": {
+      "unit": ["settings"],
+      "skill": ["quick-start-links", "start-screen"],
+      "manual": "No run plays here. The unit test holds only which venues have an open sky and which a silent crowd. A person looks at how it is drawn and lit and listens to its crowd."
+    },
+    "rooftop": {
+      "unit": ["settings"],
+      "skill": ["quick-start-links", "start-screen"],
+      "manual": "No run plays here. The unit test holds only which venues have an open sky and which a silent crowd. A person looks at how it is drawn and lit and listens to its crowd; under an open sky the ball is predicted further, which no run plays either."
+    }
+  },
+  "config": {
+    "COURT": {
+      "unit": [
+        "antenna",
+        "blockShadow",
+        "defenceForms",
+        "drills",
+        "float",
+        "gameplay",
+        "greenBite",
+        "greenSet",
+        "judge",
+        "netPress",
+        "physics",
+        "playerServe",
+        "reception",
+        "serve",
+        "setterCall",
+        "teamDefence"
+      ],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "BALL": {
+      "unit": [
+        "antenna",
+        "ballCall",
+        "character",
+        "float",
+        "gameplay",
+        "greenBite",
+        "jumpServe",
+        "netTape",
+        "physics",
+        "playerServe",
+        "serve",
+        "teamDefence"
+      ],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section that is not whole moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "SIM": {
+      "unit": ["drills", "physics", "seatRules", "simulation"],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "POSITIONS": {
+      "unit": [
+        "aiPlays",
+        "ballCall",
+        "character",
+        "gameplay",
+        "greenBite",
+        "menu",
+        "middleBlock",
+        "playerServe",
+        "seatRules",
+        "setterCall",
+        "teamDefence",
+        "wingBlock"
+      ],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "BODY": {
+      "unit": ["gameplay", "settings"]
+    },
+    "PLAYER": {
+      "unit": ["defenceForms", "greenBite", "jumpSet", "middleBlock", "playbook", "playerServe", "wingBlock"],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "TIMING": {
+      "unit": ["drills", "float", "gameplay", "jumpSet", "setting", "tutorial"],
+      "trace": ["spike/OH/perfect"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "SET_LEVELS": {
+      "unit": ["setting"],
+      "trace": ["setter/S/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "CONTACT": {
+      "unit": ["defenceForms", "float", "gameplay", "menu", "playerServe", "setting"],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "SERVE": {
+      "unit": ["float", "playerServe"],
+      "trace": ["receive/L/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "SERVE_DRILL": {
+      "trace": ["serve/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "COACH_TOSS": {
+      "trace": ["spike/OH/perfect"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "RUN_UP_GO": {
+      "manual": "How long the GO cue takes to fade. No unit test went red and the trace played the same with it changed: a person watches the cue in the Spike Drill."
+    },
+    "SET_PICK": {
+      "trace": ["setter/S/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace that is drawn or shown differently (the play is the same). Others may too: the comparison explains only the first."
+    },
+    "BLOCK_DRILL": {
+      "trace": ["block/MB/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "FREE_PLAY": {
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "SETTER_DRILL": {
+      "trace": ["setter/S/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "RECEIVE_DRILL": {
+      "trace": ["receive/L/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "SPIKE_DRILL": {
+      "trace": ["spike/OH/perfect"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "MINI_RALLY": {
+      "unit": ["drills"],
+      "trace": ["rally/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "ASSIST": {
+      "unit": ["defenceForms", "setting"],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "CAMERA": {
+      "unit": ["settings"],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace that is drawn or shown differently (the play is the same). Others may too: the comparison explains only the first."
+    },
+    "TOUCH": {
+      "unit": ["touch"],
+      "manual": "A real phone: the size of the stick and how far a thumb has to move. The unit test holds the pad's model, and the trace plays with keys."
+    },
+    "TUTORIAL": {
+      "unit": ["pace", "tutorial"],
+      "trace": ["lesson/spike"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace that is drawn or shown differently (the play is the same). Others may too: the comparison explains only the first."
+    },
+    "BALL_LOOK": {
+      "manual": "How the ball is drawn. No unit test went red and the trace played and drew the same with it changed: a person looks at the ball."
+    },
+    "ARENA": {
+      "manual": "How the hall, the net and the stands are drawn. No unit test went red, and the trace played and drew the same with every number that is not whole changed: a person looks at the hall."
+    },
+    "VENUES": {
+      "unit": ["settings"],
+      "manual": "How each venue is drawn, lit and sounds. The unit test holds only which venues have an open sky and which a silent crowd, and the trace played and drew the same with every number changed: a person looks at each venue and listens."
+    },
+    "CHARACTER": {
+      "unit": ["character"],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace that is drawn or shown differently (the play is the same). Others may too: the comparison explains only the first."
+    },
+    "FX": {
+      "unit": ["setAssist"],
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section that is not whole moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "AUDIO": {
+      "manual": "Sound: nothing in CI can hear it, and the trace does not compare what the sound engine is asked for. A person listens."
+    },
+    "PLAYBOOK": {
+      "unit": ["playbook"]
+    },
+    "QUALITY": {
+      "unit": ["quality"],
+      "manual": "What each graphics level looks like and costs on a real phone. The unit test holds the numbers of the levels and the governor that moves between them, and nothing draws at a level and looks."
+    },
+    "AI": {
+      "unit": [
+        "attackChoice",
+        "defenceForms",
+        "drills",
+        "float",
+        "greenBite",
+        "middleBlock",
+        "playbook",
+        "setterCall",
+        "teamDefence",
+        "wingBlock"
+      ],
+      "trace": ["spike/OH/perfect"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
+    },
+    "DEFAULT_SETTINGS": {
+      "trace": ["free/OH/good"],
+      "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace that is drawn or shown differently (the play is the same). Others may too: the comparison explains only the first."
+    },
+    "SETTING_RANGES": {
+      "manual": "The ends of each slider. The unit test holds only that every default lies inside its range (settings), which a 20% change to every range did not break, and the trace played the same: a person drags each slider to both ends."
+    }
+  }
+}

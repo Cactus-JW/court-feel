@@ -1303,6 +1303,12 @@ a new trace run, or a line `Unchecked: <reason>` that says why no check can hold
   that has been fixed and not taken out, so the lists only get shorter. ESLint
   flags an import that points up a layer as it is typed, from the same table
   (`tests/architecture.layers.json`).
+* `tests/verification.map.test.ts` (part of `npm test`) holds
+  `tests/verification.map.json` to the code: for each drill and position, serve,
+  lesson, setting, graphics level, venue and section of config, the map names
+  the unit tests, trace runs and end-to-end checks that hold it, or says
+  `manual` and why. The test fails when something that exists has no entry, and
+  when an entry names a check that is not there.
 * URL shortcuts for quick testing: `?mode=spike&pos=OH&cam=fp&bot=perfect`
   (modes: free, spike, block, receive, setter, rally; bots: perfect, good,
   sloppy, tip; `&hand=left` plays as a lefty, `&venue=seaside` moves the court for that visit). Unknown values are ignored: an
