@@ -8,9 +8,10 @@
 #           controls, robustness probes and a resource soak (scripts/e2e.mjs). Screenshots
 #           and report.json are uploaded as the "e2e-report" artifact.
 #   trace - every drill played twice by a seeded autopilot on the manual clock: both runs give
-#           the same play, drawn and shown the same, and every drill gives it again from its
-#           logged hands alone. Then one frozen frame is painted eight times and has to be one
-#           picture (scripts/trace.mjs, `npm run trace`).
+#           the same play, drawn and shown the same, and so do the runs played with a person's
+#           keys (the rules an autopilot never reaches). Every drill gives the same play again
+#           from its logged hands alone. Then one frozen frame is painted eight times and has to
+#           be one picture (scripts/trace.mjs, `npm run trace`).
 # Make check and e2e required checks on main (Settings > Branches > branch protection rule).
 # trace runs on every pull request too, so it can be made one.
 #
