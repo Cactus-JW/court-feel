@@ -67,8 +67,9 @@ Ask these in order and stop at the first yes.
   other in a circle, on physics importing anything but `config`, on a brain
   importing `Game`, on a simulation file that touches the DOM or builds scene
   objects, on a clock or dice in the simulation (`Math.random`, `Date.now`,
-  `performance.now`), on a test that fakes the game, and on a new folder with no
-  layer.
+  `performance.now`), on a test that fakes the game with a cast, on a test that
+  hand-makes a ball or a host for the contact system when `tests/scene.ts` gives
+  it a real `Simulation`, and on a new folder with no layer.
 - **The autopilots roll their own dice** (`tests/architecture.autopilot.test.ts`).
   An autopilot stands in for a player, and a player's hands are not part of the
   simulation: it fails when one reads the simulation's random stream.

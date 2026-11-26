@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KNOWN_CLOCK, KNOWN_DOM, KNOWN_FAKE_GAME, KNOWN_IMPORTS, KNOWN_SCENE } from './architecture.known';
+import { KNOWN_CLOCK, KNOWN_DOM, KNOWN_FAKE_GAME, KNOWN_HAND_MADE, KNOWN_IMPORTS, KNOWN_SCENE } from './architecture.known';
 import {
   clocksAndDiceIn,
   DETERMINISTIC,
@@ -89,7 +89,7 @@ describe('architecture: every import points down', () => {
   });
 
   it('the known list is sorted and has no entry twice', () => {
-    for (const list of [KNOWN_IMPORTS, KNOWN_DOM, KNOWN_SCENE, KNOWN_FAKE_GAME, KNOWN_CLOCK]) {
+    for (const list of [KNOWN_IMPORTS, KNOWN_DOM, KNOWN_SCENE, KNOWN_FAKE_GAME, KNOWN_HAND_MADE, KNOWN_CLOCK]) {
       expect([...list]).toEqual([...new Set(list)].sort());
     }
   });
@@ -121,5 +121,15 @@ describe('architecture: tests build the real thing', () => {
     // a fake is a hand-made object cast to the game, or to the part of it the brains see
     const faking = filesUnder('tests').filter((f) => f !== 'tests/architecture.test.ts' && /as unknown as (Game|AiHost)\b/.test(read(f)));
     expect(drift(faking, KNOWN_FAKE_GAME, 'build what the code under test needs, not a cast')).toEqual([]);
+  });
+
+  it('no test hand-makes a ball or a contact host, apart from the ones already known', () => {
+    // A cast is one door. The other is an object that stands in for the ball (it has its own
+    // `ensurePrediction`) or a host cast for the contact system: the test then steps a ball the
+    // game never steps, in an order the game never uses. tests/scene.ts builds the real thing.
+    const making = filesUnder('tests').filter(
+      (f) => f !== 'tests/architecture.test.ts' && /^\s*ensurePrediction\s*\(|as unknown as ContactHost\b/m.test(read(f)),
+    );
+    expect(drift(making, KNOWN_HAND_MADE, 'send a real ball in a real Simulation (tests/scene.ts)')).toEqual([]);
   });
 });
