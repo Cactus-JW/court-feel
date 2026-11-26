@@ -1274,8 +1274,14 @@ export const ASSIST = {
   /** 0..1 default aim assist strength */
   aim: 0.55,
   /**
-   * The aim assist of an athlete nobody plays, for their attack and for their set: the reach it
-   * adds and the mid-air nudge are theirs at this strength whatever the player's settings say.
+   * The aim assist of an athlete nobody plays, whatever the player's settings say. It reaches the
+   * three touches an AI player makes through the contact system, as a little more reach: a swing
+   * (a spike or a serve) meets a ball `ai * reachBonus` further from the hand (6.6 cm), a pass or
+   * a dig one 7.5 cm further from the arms, and a block's hands are 3.6 cm wider to each side
+   * (`ContactSystem.reach`, `tryPass`, `tryBlock`). It does not reach an AI setter's set, which is
+   * not played through the contact system, and it gives no mid-air nudge: that is for a player's
+   * athlete only (`Simulation.step`). The one exception is a player's athlete that a drill hands to
+   * a brain (`autoUser`): it keeps its seat, so its nudge is at this strength.
    * A number of the play, not a setting. Tuned by play, first seen in 9dee160 (2026-11-02), with
    * no reason recorded.
    */
