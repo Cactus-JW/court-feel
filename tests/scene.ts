@@ -35,17 +35,15 @@ import { NO_HOOKS } from './simHooks';
 // - `step` and `run` play fixed steps, and no seat's frame runs between them. What the game does
 //   for a player once a frame is the seat's (`Seat.frame`): the controller that turns the intent
 //   they hold into what their athlete does, the last steps onto a set, the walk back between reps.
-//   A test of one of those plays frames, as the app does: `frame`. A test of a drill's own rules is
-//   built on `tests/headlessGame.ts`, which is a scene with a real drill and its host.
+//   A scene has no frame of its own, because the app's frame is more than a seat's: the player's
+//   hands are heard, the drill's frame runs, and a press is cleared once it has been played. That
+//   frame is `frame(hands)` of `tests/headlessGame.ts`, which is a scene with a real drill and its
+//   host: a test of a drill's rules, or of anything a player does with their hands, is built
+//   there. A test of one seat rule alone calls the seat's frame itself between steps, as
+//   `tests/seatRules.test.ts` does.
 
 /** one fixed step of the simulation (s) */
 export const DT = 1 / SIM.hz;
-
-/** the fixed steps in one frame: the simulation's 120 Hz under a screen's 60 */
-const STEPS_A_FRAME = 2;
-
-/** one frame (s) */
-export const FRAME = STEPS_A_FRAME * DT;
 
 const NO_SPIN: V3 = { x: 0, y: 0, z: 0 };
 
@@ -122,12 +120,6 @@ export interface Scene {
   send(ball: Flight, by?: SentBy): V3;
   /** play fixed steps, the invariants checked at each */
   step(n?: number): void;
-  /**
-   * Play frames, as the app does: every seat plays the intent it holds (`Seat.frame`: the
-   * controller, the last steps onto a set, the walk back), then the simulation steps twice.
-   * Feed a seat its player's hands by writing what it holds (`sim.seats[i].intent`).
-   */
-  frame(n?: number): void;
   /**
    * Play for `seconds` (a part of a step is played as a whole one), or until `until` is true after
    * a step. Returns whether it became true.
@@ -240,12 +232,5 @@ export function scene(o: SceneOptions = {}): Scene {
     return false;
   };
 
-  const frame: Scene['frame'] = (n = 1) => {
-    for (let i = 0; i < n; i++) {
-      for (const seat of sim.seats) seat.frame(FRAME);
-      step(STEPS_A_FRAME);
-    }
-  };
-
-  return { sim, touches, outcomes, athlete, team, place, send, step, frame, run };
+  return { sim, touches, outcomes, athlete, team, place, send, step, run };
 }

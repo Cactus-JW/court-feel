@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ASSIST, CONTACT } from '../src/config';
 import { netYaw } from '../src/ai/brain';
-import { scene } from './scene';
+import { DT, scene } from './scene';
 
 // The scene builder is what the tests of the play stand on (tests/scene.ts). These hold what its
 // header says of it: where it puts a player, and the three ways a scene is not the app.
@@ -50,20 +50,25 @@ describe('a scene is the simulation, not the app', () => {
     expect(armed.outcomes.map((x) => x.o.kind)).toEqual(['in']);
   });
 
-  it('fixed steps run no seat’s frame: a player sent back to a spot walks there only when frames are played', () => {
-    const walk = (play: (s: ReturnType<typeof scene>) => void) => {
+  it('fixed steps run no seat’s frame: a player sent back to a spot walks there only when their seat’s frame is played', () => {
+    const walk = (seconds: number, frames: boolean) => {
       const s = scene();
       const you = s.athlete('OH', 1, { x: -3, z: 6 }, { user: true });
-      s.sim.seats[0].walkTo(1, 6, 0);
-      play(s);
-      return { x: you.pos.x, walking: s.sim.seats[0].walking };
+      const seat = s.sim.seats[0];
+      seat.walkTo(1, 6, 0);
+      for (let i = 0; i < seconds * 60; i++) {
+        // the app's beat: the seat's frame, then two fixed steps
+        if (frames) seat.frame(2 * DT);
+        s.step(2);
+      }
+      return { x: you.pos.x, walking: seat.walking };
     };
     // one second of steps: nobody has played what the seat holds
-    const stepped = walk((s) => s.run(1));
+    const stepped = walk(1, false);
     expect(stepped.x).toBe(-3);
     expect(stepped.walking).toBe(true);
-    // two seconds of frames: the seat jogs its player back, and says when they are there
-    const framed = walk((s) => s.frame(120));
+    // two seconds with the seat's frame played: it jogs its player back, and says when they are there
+    const framed = walk(2, true);
     expect(Math.abs(framed.x - 1)).toBeLessThan(0.2);
     expect(framed.walking).toBe(false);
   });
