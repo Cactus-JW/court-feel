@@ -16,10 +16,8 @@ import {
 } from '../src/config';
 import { CameraRig } from '../src/camera/cameraRig';
 import { Athlete } from '../src/game/athlete';
-import { aimPitchRange, aimTargetFromLook, AIM_DEPTH, ContactSystem, type ContactEvent, type ContactHost } from '../src/game/contact';
-import { Judge } from '../src/game/judge';
-import { copyBall, makeBall, R, stepBall, type BallState, type CollisionEvent } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
+import { aimPitchRange, aimTargetFromLook, AIM_DEPTH, ContactSystem, type ContactEvent } from '../src/game/contact';
+import { R } from '../src/physics/ball';
 import { flyFor, solveApex, solveFixedTime } from '../src/physics/solve';
 import { planQuick } from '../src/game/approach';
 import { laneFor, QUICK, quickSetFor, quickSpot, SET_PLAYS, SETTER_TARGET } from '../src/game/plays';
@@ -29,6 +27,7 @@ import { makeKit } from '../src/character/kits';
 import { AudioEngine } from '../src/audio/audio';
 import { bodyStats, isCustomBody, resolveBody, sanitizeBodies, setBodyValue, spikeReach, topSpikeKmh, type Bodies } from '../src/game/body';
 import { loadSettings, saveSettings } from '../src/app/settings';
+import { scene, type Scene } from './scene';
 
 const DT = 1 / SIM.hz;
 
@@ -152,63 +151,21 @@ describe('aim mapping', () => {
   });
 });
 
-// ------------------------------------------------------------------ fake ball for the contact system
-class FakeBall {
-  state: BallState = makeBall();
-  predictor = new BallPredictor(DT, SIM.predictHorizon);
-  version = 0;
-  private pv = -1;
-  lastTouch: any = null;
-  active = true;
-  get pos() {
-    return this.state.p;
-  }
-  get vel() {
-    return this.state.v;
-  }
-  speed() {
-    const v = this.state.v;
-    return Math.hypot(v.x, v.y, v.z);
-  }
-  ensurePrediction(env: { netTop: number }, t: number) {
-    if (this.pv !== this.version) {
-      this.predictor.compute(this.state, env, t);
-      this.pv = this.version;
-    }
-    return this.predictor;
-  }
-  hit(v: any, w: any) {
-    Object.assign(this.state.v, v);
-    Object.assign(this.state.w, w);
-    this.version++;
-  }
-  launch(p: any, v: any, w: any) {
-    Object.assign(this.state.p, p);
-    Object.assign(this.state.v, v);
-    Object.assign(this.state.w, w);
-    this.active = true;
-    this.version++;
-  }
-}
-
-function makeHost(ball: FakeBall, events: ContactEvent[]) {
-  const host = {
-    ball: ball as any,
-    simTime: 0,
-    env: { netTop: COURT.netHeightMen },
-    aimAssist: () => 0,
-    aimTargetFor: (_a: Athlete, out: THREE.Vector3) => out.copy(AIM),
-    emitContact: (e: ContactEvent) => events.push(e),
-    rand: () => 0.5,
-    passTarget: () => ({ x: 1, y: 2.35, z: 0.9, apex: 4 }),
-    setOptions: () => [],
-    canServe: () => true,
-  } satisfies ContactHost;
-  return host;
-}
-
 /** where the hitter in these tests aims (the floor of the other court) */
 const AIM = new THREE.Vector3(1, 0.105, -6);
+
+/** a real court where every attack is aimed at `AIM`, and every touch the contact system resolves on it */
+function court() {
+  const events: ContactEvent[] = [];
+  // fixed dice: the aim has no spread, so where the ball goes and how hard is the timing and the wind-up alone
+  const s = scene({ dice: { roll: 0.5 }, hooks: { aimTargetFor: (_a, out) => out.copy(AIM), contact: (e) => events.push(e) } });
+  return { s, events };
+}
+
+/** the hitter stands this long first: the set leaves the setter, and a long wind-up starts, before the jump does (steps) */
+const STAND = SIM.hz;
+/** a full plant: the hitter is off the floor when it is over (steps) */
+const PLANT = Math.round(PLAYER.loadMax / DT) + 1;
 
 /**
  * Put a hitter in the air under a set, wind up for `hold` seconds and release
@@ -222,59 +179,60 @@ function spikeWithOffset(
   hand: Hand = 'right',
   user = false,
 ) {
-  const ball = new FakeBall();
-  const events: ContactEvent[] = [];
-  const host = makeHost(ball, events);
-  const cs = new ContactSystem(host);
-  const a = new Athlete('OH', 1, { body, hand });
-  a.isUser = user;
-  a.place(-3.4, 1.4, 0);
-  // jump straight up with a full load
-  a.jumpPress();
-  let t = 0;
-  for (let i = 0; i < Math.round(PLAYER.loadMax / DT) + 1; i++) a.step(DT, (t += DT));
-  // ball: a set that peaks and falls through the hitter's ideal point at the jump apex
-  const tApex = t + a.timeToApex();
+  /** the hitter on the floor at the left pin, on a court of their own */
+  const hitter = () => {
+    const c = court();
+    return { ...c, a: c.s.athlete('OH', 1, { x: -3.4, z: 1.4, yaw: 0 }, { user, build: { body, hand } }) };
+  };
+  // the jump on its own, straight up off a full plant: when its top is, and where the hand is then
+  const alone = hitter();
+  alone.s.step(STAND);
+  alone.a.jumpPress();
+  alone.s.step(PLANT);
+  const t = alone.s.sim.simTime;
+  const tApex = t + alone.a.timeToApex();
   const ideal = new THREE.Vector3();
-  a.idealContact(ideal, a.predictAir(tApex - t, new THREE.Vector3()));
+  alone.a.idealContact(ideal, alone.a.predictAir(tApex - t, new THREE.Vector3()));
+  // ball: a set that peaks and falls through the hitter's ideal point at the jump apex
   const p0 = { x: 1, y: 2.4, z: 0.8 };
   const v = { x: 0, y: 0, z: 0 };
   const res = solveApex(p0, { x: ideal.x, y: ideal.y, z: ideal.z }, ideal.y + 1.2, { x: 0, y: 0, z: 0 }, v);
-  // launch so that it arrives exactly at the apex
-  const launchT = tApex - res.T;
-  // rewind: simulate from launch by stepping the ball before the jump begins
-  Object.assign(ball.state.p, p0);
-  Object.assign(ball.state.v, v);
-  const sim = copyBall(ball.state, makeBall());
-  const steps = Math.round((t - launchT) / DT);
-  for (let i = 0; i < steps; i++) stepBall(sim, DT, host.env);
-  copyBall(sim, ball.state);
-  ball.version++;
-  host.simTime = t;
+  // it is in the air longer than the jump takes to top out: it leaves the setter's hands while the hitter still stands
+  const setAt = STAND + PLANT - Math.round((t - (tApex - res.T)) / DT);
+  /** before step `i`: the set goes up and the hitter plants, each on its step */
+  const cue = (h: { s: Scene; a: Athlete }, i: number) => {
+    if (i === setAt) h.s.send({ from: p0, v }, { athlete: null, kind: 'set', side: 1 });
+    if (i === STAND) h.a.jumpPress();
+  };
+  // the same jump under that set: once off the floor, when will the ball be at the hand (read
+  // between two steps, as the game reads a player's timing cue: src/app/game.ts, fixedStep)
+  const read = hitter();
+  for (let i = 0; i < STAND + PLANT; i++) {
+    cue(read, i);
+    read.s.step();
+  }
+  const info = read.s.sim.contact.ideal(read.a, read.s.sim.simTime, 0.9)!;
   // press (wind-up) `hold` before the release, release on the timing
-  const info = cs.ideal(a, t, 0.9)!;
   const releaseAt = info.t - ContactSystem.swingLead(ContactSystem.chargeFor(hold)) + offset;
   const pressAt = releaseAt - hold;
-  // rewind the clock for early presses (the hitter stands in the plant until then)
-  let pressed = pressAt < host.simTime;
-  if (pressed) {
-    cs.beginWindup(a);
-    a.action!.t0 = pressAt;
-  }
-  let act: any = null;
-  const evs: CollisionEvent[] = [];
-  for (let i = 0; i < SIM.hz * 1.5; i++) {
-    if (!pressed && host.simTime >= pressAt - 1e-9) {
+  if (setAt < 0 || pressAt < 0) throw new Error('the hitter has to stand longer: the set or the wind-up starts before the clock does');
+  // and once more, with the arm: an early press is made where a player makes it, in the plant or still standing
+  const { s, a, events } = hitter();
+  const cs = s.sim.contact;
+  let pressed = false;
+  let released = false;
+  for (let i = 0; i < STAND + PLANT + SIM.hz * 1.5; i++) {
+    cue({ s, a }, i);
+    if (!pressed && s.sim.simTime >= pressAt - 1e-9) {
       cs.beginWindup(a);
       pressed = true;
     }
-    if (!act && host.simTime >= releaseAt - 1e-9) act = cs.releaseWindup(a);
-    host.simTime += DT;
-    a.step(DT, host.simTime);
-    cs.step([a]);
-    stepBall(ball.state, DT, host.env, evs);
+    if (pressed && !released && s.sim.simTime >= releaseAt - 1e-9) released = !!cs.releaseWindup(a);
+    s.step();
+    // the hitter is watched from the step they are off the floor
+    if (i < STAND + PLANT) continue;
     // with a per-step hook, keep going until it says stop (e.g. the landing)
-    if (onStep ? onStep(a, host.simTime, events) : events.length) break;
+    if (onStep ? onStep(a, s.sim.simTime, events) : events.length) break;
   }
   return events[0];
 }
@@ -372,11 +330,13 @@ describe('hold-to-charge spike power', () => {
 });
 
 describe('line judge', () => {
+  /** a ball last played by `side` comes straight down on (x, z): what the judge calls when it meets the floor */
   function judgeFloor(x: number, z: number, side: 1 | -1) {
-    const j = new Judge();
-    const ball = { pos: { x, y: 1, z }, active: true, lastTouch: { side } } as any;
-    j.arm(ball);
-    return j.step(ball, [{ kind: 'floor', x, y: 0.105, z, impact: 10 }], COURT.netHeightMen)!;
+    const s = scene();
+    s.send({ from: { x, y: 1, z }, v: { x: 0, y: 0, z: 0 } }, { athlete: null, kind: 'spike', side });
+    s.sim.judge.arm(s.sim.ball);
+    s.run(1, () => s.outcomes.length > 0);
+    return s.outcomes[0].o;
   }
   it('ball on the line is in', () => {
     const o = judgeFloor(4.5, -6, 1);
@@ -389,13 +349,16 @@ describe('line judge', () => {
     expect(o.winner).toBe(-1);
   });
   it('crossing outside the antennae is a fault (called once it can no longer be played back: tests/judge.test.ts)', () => {
-    const j = new Judge();
-    const ball = { pos: { x: 5.2, y: 3, z: 0.3 }, active: true, lastTouch: { side: 1, t: 0 } } as any;
-    j.arm(ball);
-    ball.pos = { x: 5.25, y: 3, z: -0.3 };
-    expect(j.step(ball, [], COURT.netHeightMen)).toBeNull();
-    ball.pos = { x: 4.0, y: 0.105, z: -3 };
-    const o = j.step(ball, [{ kind: 'floor', x: 4.0, y: 0.105, z: -3, impact: 8 }], COURT.netHeightMen)!;
+    const s = scene();
+    const { ball, judge } = s.sim;
+    // played from outside our right sideline, round the outside of the antenna, to come down in their court
+    s.send({ from: { x: 5.2, y: 3, z: 0.3 }, to: { x: 4.0, y: R, z: -3 }, apex: 3.4 }, { athlete: null, kind: 'pass', side: 1 });
+    judge.arm(ball);
+    expect(s.run(1, () => ball.pos.z < 0)).toBe(true);
+    expect(ball.pos.x).toBeGreaterThan(COURT.antennaX);
+    expect(s.outcomes).toEqual([]);
+    s.run(2, () => s.outcomes.length > 0);
+    const o = s.outcomes[0].o;
     expect(o.kind).toBe('outside-antenna');
     expect(o.winner).toBe(-1);
   });
@@ -533,15 +496,18 @@ describe('spike drill set calls', () => {
 describe('middle shot choice', () => {
   it('a middle hits down and short, into the 3-6 m zone; now and then deep to zone 1 or zone 5', () => {
     for (const side of [1, -1] as const) {
-      const a = new Athlete('MB', side);
+      let r = 0;
+      // fixed dice, walked from 0 to 1: every shot the middle has comes up, as often as it is chosen, with no spread on it
+      const s = scene({ dice: { roll: () => r } });
+      const a = s.athlete('MB', side, { x: 0, z: 0 });
       const brain = new HitterBrain(a, laneFor('MB', side));
+      s.sim.setBrain(a, brain);
       const seen = new Set<string>();
       let short = 0;
       const n = 200;
       for (let i = 0; i < n; i++) {
-        const r = (i + 0.5) / n;
-        const g = { rng: { next: () => r, gauss: () => 0 } } as any;
-        const aim = brain.chooseAim(g, 0.2 * side);
+        r = (i + 0.5) / n;
+        const aim = brain.chooseAim(s.sim, 0.2 * side);
         seen.add(brain.lastShot);
         // always into their court, the side away from the hitter
         expect(Math.sign(aim.z)).toBe(-side);
@@ -554,8 +520,8 @@ describe('middle shot choice', () => {
       expect(short / n).toBeGreaterThan(0.7);
       expect([...seen].sort()).toEqual(['cut', 'down', 'zone 1', 'zone 5']);
       // zone 1 is the receiving team's right back: x < 0 when the home team attacks
-      const g1 = { rng: { next: () => 0.85, gauss: () => 0 } } as any;
-      const z1 = brain.chooseAim(g1, 0);
+      r = 0.85;
+      const z1 = brain.chooseAim(s.sim, 0);
       expect(brain.lastShot).toBe('zone 1');
       expect(Math.sign(z1.x)).toBe(-side);
     }
@@ -775,29 +741,24 @@ describe('left-handed players (settings: hitting hand)', () => {
 
   /** a standing float serve: toss (Q), wind up and release on the ideal moment */
   function floatServe(hand: Hand) {
-    const ball = new FakeBall();
-    const events: ContactEvent[] = [];
-    const host = makeHost(ball, events);
-    const cs = new ContactSystem(host);
-    const a = new Athlete('OPP', 1, { hand });
-    a.place(1, 9.6, 0);
+    const { s, events } = court();
+    const cs = s.sim.contact;
+    const ball = s.sim.ball;
+    const a = s.athlete('OPP', 1, { x: 1, z: 9.6, yaw: 0 }, { build: { hand } });
     expect(cs.serveToss(a)).toBe(true);
     const tossX = ball.pos.x - a.pos.x;
-    const info = cs.ideal(a, host.simTime, 2.0)!;
+    const info = cs.ideal(a, s.sim.simTime, 2.0)!;
     const hold = 0.45;
     const releaseAt = info.t - ContactSystem.swingLead(ContactSystem.chargeFor(hold));
     let pressed = false;
     let released = false;
     for (let i = 0; i < SIM.hz * 3 && !events.length; i++) {
-      if (!pressed && host.simTime >= releaseAt - hold - 1e-9) {
+      if (!pressed && s.sim.simTime >= releaseAt - hold - 1e-9) {
         cs.beginWindup(a);
         pressed = true;
       }
-      if (pressed && !released && host.simTime >= releaseAt - 1e-9) released = !!cs.releaseWindup(a);
-      host.simTime += DT;
-      a.step(DT, host.simTime);
-      cs.step([a]);
-      stepBall(ball.state, DT, host.env);
+      if (pressed && !released && s.sim.simTime >= releaseAt - 1e-9) released = !!cs.releaseWindup(a);
+      s.step();
     }
     return { tossX, e: events[0] };
   }

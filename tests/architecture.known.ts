@@ -26,7 +26,6 @@ export const KNOWN_FAKE_GAME: readonly string[] = ['tests/greenBite.test.ts', 't
 /** tests that hand-make a ball (an object with its own `ensurePrediction`) or cast a host for the contact system, when tests/scene.ts gives them a real one */
 export const KNOWN_HAND_MADE: readonly string[] = [
   'tests/defenceForms.test.ts',
-  'tests/gameplay.test.ts',
   'tests/greenBite.test.ts',
   'tests/reception.test.ts',
   'tests/setting.test.ts',
