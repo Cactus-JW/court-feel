@@ -146,7 +146,8 @@ jobs:
     name: Trace (the same play every run)
     runs-on: ubuntu-latest
     # twice the play (here, and here against the commit this goes into), and both again with the base
-    # branch's tool when a pull request changes the tool: four passes of about three and a half minutes
+    # branch's tool when a pull request changes the tool: four passes of about four minutes each
+    # (3 min 54 s and 3 min 53 s in this workflow's first run with the comparison, 45887144300)
     timeout-minutes: 30
     permissions:
       contents: read
