@@ -1,0 +1,92 @@
+{
+  "indexNote": "// One file for each owner of numbers, lowest first. A file may import the ones above it in this list.",
+  "files": [
+    {
+      "file": "court.ts",
+      "title": "The court, the net and the simulation's clock: what the rules and the hall fix. Read by every layer.",
+      "names": ["COURT", "SIM"]
+    },
+    {
+      "file": "ball.ts",
+      "title": "The ball in the air and against the floor, the net, the tape and the antennae. Owner: physics.",
+      "names": ["BALL"]
+    },
+    {
+      "file": "input.ts",
+      "title": "The touch controls as the input layer reads them. Owner: core.",
+      "names": ["TOUCH"]
+    },
+    {
+      "file": "body.ts",
+      "title": "An athlete's body: the positions, the custom body, how it moves, jumps, dives and turns. Owner: the simulation.",
+      "names": ["PositionId", "PositionStats", "POSITIONS", "isPositionId", "BodyOverride", "BODY", "Hand", "PLAYER"]
+    },
+    {
+      "file": "skills.ts",
+      "title": "The skills: the timing windows, what a touch does to the ball, the serves, the plays, what assist does for the body. Owner: the simulation.",
+      "names": [
+        "TIMING",
+        "SetLevel",
+        "SET_LEVEL_IDS",
+        "SET_LEVELS",
+        "SetTier",
+        "CONTACT",
+        "ServeKind",
+        "SERVE_KINDS",
+        "SERVE",
+        "ASSIST",
+        "PLAYBOOK"
+      ]
+    },
+    {
+      "file": "ai.ts",
+      "title": "How the AI players read, decide and err. Owner: the brains.",
+      "names": ["AI"]
+    },
+    {
+      "file": "drills.ts",
+      "title": "Each drill's own numbers, and the lessons'. Owner: the drills.",
+      "names": [
+        "SERVE_DRILL",
+        "COACH_TOSS",
+        "RUN_UP_GO",
+        "SET_PICK",
+        "BLOCK_DRILL",
+        "FREE_PLAY",
+        "SETTER_DRILL",
+        "RECEIVE_DRILL",
+        "SPIKE_DRILL",
+        "MINI_RALLY",
+        "TUTORIAL"
+      ]
+    },
+    {
+      "file": "display.ts",
+      "title": "What the player sees and hears: the camera, the ball, the hall, the athletes, the effects, the sound. Owner: the display.",
+      "names": ["CAMERA", "BALL_LOOK", "ARENA", "CHARACTER", "FX", "AUDIO"]
+    },
+    {
+      "file": "venues.ts",
+      "title": "The five venues: looks and sound, except for the open sky (docs/adr/0009). Owner: the display.",
+      "names": ["VenueId", "VenueSpec", "HALL_BOARDS", "VENUES", "VENUE_IDS", "isVenueId"]
+    },
+    {
+      "file": "app.ts",
+      "title": "The graphics levels and their governor, and the player's stored settings. Owner: the app.",
+      "names": [
+        "GRAPHICS_LEVEL_IDS",
+        "GraphicsLevel",
+        "GraphicsSetting",
+        "GRAPHICS_SETTINGS",
+        "QualityLevel",
+        "QUALITY",
+        "Settings",
+        "DEFAULT_SETTINGS",
+        "NumericSettingKey",
+        "BooleanSettingKey",
+        "SETTING_RANGES",
+        "TOUCH_CONTROL_MODES"
+      ]
+    }
+  ]
+}
