@@ -58,6 +58,8 @@ export interface SimDrill {
   /** the hitter the player picked for this set, if any */
   setPick?(a: Athlete): SetPick | null;
   canServe?(a: Athlete): boolean;
+  /** the next ball is the player's to set (a pass is in the air for them): their seat takes the last steps onto it */
+  userSetsNext?(): boolean;
 }
 
 /**

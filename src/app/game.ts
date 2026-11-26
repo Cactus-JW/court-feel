@@ -44,8 +44,7 @@ import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
 import type { Kit } from '../character/rig';
 import { wheelPlays } from '../game/playbook';
-import { setStepAssist } from '../game/setAssist';
-import { autoSetJump, takeoffSpot } from '../game/setJump';
+import { autoSetJump } from '../game/setJump';
 import { aimTargetFromLook, ContactSystem, tossGroove, type ContactEvent, type IdealInfo, type SetPreview } from '../game/contact';
 import { SetGuide } from '../fx/setGuide';
 import { SetRing } from '../fx/setRing';
@@ -944,23 +943,6 @@ export class Game implements AiHost {
     this.post.render(dt);
   }
 
-  /** frame-level input: look, toggles, immediate action starts (same frame as the input) */
-  /**
-   * Set aim assist for your footwork: the ball is yours to set and you are on the floor near
-   * the spot, so your body takes the last steps onto it (setStepAssist; off at assist 0, and
-   * once the ball is in your hands).
-   */
-  private assistSetStep(): void {
-    const me = this.me;
-    if (!this.user.intent.helped || this.settings.setAimAssist <= 0 || me.state !== 'ground' || !this.mode?.userSetsNext?.()) return;
-    if (me.action?.kind === 'set' && me.action.absorbing) return;
-    // going up for it: the steps go to where the hop takes off from (the spot, less what your run carries)
-    const jump = this.contact.setCatch(me)?.jump;
-    const spot = jump ? takeoffSpot(me, jump, this.stepP) : this.contact.setSpot(me, this.stepP);
-    if (spot) setStepAssist(me.cmd, me.pos, spot, this.settings.setAimAssist);
-  }
-  private stepP = { x: 0, y: 0, z: 0 };
-
   /**
    * The play wheel (C, while the mode lets you call a play): hold C and move the mouse to a
    * play, let go to call it; or press C, then the play's number (a tap on touch) or click.
@@ -1001,6 +983,7 @@ export class Game implements AiHost {
     return this.mode && !this.inMenu ? (this.mode.routes?.() ?? null) : null;
   }
 
+  /** frame-level input: look, toggles, immediate action starts (same frame as the input) */
   private frameInput(dt: number): void {
     if (this.input.consumePress('F3')) {
       this.debug.toggle();
@@ -1044,8 +1027,8 @@ export class Game implements AiHost {
         if (!this.fx.startPointReplay()) this.fx.startReplay();
       }
     }
-    this.user.frame(dt);
-    this.assistSetStep();
+    // the seat plays it: the controller, then the last steps onto a set (the set-step assist)
+    this.seat.frame(dt);
     // the lesson's together rep: the coach holds your line (what you hold decides whether time runs)
     this.tutorial.drive(this.me);
     this.stepReturn(dt);

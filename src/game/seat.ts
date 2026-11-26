@@ -2,6 +2,8 @@ import type { ServeKind } from '../config';
 import type { Athlete } from './athlete';
 import type { ContactSystem } from './contact';
 import type { Intent } from './intent';
+import { setStepAssist } from './setAssist';
+import { takeoffSpot } from './setJump';
 import type { Tutorial } from './tutorial';
 import { UserActions } from './userActions';
 import { UserController } from './userController';
@@ -21,12 +23,24 @@ export interface SeatHost {
 
 const NO_LESSON: Pick<Tutorial, 'ownsButtons' | 'quiet'> = { ownsButtons: () => false, quiet: () => false };
 
+/** what a seat reads of the simulation it sits in */
+export interface SeatSim {
+  readonly simTime: number;
+  readonly contact: ContactSystem;
+  /** the drill being played: it says when the next ball is this player's to set */
+  readonly drill: { userSetsNext?(): boolean } | null;
+}
+
 /**
  * A seat: one player's place in the game. It holds the athlete they play, the controller that
  * turns their intent into what that athlete does, and the actions they are holding (a pass, a
  * set, a block waiting on its moment). It is handed an `Intent` a frame and takes nothing else
  * from the player, so it does not matter whose hands they are: this machine's keys, a recording,
  * or a player on another machine (docs/adr/0011). Seat 0 is this machine's player.
+ *
+ * What the game does for a player is here too, written for this seat's athlete and this seat's
+ * intent: the last steps onto a set (`frame`). The controller only turns an intent into
+ * commands; these are the game acting for the player, so every seat has its own.
  */
 export class Seat {
   readonly controller = new UserController();
@@ -38,7 +52,7 @@ export class Seat {
   constructor(
     readonly id: number,
     athlete: Athlete,
-    sim: { readonly simTime: number; readonly contact: ContactSystem },
+    private readonly sim: SeatSim,
     host: SeatHost = {},
   ) {
     this.body = athlete;
@@ -79,9 +93,38 @@ export class Seat {
     return this.controller.intent;
   }
 
-  /** this frame's intent from the player: play it. A frame with none leaves the athlete doing what it was last asked */
+  /** this frame's intent from the player: hold it and play it (`frame`). A frame with none leaves the athlete doing what it was last asked */
   hear(dt: number, intent: Intent): void {
     this.controller.intent = intent;
-    this.controller.frame(dt);
+    this.frame(dt);
   }
+
+  /**
+   * Play the intent held, once a frame: the controller turns it into what the athlete does, then
+   * the set-step assist takes the last steps onto a set. The order matters: the assist steers the
+   * move command the controller has just written.
+   */
+  frame(dt: number): void {
+    this.controller.frame(dt);
+    this.assistSetStep();
+  }
+
+  /**
+   * Set aim assist for the player's footwork: the ball is theirs to set and they are on the floor
+   * near the spot, so their body takes the last steps onto it (`setStepAssist`). Off at assist 0,
+   * once the ball is in their hands, and for hands that say where they go outright (an autopilot:
+   * `Intent.helped`). Its strength is the player's Set aim assist, as the contact system has it.
+   */
+  private assistSetStep(): void {
+    const me = this.body;
+    const contact = this.sim.contact;
+    const assist = contact.setAssist(me);
+    if (!this.intent.helped || assist <= 0 || me.state !== 'ground' || !this.sim.drill?.userSetsNext?.()) return;
+    if (me.action?.kind === 'set' && me.action.absorbing) return;
+    // going up for it: the steps go to where the hop takes off from (the spot, less what your run carries)
+    const jump = contact.setCatch(me)?.jump;
+    const spot = jump ? takeoffSpot(me, jump, this.stepP) : contact.setSpot(me, this.stepP);
+    if (spot) setStepAssist(me.cmd, me.pos, spot, assist);
+  }
+  private readonly stepP = { x: 0, y: 0, z: 0 };
 }
