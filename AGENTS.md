@@ -48,7 +48,7 @@ When you make a call that someone would otherwise argue about again, write the r
 Why the checks are arranged as they are, and where a new rule should live, is in [docs/verification.md](docs/verification.md): hold each rule in the cheapest layer that can hold it.
 
 - **Approach before code.** For a change to the simulation (physics, timing, contacts, AI, a drill's rules), say first what the real court does, which tests will state it and which files it touches. Code written to see whether an approach works is thrown away, not tidied up and kept.
-- **The test comes first.** Write the test that states the real-court fact and watch it fail. Then write the code that passes it. A test written after the code tends to describe the code.
+- **The test comes first.** Write the test that states the real-court fact and watch it fail. Then write the code that passes it. A test written after the code tends to describe the code. CI holds this for a `feat` or a `fix`: a change to the play brings a test that fails on `main`'s code (`node scripts/red-on-base.mjs origin/main` says which of yours do), a new trace run, or a line `Unchecked: <reason>` in the pull request ([docs/verification.md](docs/verification.md#a-change-to-the-play-brings-a-check-or-says-why-not)).
 - **Three failed attempts, then stop.** If a fix has not worked after three tries, stop and say what was tried, what each showed and what you would look at next. A fourth guess costs more than the question.
 - **A file that keeps growing is a prompt to look for a boundary**, not a failure. A large file with one job and a clear edge is fine. One that several features have to edit at once is where the next split belongs.
 

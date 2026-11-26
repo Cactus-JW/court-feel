@@ -105,6 +105,31 @@ Ask these in order and stop at the first yes.
   play. It fails when the simulation takes something from a player that is not
   in the intent: a key read on the side, a camera read for aim, an autopilot
   rolling the simulation's dice. A second player rests on this (docs/adr/0011).
+- **A person's keys** (a pass of both). An autopilot says where its feet go
+  outright and is never late, so what the game does for a person never runs in
+  a drill it plays: the last steps onto a set, the jump set, the walk back when
+  the player jumps, takes the stick or is not back in time. So the trace also
+  plays runs with no autopilot (`KEY_RUNS` in `scripts/trace.mjs`): real keys go
+  down and come up in `Input`, pressed by habits (what a player does about what
+  is on the screen: runs off their spot, keeps jumping while they are walked
+  back, looks away with the mouse, runs under a ball that is theirs and sets
+  it), by scripts and by dice of the run's own. They play the Setter Drill, the Mini Rally, the other
+  drills, the four lessons with the rep started again part-way, and the start
+  screen's demo from the moment its page loads. They share a page of their own,
+  and the simulation, the player's move command, the walk back, the camera and
+  every call the HUD gets are compared after every frame. A run where what is
+  shown is part of the rule (the demo, a walk back that ends with a dip, a
+  lesson) is played a whole frame at a time; the others with the keys and the
+  simulation only, which costs a fifteenth. Each run also counts
+  what it reached, from outside (a screen dip, a step with no key down), and
+  fails when it no longer reaches what it is in the list for: a run that stopped
+  getting to its rule would be the same on two builds for the wrong reason.
+  That count fails on any pull request, so a few of them are plain facts too:
+  no step is taken for the player at Set aim assist 0, the body stays down with
+  Auto jump set off, the screen dips when a walk back runs out of time, and a
+  player who had looked away is then left looking where their spot faces (in
+  the Setter Drill that is across the court, the one spot that does not face
+  down it).
 - **One painted frame** (the last pass of both). The Spike Drill with a double
   block on is stopped three seconds in, and that one frame is painted eight
   times in a page of its own. Nothing moves between the paints, so it has to be
@@ -123,9 +148,15 @@ Ask these in order and stop at the first yes.
   handed its own intents, and the game replays from the log of both.
 - **What the game does for a player, on a bare seat** (`tests/seatRules.test.ts`):
   the last steps onto a set, the walk back between reps and the auto jump set,
-  in a simulation with no app. The trace cannot see the set-step assist (every
-  autopilot turns it off) and sees a walk back's snap only if an autopilot is
-  late, so these tests are their proof.
+  in a simulation with no app. These rules are held twice. The runs with a
+  person's keys (above) hold them in the app, as the same play on two builds.
+  These tests state each one as a fact, guard by guard: legs off the floor are
+  asked for no step, the steps go to where a hop takes off from, the feet are
+  left alone once the ball is in the hands, a body in the air is not jogged, a
+  player who took the stick is never put anywhere. They are also the only
+  check of the two rules no key can reach: the walk back giving way to feet
+  that something else is already moving, and every seat being stepped (the app
+  has one).
 - **Property tests** (`tests/properties.test.ts`). A fact that must hold for
   every input, tried on hundreds of seeded ones. They are for the bugs nobody
   wrote a case for. The inputs are seeded, so the tests are as repeatable as any
@@ -134,7 +165,19 @@ Ask these in order and stop at the first yes.
   every step: every number finite, nobody under the floor, the clock moving one
   step at a time. A rare bug fails at the step it happens.
 - **The end-to-end run** (`npm run e2e`): every drill in a real browser through
-  the real input path.
+  the real input path. It also states, with nobody playing for the player, the
+  facts of the help a person gets that hold whatever the code looks like: hands
+  off, the feet step onto a pass in reach and the hands are under it when it
+  arrives; at Set aim assist 0 nothing moves the body; with Auto jump set on
+  the body goes up for a pass in system, and with it off it stays down; a player
+  who is not back on their spot in time is put there and the screen dips once;
+  one who took the stick is never put anywhere; the Mini Rally waits less long
+  than a drill. They were written while these rules were in `Game`, which only
+  a browser can build. The rules are the seat's now, and
+  `tests/seatRules.test.ts` states them in the cheaper place. These stay as
+  the check that the app, with its settings and a person's keys, still brings
+  them to the player. Where a unit test can reach a rule, it is the cheaper
+  place.
 - **Driving the app.** The `verify-court-feel` skill lets an agent run the game
   and look, before it says a change works.
 
@@ -173,11 +216,28 @@ A check is worth nothing if the change it judges can rewrite it.
 
 Say these out loud in a pull request when they apply.
 
-- **The trace proves what the autopilots play**, in the repeat check and in the
-  comparison. A change they never reach passes. It does not cover the menus,
-  touch input, effects or sound, and a lesson is covered as far as its scripted
-  hands get: the spike and the float lesson to the end, the two jump serves to
-  their last rep.
+- **The trace proves what the autopilots and the runs with a person's keys
+  play**, in the repeat check and in the comparison. A change they never reach
+  passes. It does not cover the menus, touch input (the stick is a way to steer
+  that no run has), effects or sound, and a lesson is covered as far as its
+  scripted hands get: the spike and the float lesson to the end, the two jump
+  serves to their last rep.
+- **Two rules for a person that no key reaches**, so no run can: the walk back
+  giving way to feet that something else is already moving (with a keyboard a
+  move key is the only thing that moves them, and a move key already makes the
+  walk back the player's), and every seat being stepped (the app has one seat).
+  A unit test on a bare seat holds each (`tests/seatRules.test.ts`: "feet
+  already going somewhere are left to it", "every seat's player goes up for
+  their own set"). A run that prints `same play` says nothing about them.
+- **First person is never played.** Every pass of the trace sets the camera to
+  third person. Where a walk back that runs out of time leaves the player
+  looking is held in third person (two runs look away first). What the same
+  placement does to the first-person view (the eye is started again from the
+  new spot, in `Game.userPlaced`) is held by nothing: a refactor that drops it
+  prints `same play`. The seat's half is tested: it tells whoever runs the game
+  of every placement and whether it was a snap. Until a run plays in first
+  person, the rest is a look by a person: look away, get put back on the spot,
+  in first person.
 - **The trace sees one painted frame**, of the Spike Drill with a block on, and
   only that eight paints of it are one picture. It does not say the picture is
   the right one, and no other drill or moment is painted.
@@ -187,12 +247,61 @@ Say these out loud in a pull request when they apply.
 - **Passing tests do not prove a change to what the player sees.** Drive the
   app.
 
+## A change to the play brings a check, or says why not
+
+The rule: a change that alters the feel, or adds something a player can feel,
+adds or updates the check that holds it, and if no check can hold it the pull
+request says why. It was prose, and review was its only reader. Now the `check`
+job holds it (`scripts/brings-a-check.mjs`), for a pull request whose title
+starts with `feat` or `fix`:
+
+- **It says how it is held.** Its description has the template's sections "How
+  it is held" and "What no check holds", each with more in it than the
+  template's comment.
+- **It touches the play** (physics, the simulation, the brains, the drills, the
+  input door, the gameplay sections of config). Then one of the tests it adds or
+  changes fails on the code of the branch it goes into, or it changes the
+  trace's runs, or a line `Unchecked: <reason>` stands under "What no check
+  holds". `scripts/red-on-base.mjs` is what tries the tests: this checkout, with
+  `src/` as it is on the base. A test of a function the base does not have
+  cannot run there, and that is red too. So is a test that does not end there:
+  the run is stopped after two minutes and the file is named, because a fix for
+  a loop that never ends comes with the test that states it.
+- **It touches only what is shown and heard** (the HUD, the menus, effects,
+  sound, the camera, the world, the look and sound sections of config). Then a
+  test, the end-to-end run, a `verify-court-feel` feature file or a trace run
+  changed with it, or the same line stands.
+
+Which path is in which tier is one table (`TIERS` in
+`scripts/brings-a-check.rule.mjs`), and a part of config or a folder of `src/`
+that nobody has listed is the play. The decision is a pure function of the
+title, the changed paths, the tests that are red on the base and the
+description, and `tests/bringsACheck.test.ts` holds it case by case. Like the
+architecture rules, the gate that judges a pull request is the base branch's.
+Every failure says what to do and ends with how to have the gate look again: a
+push, when a test or a run mends it, or the command that runs the job again,
+when the description does (an edit to a description starts no run).
+
+What it cannot tell:
+
+- **Whether the test states the fact.** For the play, any test that fails on
+  the base passes it: one that only calls a new function is red there. For what
+  is shown and heard, any changed test passes it, an empty one too. What a test
+  holds is still found by breaking the line it is there for.
+- **Whether the reason is a good one.** `Unchecked: no time` passes, on purpose:
+  the reason is then written where the owner sees it, in the description and in
+  the job's summary, and not left unsaid.
+- **Whether a trace run was added.** A run taken out of the list changes the
+  list too.
+- **Anything about another title.** A change to the play that is called a
+  `chore`, or has no type at all, is asked nothing here.
+- **What a line is.** It goes by path, so a comment changed in a file of the
+  play is a change to the play.
+
 ## Rules with no check yet
 
-These live in prose only, so they are the ones most likely to be broken.
-
-| Rule | Where it should go |
-|---|---|
-| A changed mechanic comes with a test that states the real-court fact | Review, helped by the "test first" rule |
-
-When one of these gets a check, move it up this page.
+A rule that lives in prose only is the one most likely to be broken. List it
+here with the layer it should move to, and move it up this page when it gets a
+check. The last one listed, that a changed mechanic comes with a test that
+states the real-court fact, is held by the gate above as far as a check can
+hold it.
