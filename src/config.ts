@@ -400,6 +400,18 @@ export const PLAYER = {
    */
   airTurnMax: 0.35,
   airTurnRate: 4,
+  /**
+   * The walk back between reps: a drill sends the player's athlete back to its spot at a jog, with
+   * no cut (the rep reset used to cut the screen to black: playtest, 142263c, 2026-11-02). It is on
+   * the spot within `near` m. A player who takes the stick walks themselves, and the game lets go
+   * once they are within `nearSteered` m. One not back after `maxT` s is put on the spot (the
+   * screen dips, it does not cut). One who steered is never put there: `giveUp` s after `maxT`
+   * the game stops waiting where they stand. The jog gives way while the body is being moved by
+   * anything else (a move command above `idle`), slows over the last `ease` m and is a sprint
+   * from more than `sprintFrom` m out. All seven tuned by play in that commit, with no measurement
+   * recorded: a drill may give its own `maxT`.
+   */
+  walkBack: { maxT: 2.6, near: 0.1, nearSteered: 0.9, giveUp: 2, idle: 0.05, ease: 0.6, sprintFrom: 2.5 },
 };
 
 export const TIMING = {
@@ -898,6 +910,13 @@ export const SERVE_DRILL = {
 export const ASSIST = {
   /** 0..1 default aim assist strength */
   aim: 0.55,
+  /**
+   * The aim assist of an athlete nobody plays, for their attack and for their set: the reach it
+   * adds and the mid-air nudge are theirs at this strength whatever the player's settings say.
+   * A number of the play, not a setting. Tuned by play, first seen in 9dee160 (2026-11-02), with
+   * no reason recorded.
+   */
+  ai: 0.3,
   /** max horizontal mid-air nudge (m/s) at assist 1 */
   airMagnet: 1.2,
   /** reach bonus (m) at assist 1 */

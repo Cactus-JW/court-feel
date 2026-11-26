@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COURT, type SetLevel } from '../config';
+import { ASSIST, COURT, type SetLevel } from '../config';
 import { Rng } from '../core/mathx';
 import type { BallEnv, CollisionEvent } from '../physics/ball';
 import type { Athlete } from './athlete';
@@ -17,15 +17,21 @@ import type { SetPick } from './setterCalls';
  * camera's, how much the aim is helped is a setting.
  */
 export interface SimulationHooks {
-  /** how much this athlete's aim is helped (0..1) */
+  /** how much this player's aim is helped (0..1). Asked only of an athlete a player plays: an AI player's is `ASSIST.ai` */
   aimAssist(a: Athlete): number;
-  /** how much this athlete's set is helped (0..1); their aim assist when not given */
+  /** how much this player's set is helped (0..1); their aim assist when not given */
   setAssist?(a: Athlete): number;
   /** the player sets by feel, with no timing cues (a setting): their set's windows are wider */
   setByFeel?(): boolean;
   /** where this athlete is aiming on the floor */
   aimTargetFor(a: Athlete, out: THREE.Vector3): THREE.Vector3;
-  /** a touch was resolved */
+  /**
+   * A touch was resolved, and nothing has acted on it yet: the judge is not armed and the drill has
+   * not heard. What has to be shown before the drill's own words goes here (the grade, ahead of the
+   * drill's banner).
+   */
+  touched?(ev: ContactEvent): void;
+  /** a touch was resolved: a clean one has armed the judge, and the drill has heard of it */
   contact(ev: ContactEvent): void;
   /** a touch a brain made without the contact system (the AI setter's set) */
   aiContact(a: Athlete, kind: TouchKind, speed: number): void;
@@ -37,19 +43,21 @@ export interface SimulationHooks {
   outcome(o: Outcome): void;
   /** how hard the player's set is to time (a setting; Easy without one) */
   setLevel?(): SetLevel;
-  /** before the athletes move: the player's body goes up for a set by itself (Settings: Auto jump set) */
-  userSetJump?(): void;
 }
 
 /** the drill being played, as the simulation sees it */
 export interface SimDrill {
   step(dt: number): void;
+  /** a touch was resolved (a missed swing too). A clean one has armed the judge by now */
+  onContact?(ev: ContactEvent): void;
   onOutcome(o: Outcome): void;
   passTarget?(a: Athlete): { x: number; y: number; z: number; apex: number };
   setOptions?(a: Athlete): SetOption[];
   /** the hitter the player picked for this set, if any */
   setPick?(a: Athlete): SetPick | null;
   canServe?(a: Athlete): boolean;
+  /** the next ball is the player's to set (a pass is in the air for them): their seat takes the last steps onto it, and takes them up for it */
+  userSetsNext?(): boolean;
 }
 
 /**
@@ -81,11 +89,13 @@ export class Simulation implements AiHost {
         return sim.simTime;
       },
       env: this.env,
-      aimAssist: (a) => hooks.aimAssist(a),
-      setAssist: (a) => (hooks.setAssist ?? hooks.aimAssist)(a),
+      // a player's is a setting. An athlete nobody plays has the play's own number: `isUser`, not a
+      // seat, since a drill can hand the player's athlete to a brain (the Mini Rally under `autoUser`)
+      aimAssist: (a) => (a.isUser ? hooks.aimAssist(a) : ASSIST.ai),
+      setAssist: (a) => (a.isUser ? (hooks.setAssist ?? hooks.aimAssist)(a) : ASSIST.ai),
       setByFeel: () => hooks.setByFeel?.() ?? false,
       aimTargetFor: (a, out) => hooks.aimTargetFor(a, out),
-      emitContact: (ev) => hooks.contact(ev),
+      emitContact: (ev) => this.touched(ev),
       rand: () => this.rng.next(),
       passTarget: (a) => this.drill?.passTarget?.(a) ?? defaultPassTarget(a),
       setOptions: (a) => this.drill?.setOptions?.(a) ?? defaultSetOptions(a),
@@ -126,15 +136,28 @@ export class Simulation implements AiHost {
     this.brains.clear();
   }
 
+  /**
+   * A touch was resolved. A clean one puts the rally in the judge's hands, then the drill hears of
+   * it, then whoever runs the game: nobody who builds a simulation has to remember to do either.
+   * A missed swing, or a touch the ball did not leave (a lift), arms nothing.
+   */
+  private touched(ev: ContactEvent): void {
+    this.hooks.touched?.(ev);
+    if (ev.grade !== 'Miss' && ev.speed > 0) this.judge.arm(this.ball);
+    this.drill?.onContact?.(ev);
+    this.hooks.contact(ev);
+  }
+
   onAiContact(a: Athlete, kind: TouchKind, speed: number): void {
     this.hooks.aiContact(a, kind, speed);
   }
 
-  /** one fixed step: brains, athletes, the player's actions, contacts, the ball, the judge, the drill, in that order */
+  /** one fixed step: brains, each player's seat (the auto jump set), athletes, the players' actions, contacts, the ball, the judge, the drill, in that order */
   step(dt: number): void {
     this.simTime += dt;
     for (const [, b] of this.brains) b.step(dt, this);
-    this.hooks.userSetJump?.();
+    // each player's arms get ready, and their body goes up for a set by itself (Auto jump set)
+    for (const seat of this.seats) seat.beforeStep();
     // assist magnet for a player's mid-air drift
     for (const seat of this.seats) this.contact.magnet(seat.athlete);
     for (const a of this.athletes) a.step(dt, this.simTime);

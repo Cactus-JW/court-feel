@@ -4,7 +4,7 @@ import { Athlete } from '../src/game/athlete';
 import type { ContactEvent } from '../src/game/contact';
 import { takeKey } from '../src/game/intent';
 import { NO_MARKERS } from '../src/game/modes/markers';
-import type { DrillHost, DrillHud, Mode, ModeId } from '../src/game/modes/mode';
+import type { DrillHost, DrillHud, ModeId } from '../src/game/modes/mode';
 import { createMode } from '../src/game/modes/registry';
 import { Simulation } from '../src/game/simulation';
 import { NO_HOOKS } from './simHooks';
@@ -48,25 +48,24 @@ const NO_LESSON: DrillHost['tutorial'] = {
 /**
  * A whole game with nobody watching: a real simulation, a real drill and one player in seat 0,
  * with no renderer, no DOM, no HUD and no camera. It is what `Game` is to a drill (`DrillHost`),
- * cut down to what the play needs. The player's hands do nothing unless a test feeds the seat.
+ * cut down to what the play needs. The player has the settings a new player has (`settings`: the
+ * assists are on), and their hands do nothing: the seat plays the intent it holds every frame, which
+ * is nothing held and a look that stays where the drill last turned it. A test that wants hands
+ * changes what the seat holds (`seat.intent`).
  */
 export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
   const said: string[] = [];
   const touches: string[] = [];
   const outcomes: string[] = [];
-  let mode: Mode | null = null;
-  let walkBack: { x: number; z: number; yaw: number } | null = null;
 
+  const settings: Settings = { ...DEFAULT_SETTINGS };
   const sim = new Simulation({
     ...NO_HOOKS,
-    aimAssist: (a) => (a.isUser ? DEFAULT_SETTINGS.aimAssist : 0.3),
+    aimAssist: () => settings.aimAssist,
+    setAssist: () => settings.setAimAssist,
     aimTargetFor: (a, out) => (a.isUser ? out.set(a.pos.x, 0, -a.side * 6) : out.copy(a.aiAim)),
-    contact: (ev: ContactEvent) => {
-      // as the game does: a clean touch arms the judge, and the drill hears of every touch
-      if (ev.grade !== 'Miss' && ev.speed > 0) sim.judge.arm(sim.ball);
-      touches.push(`${sim.simTime.toFixed(4)} ${ev.athlete.role}${ev.athlete.side === 1 ? 'H' : 'A'} ${ev.kind} ${ev.grade}`);
-      mode?.onContact(ev);
-    },
+    contact: (ev: ContactEvent) =>
+      touches.push(`${sim.simTime.toFixed(4)} ${ev.athlete.role}${ev.athlete.side === 1 ? 'H' : 'A'} ${ev.kind} ${ev.grade}`),
     aiContact: (a, kind) => touches.push(`${sim.simTime.toFixed(4)} ${a.role}${a.side === 1 ? 'H' : 'A'} ${kind} ai`),
     outcome: (o) => outcomes.push(`${sim.simTime.toFixed(4)} ${o.kind} ${o.side}`),
   });
@@ -74,8 +73,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
   const me = new Athlete(pos, 1);
   me.place(-3.2, 4.5, 0);
   sim.athletes.push(me);
-  const seat = sim.addSeat(me);
-  const settings: Settings = { ...DEFAULT_SETTINGS };
+  const seat = sim.addSeat(me, { autoJumpSet: () => settings.autoJumpSet });
 
   const host: DrillHost = {
     get simTime() {
@@ -118,18 +116,10 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
       seat.serveKind = kind;
     },
     autoUser: false,
-    placeUser: (x, z, yaw) => {
-      walkBack = null;
-      seat.athlete.place(x, z, yaw);
-      seat.intent.yaw = yaw;
-      seat.controller.clear();
-    },
-    // nobody is steering: the walk back between reps is taken at once
-    returnUser: (x, z, yaw) => {
-      walkBack = { x, z, yaw };
-    },
+    placeUser: (x, z, yaw) => seat.place(x, z, yaw),
+    returnUser: (x, z, yaw, maxT) => seat.walkTo(x, z, yaw, maxT),
     get userReturning() {
-      return walkBack !== null;
+      return seat.walking;
     },
     wheelOpen: false,
     tutorial: NO_LESSON,
@@ -142,7 +132,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     fx: { replay: { contact: new THREE.Vector3() } },
   };
 
-  mode = createMode(id, host, pos);
+  const mode = createMode(id, host, pos);
   sim.drill = mode;
   mode.setup();
 
@@ -154,14 +144,11 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     said,
     touches,
     outcomes,
-    /** play one frame: the walk back is taken, the drill's frame runs, and the simulation steps twice (120 Hz under 60 fps) */
+    /** play one frame: the seat plays the intent it holds (and walks its player back between reps), the simulation steps twice (120 Hz under 60 fps) and the drill's frame runs */
     frame(): void {
-      if (walkBack) {
-        const to = walkBack;
-        host.placeUser(to.x, to.z, to.yaw);
-      }
+      seat.frame(1 / 60);
       for (let i = 0; i < 2; i++) sim.step(1 / 120);
-      mode!.frame(1 / 60);
+      mode.frame(1 / 60);
     },
   };
 }
