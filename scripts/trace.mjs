@@ -21,8 +21,10 @@
 // Then the runs with a person's keys (`KEY_RUNS`). An autopilot says where its feet go outright and
 // is never late, so what the game does for a person never runs in a drill it plays: the last steps
 // onto a set, the jump set, the walk back between reps when the player jumps, takes the stick or
-// is not back in time. These runs have no autopilot. Real keys are pressed in `Input`, by habits
-// (what a player does about what is on the screen), scripts and dice of the run's own, in the
+// is not back in time. These runs have no autopilot. Real keys are pressed in `Input`, and the
+// mouse moved there, by habits (what a player does about what is on the screen: two runs look away
+// before a walk back runs out of time, so where it leaves them looking is held), scripts and dice
+// of the run's own, in the
 // Setter Drill, the Mini Rally, the other drills and the four lessons, and the start screen's demo
 // is played from the moment its page loads. They share a page of their own, and after every frame
 // the simulation, the player's move command, the walk back, the camera and every call the HUD gets
@@ -42,7 +44,9 @@
 // (#108). Everything before this passes on that build, and this does not.
 //
 // What it does not cover: the menus, touch input, effects and sound, and of the rules for a person
-// the two no key can reach (docs/verification.md names them). Of the picture itself it sees
+// the two no key can reach (docs/verification.md names them). First person is never played: every
+// pass sets the camera to third person, so what a placement does to the first-person view (where a
+// walk back out of time leaves the eye) is not held. Of the picture itself it sees
 // that one frame of one drill, and only whether it is the same every time it is painted: not
 // whether it is the right picture, not any other drill or moment, and not whether two pages, two
 // machines or two builds paint the same one. Two pages do not: the sparks are placed by
@@ -127,8 +131,9 @@ const LESSON_KEYS = [
  * runs have no autopilot. Real keys go down and come up in `Input`, as a keyboard's do, and three
  * things press them (`keysOne`):
  *   `habits`  what a player does about what is on the screen: runs off their spot, keeps jumping
- *             while they are walked back, runs under a ball that is theirs and sets it. A habit
- *             gets to the rule it is there for however the drill's timing changes.
+ *             while they are walked back, looks away (the one habit that moves the mouse), runs
+ *             under a ball that is theirs and sets it. A habit gets to the rule it is there for
+ *             however the drill's timing changes.
  *   `script`  keys on fixed frames, in parts played one after the other: a lesson is taken this way.
  *   `keys`    dice of the run's own (never the simulation's), for the keys nobody thought of:
  *             [key, the chance a frame that it goes down, the chance a frame that it comes up].
@@ -313,6 +318,27 @@ const KEY_RUNS = [
     reach: {
       'frames of a walk back in the rep the coach leads': 1,
       'frames of a walk back with the lesson slowing or holding the clock': 1,
+    },
+  },
+  // ---- where a walk back that runs out of time leaves the player looking: on the spot's facing, wherever they had turned
+  {
+    name: 'spike/OH/runs off, keeps jumping and looks away when walked back',
+    whole: true,
+    mode: 'spike',
+    pos: 'OH',
+    habits: ['runs off', 'keeps jumping when walked back', 'looks away when walked back'],
+    reach: { 'walk backs out of time that turned the look back from where the player had turned it': 1 },
+  },
+  // the Setter Drill's spot is the one that does not face down the court (the setter stands side on to the net)
+  {
+    name: 'setter/S/runs off, keeps jumping and looks away when walked back',
+    whole: true,
+    mode: 'setter',
+    pos: 'S',
+    habits: ['runs off', 'keeps jumping when walked back', 'looks away when walked back'],
+    reach: {
+      'walk backs out of time that turned the look back from where the player had turned it': 1,
+      'walk backs out of time that left the player looking across the court': 1,
     },
   },
 ].map((run) => ({ seconds: KEYS_SECONDS, seed: SEED, reach: {}, ...run, name: `keys/${run.name}` }));
@@ -847,6 +873,11 @@ function keysOne({
     'keeps jumping when walked back': (hold, f) => {
       if (sees.walked && f % 4 < 2) hold('Space');
     },
+    // walked back, they look away to their right: the mouse moves, as it does under a hand (`Input.mouseDX`),
+    // for most of a second. The camera is no longer where the spot faces when the walk back runs out
+    'looks away when walked back': (_hold, _f, mouse) => {
+      if (sees.walked >= 5 && sees.walked < 45) mouse(12);
+    },
     // walked back, they take the stick for a moment: from then on the walk back is theirs
     'takes the stick when walked back': (hold) => {
       if (sees.walked >= 20 && sees.walked < 30) hold('KeyA');
@@ -890,6 +921,8 @@ function keysOne({
     'frames of a walk back with a move key down': 0,
     'walk backs the game let go of with the player steering': 0,
     'walk backs that ended with the screen dipping': 0,
+    'walk backs out of time that turned the look back from where the player had turned it': 0,
+    'walk backs out of time that left the player looking across the court': 0,
     'frames the feet stepped to a set with no move key down': 0,
     'frames off the floor with the ball theirs to set': 0,
     'jump sets the body took by itself': 0,
@@ -902,6 +935,8 @@ function keysOne({
     'frames the lesson held the line': 0,
     'contacts and outcomes': 0,
   };
+  /** a look this far (rad) from another is somewhere else: the mouse moves it a tenth of that a frame */
+  const LOOK_TURNED = 0.2;
   /** the walk back in progress: was a move key down in it, and how many dips there were when it began */
   let walk = null;
   let spaceAt = -1e9;
@@ -930,7 +965,12 @@ function keysOne({
       }
     }
     const want = new Set([...rolled, ...scripted]);
-    for (const h of habits ?? []) HABITS[h]((code) => want.add(code), f);
+    for (const h of habits ?? [])
+      HABITS[h](
+        (code) => want.add(code),
+        f,
+        (dx) => (g.input.mouseDX += dx),
+      );
     for (const code of [...down]) {
       if (want.has(code)) continue;
       g.input.up(code);
@@ -947,6 +987,7 @@ function keysOne({
     const me0 = g.me;
     const was = me0.state;
     const t0 = g.simTime;
+    const looked = g.rig.yaw;
     if (whole) g.play(1 / 60);
     else g.simulate(1 / 60);
 
@@ -966,8 +1007,14 @@ function keysOne({
       if (inLesson && g.tutorial.step === 1) reach['frames of a walk back in the rep the coach leads']++;
       if (inLesson && g.simTime - t0 < 1 / 60 - 1e-9) reach['frames of a walk back with the lesson slowing or holding the clock']++;
     } else if (walk) {
-      if ((counts.dip ?? 0) > walk.dips) reach['walk backs that ended with the screen dipping']++;
-      else if (walk.steered) reach['walk backs the game let go of with the player steering']++;
+      if ((counts.dip ?? 0) > walk.dips) {
+        reach['walk backs that ended with the screen dipping']++;
+        // the camera is put where the spot faces: was that a turn, and is it a facing other than down the court (0)?
+        if (Math.abs(g.rig.yaw - looked) > LOOK_TURNED)
+          reach['walk backs out of time that turned the look back from where the player had turned it']++;
+        if (Math.abs(Math.sin(g.rig.yaw)) > Math.sin(LOOK_TURNED))
+          reach['walk backs out of time that left the player looking across the court']++;
+      } else if (walk.steered) reach['walk backs the game let go of with the player steering']++;
       walk = null;
     }
     if (!g.userReturning && !steering && pushed) {

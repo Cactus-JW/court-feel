@@ -1254,12 +1254,14 @@ branch it goes into and fails when the known lists grow
   with a person's keys (`TRACE_KEYS_SECONDS`, 45 each, the lessons 75). An
   autopilot says where its feet go outright and is never late, so what the game
   does for a person never runs in a drill it plays. These runs have no
-  autopilot: real keys are pressed by habits (run off the spot, keep jumping
-  while walked back, run under a ball and set it), scripts and seeded dice, in
+  autopilot: real keys are pressed and the mouse moved by habits (run off the
+  spot, keep jumping while walked back, look away, run under a ball and set
+  it), scripts and seeded dice, in
   the Setter Drill, the Mini Rally, the other drills and the lessons, and the
   start screen's demo is played from the moment its page loads. They hold the
   last steps onto a set, the jump set and the walk back between reps: its dip
-  of the screen, the stick taken back, a jump in the middle of it. Each run
+  of the screen, where it leaves the player looking, the stick taken back, a
+  jump in the middle of it. They play in third person only. Each run
   counts what it reached and **fails** when it no longer reaches what it is
   there for. Last, every drill is
   played again from the hands the game logged the first time, with no autopilot

@@ -112,8 +112,8 @@ Ask these in order and stop at the first yes.
   plays runs with no autopilot (`KEY_RUNS` in `scripts/trace.mjs`): real keys go
   down and come up in `Input`, pressed by habits (what a player does about what
   is on the screen: runs off their spot, keeps jumping while they are walked
-  back, runs under a ball that is theirs and sets it), by scripts and by dice
-  of the run's own. They play the Setter Drill, the Mini Rally, the other
+  back, looks away with the mouse, runs under a ball that is theirs and sets
+  it), by scripts and by dice of the run's own. They play the Setter Drill, the Mini Rally, the other
   drills, the four lessons with the rep started again part-way, and the start
   screen's demo from the moment its page loads. They share a page of their own,
   and the simulation, the player's move command, the walk back, the camera and
@@ -126,7 +126,10 @@ Ask these in order and stop at the first yes.
   getting to its rule would be the same on two builds for the wrong reason.
   That count fails on any pull request, so a few of them are plain facts too:
   no step is taken for the player at Set aim assist 0, the body stays down with
-  Auto jump set off, the screen dips when a walk back runs out of time.
+  Auto jump set off, the screen dips when a walk back runs out of time, and a
+  player who had looked away is then left looking where their spot faces (in
+  the Setter Drill that is across the court, the one spot that does not face
+  down it).
 - **One painted frame** (the last pass of both). The Spike Drill with a double
   block on is stopped three seconds in, and that one frame is painted eight
   times in a page of its own. Nothing moves between the paints, so it has to be
@@ -206,6 +209,13 @@ Say these out loud in a pull request when they apply.
   move key is the only thing that moves them, and a move key already makes the
   walk back the player's), and every seat being stepped (the app has one seat).
   A unit test on a bare seat is their place.
+- **First person is never played.** Every pass of the trace sets the camera to
+  third person. Where a walk back that runs out of time leaves the player
+  looking is held in third person (two runs look away first). What the same
+  placement does to the first-person view (the eye is started again from the
+  new spot) is held by nothing: a refactor that drops it prints `same play`.
+  Until a run plays in first person, that is a look by a person: look away,
+  get put back on the spot, in first person.
 - **The trace sees one painted frame**, of the Spike Drill with a block on, and
   only that eight paints of it are one picture. It does not say the picture is
   the right one, and no other drill or moment is painted.
