@@ -46,7 +46,7 @@ and the simulation nothing of the display's or the app's.
   after the files it reads, and, if it is the display's or the app's, a line
   in the gate's list (`CONFIG_SHOWN` in `scripts/brings-a-check.rule.mjs`),
   which is also the list of what the simulation may not read.
-- Three files of the simulation still read a display or app number. They are
-  listed by name in `tests/architecture.known.ts`, and the list only gets
-  shorter.
+- The simulation's reads of a display or app number that were there when the
+  rule arrived are listed by name in `tests/architecture.known.ts`, and the
+  list only gets shorter.
 - `drills.ts` is not split by drill without a new record.

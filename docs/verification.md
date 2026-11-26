@@ -102,8 +102,8 @@ Ask these in order and stop at the first yes.
   of it, when physics reads more of config than the court and the ball, when
   the simulation, the brains or a drill reads a number of the display or the
   app, and when a config file reads a clock, rolls dice or touches the page.
-  Three files of the simulation still read a display or app number: they are
-  on a known list that only gets shorter. It goes by the names a file imports
+  The files of the simulation that still read one are on a known list that
+  only gets shorter. It goes by the names a file imports
   from config, so it does not see a number handed on by the code that read it:
   a drill reads the app's settings through its host (`DrillHost.settings`),
   and the test sees that as one import of the type.
