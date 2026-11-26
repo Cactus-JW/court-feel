@@ -46,6 +46,7 @@ env:
   # pull request each is taken from the commit it goes into, where that commit has it: a change is
   # judged by rules it did not write. One that is new in a pull request judges that pull request.
   JUDGES: >-
+    scripts/rules-from-base.mjs
     scripts/brings-a-check.mjs scripts/brings-a-check.rule.mjs scripts/red-on-base.mjs
     scripts/pull-request.mjs scripts/pull-request.rule.mjs
     scripts/title-has-a-type.mjs scripts/same-play-as-base.mjs
@@ -74,19 +75,6 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
-      - name: The architecture rules as they are on the branch this goes into
-        # a change is judged by rules it did not write, and the known lists only get shorter (scripts/rules-from-base.mjs)
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
-          # the script that does the judging is the base branch's too, where it has one
-          if git cat-file -e FETCH_HEAD:scripts/rules-from-base.mjs 2>/dev/null; then
-            git show FETCH_HEAD:scripts/rules-from-base.mjs > scripts/rules-from-base.mjs
-          fi
-          node scripts/rules-from-base.mjs FETCH_HEAD
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          ALLOW_KNOWN_GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'known-list-may-grow') && '1' || '0' }}
       - name: The scripts that judge this pull request are the ones on the branch it goes into
         # after the unit tests, which test the scripts as this pull request has them
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
@@ -94,6 +82,14 @@ jobs:
           for script in $JUDGES; do
             if git cat-file -e "HEAD^1:$script" 2>/dev/null; then git checkout -q HEAD^1 -- "$script"; fi
           done
+      - name: The architecture rules as they are on the branch this goes into
+        # A change is judged by rules it did not write, and the known lists only get shorter (scripts/rules-from-base.mjs).
+        # The rules are those of HEAD^1, the commit this checkout was merged into, and not of the branch as it is
+        # when the step runs: when main moves while a run is under way, the newer rules would judge the older merge.
+        if: github.event_name == 'pull_request'
+        run: node scripts/rules-from-base.mjs HEAD^1
+        env:
+          ALLOW_KNOWN_GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'known-list-may-grow') && '1' || '0' }}
       - name: The title starts with its type
         # feat, fix, perf, refactor, test, docs, ci or chore (AGENTS.md): the two steps that treat one kind of
         # change differently from another read the kind off the title (scripts/title-has-a-type.mjs)
