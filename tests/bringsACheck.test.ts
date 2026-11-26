@@ -213,6 +213,28 @@ describe('a feat or a fix that touches the play brings a check that is red on th
     expect(feat([PLAY], { body }).failures).toHaveLength(1);
   });
 
+  it('an "Unchecked:" line under a subheading of "What no check holds" passes: it is in that section', () => {
+    const body = [
+      '## How it is held',
+      'By nothing yet.',
+      '## What no check holds',
+      '### On a phone',
+      '- Unchecked: the feel of the new window, with thumbs.',
+    ].join('\n');
+    const verdict = feat([PLAY], { body });
+    expect(verdict.failures).toEqual([]);
+    expect(verdict.unchecked).toEqual(['the feel of the new window, with thumbs.']);
+  });
+
+  it('an "Unchecked:" line after the section has ended, under the next heading of its level or higher, does not pass', () => {
+    const lines = ['## How it is held', 'By nothing yet.', '## What no check holds', '### On a phone', 'Nothing.'];
+    for (const next of ['## Checklist', '# Notes']) {
+      const { failures } = feat([PLAY], { body: [...lines, next, 'Unchecked: the feel.'].join('\n') });
+      expect(failures, next).toHaveLength(1);
+      expect(failures[0], next).toMatch(/move it under "## What no check holds"/);
+    }
+  });
+
   it('an "Unchecked:" line under another heading does not pass, and the failure says to move it', () => {
     const body = described('Nothing.').replace('The block reads the hands.', 'Unchecked: the feel.');
     const { failures } = feat([PLAY], { body });
@@ -334,6 +356,27 @@ describe('a feat or a fix says how it is held and what no check holds', () => {
   it('fails on a description that is empty or was never written', () => {
     expect(held('').failures).toHaveLength(2);
     expect(decide({ title: 'fix: the whistle', paths: [], body: null }).failures).toHaveLength(2);
+  });
+
+  it('a section runs on through its subheadings: what stands under one is in the section', () => {
+    const body = [
+      '## How it is held',
+      '### Unit tests',
+      '- tests/a.test.ts holds the angle',
+      '## What no check holds',
+      '#### On a phone',
+      'The feel, with thumbs.',
+    ].join('\n');
+    expect(held(body).failures).toEqual([]);
+  });
+
+  it('a section ends at the next heading of its own level or higher: what stands under that one is not in it', () => {
+    const { failures } = held(
+      ['### How it is held', '## Why', 'It was wrong.', '### What no check holds', '### Checklist', '- done'].join('\n'),
+    );
+    expect(failures).toHaveLength(2);
+    expect(failures[0]).toMatch(/"## How it is held" still holds only its placeholder comment/);
+    expect(failures[1]).toMatch(/"## What no check holds" still holds only its placeholder comment/);
   });
 
   it('a heading is found whatever its level or case', () => {

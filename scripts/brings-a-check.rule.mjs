@@ -184,7 +184,11 @@ export function changedSections(before, after) {
 
 const UNCHECKED = /^\s*(?:[-*+]\s+)?[*_]*Unchecked:[*_]*\s*(.*?)\s*$/i;
 
-/** the description's sections by heading (lower case), with the comments taken out, and its `Unchecked:` lines */
+/**
+ * The description's sections by heading (lower case), with the comments taken out, and its
+ * `Unchecked:` lines. A section runs to the next heading of its own level or a higher one, so what
+ * stands under a subheading is in the section too ("## How it is held", then "### Unit tests").
+ */
 function described(body) {
   const text = (body ?? '').replace(/\r\n?/g, '\n').replace(/<!--[\s\S]*?(?:-->|$)/g, '');
   const held = new Map();
@@ -192,19 +196,23 @@ function described(body) {
   const unchecked = [];
   /** whether an `Unchecked:` line with a reason stands anywhere else */
   let stray = false;
-  let heading = null;
+  /** the headings a line stands under, outermost first: `[level, name]` */
+  let open = [];
   for (const line of text.split('\n')) {
-    const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+    const h = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
     if (h) {
-      heading = h[1].toLowerCase();
-      if (!held.has(heading)) held.set(heading, '');
+      const level = h[1].length;
+      const name = h[2].toLowerCase();
+      // a heading ends every section of its own level or lower
+      open = [...open.filter(([above]) => above < level), [level, name]];
+      if (!held.has(name)) held.set(name, '');
       continue;
     }
-    if (heading !== null) held.set(heading, `${held.get(heading)}${line}\n`);
+    for (const [, name] of open) held.set(name, `${held.get(name)}${line}\n`);
     const reason = UNCHECKED.exec(line)?.[1];
     // `Unchecked: <reason>` is the template's own placeholder, not a reason
     if (!reason || /^<[^>]*>$/.test(reason)) continue;
-    if (heading === NOT_HELD.toLowerCase()) unchecked.push(reason);
+    if (open.some(([, name]) => name === NOT_HELD.toLowerCase())) unchecked.push(reason);
     else stray = true;
   }
   return { held, unchecked, stray };
