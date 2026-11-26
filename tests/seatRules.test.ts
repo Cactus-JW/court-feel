@@ -19,14 +19,15 @@ const DOWN_THE_NET = Math.PI / 2;
 /**
  * A setter with a seat, and a pass on its way to the setter's spot. The setter stands `off` m short
  * of where their feet have to be for it. `setAssist` is the Set aim assist setting, `theirs`
- * whether the drill says the ball is theirs to set.
+ * whether the drill says the ball is theirs to set, `autoJumpSet` the Auto jump set setting (a
+ * host with no answer when not given).
  */
-function aSetterAndAPass(o: { off: number; setAssist: number; theirs?: boolean }) {
+function aSetterAndAPass(o: { off: number; setAssist: number; theirs?: boolean; autoJumpSet?: boolean }) {
   const sim = new Simulation({ ...NO_HOOKS, setAssist: () => o.setAssist });
   const setter = new Athlete('S', 1);
   setter.place(SETTER_SPOT.x, SETTER_SPOT.z, DOWN_THE_NET);
   sim.athletes.push(setter);
-  const seat = sim.addSeat(setter);
+  const seat = sim.addSeat(setter, o.autoJumpSet === undefined ? {} : { autoJumpSet: () => o.autoJumpSet! });
   sim.drill = { step: () => {}, onOutcome: () => {}, userSetsNext: () => o.theirs ?? true };
   const from = { x: -3, y: 1, z: 6 };
   const v = { x: 0, y: 0, z: 0 };
@@ -38,12 +39,17 @@ function aSetterAndAPass(o: { off: number; setAssist: number; theirs?: boolean }
   const arrives = sim.contact.setCatch(setter)!.t;
   setter.place(spot.x - o.off, spot.z, DOWN_THE_NET);
   const fromSpot = (): number => Math.hypot(setter.pos.x - spot.x, setter.pos.z - spot.z);
-  /** play until the ball reaches the hands, the seat hearing `hands` every frame */
-  const untilTheBallArrives = (hands: () => Intent): void => {
+  /** play until the ball reaches the hands, the seat hearing `hands` every frame. Returns how high the feet got (m) */
+  const untilTheBallArrives = (hands: () => Intent): number => {
+    let peak = 0;
     while (sim.simTime < arrives - STEP / 2) {
       seat.hear(FRAME, hands());
-      for (let i = 0; i < STEPS_A_FRAME; i++) sim.step(STEP);
+      for (let i = 0; i < STEPS_A_FRAME; i++) {
+        sim.step(STEP);
+        peak = Math.max(peak, setter.pos.y);
+      }
     }
+    return peak;
   };
   return { sim, setter, seat, fromSpot, untilTheBallArrives };
 }
@@ -216,5 +222,32 @@ describe('the walk back between reps is the seat’s', () => {
     expect(Math.hypot(other.pos.x - 2, other.pos.z + 8)).toBeLessThan(W.near);
     expect(seat.athlete.pos.x).toBeCloseTo(at.x, 9);
     expect(seat.athlete.pos.z).toBeCloseTo(at.z, 9);
+  });
+});
+
+describe('the auto jump set is the seat’s', () => {
+  // A setter meets a pass in system at the top of a small jump: higher and sooner than off the
+  // floor. With Auto jump set on the body goes up for it by itself and the hands stay the player's.
+  it('with Auto jump set on, a setter on the spot leaves the floor for a pass in system, hands off', () => {
+    const { setter, untilTheBallArrives } = aSetterAndAPass({ off: 0, setAssist: ASSIST.aim, autoJumpSet: true });
+    const peak = untilTheBallArrives(handsOff);
+    expect(peak).toBeGreaterThan(0.1);
+    // the arms went up for a set, not a swing
+    expect(setter.airIntent).toBe('set');
+  });
+
+  it('with it off they stay on the floor, and so does a seat whose host has no answer', () => {
+    const off = aSetterAndAPass({ off: 0, setAssist: ASSIST.aim, autoJumpSet: false });
+    expect(off.untilTheBallArrives(handsOff)).toBe(0);
+    const unasked = aSetterAndAPass({ off: 0, setAssist: ASSIST.aim });
+    expect(unasked.untilTheBallArrives(handsOff)).toBe(0);
+    // the arms are ready for the set all the same: a jump of their own (Space) would be a jump set
+    expect(off.setter.airIntent).toBe('set');
+  });
+
+  it('a ball that is not theirs to set leaves them down, their arms ready to attack', () => {
+    const { setter, untilTheBallArrives } = aSetterAndAPass({ off: 0, setAssist: ASSIST.aim, autoJumpSet: true, theirs: false });
+    expect(untilTheBallArrives(handsOff)).toBe(0);
+    expect(setter.airIntent).toBe('attack');
   });
 });

@@ -114,9 +114,18 @@ Ask these in order and stop at the first yes.
   and a real drill in Node, with no renderer, no DOM, no HUD and no camera
   (`tests/headlessGame.ts`), invariants checked at every step. It fails the
   moment a drill needs the browser to play, and it is where a test of a drill's
-  rules can now be written without faking the game.
+  rules can now be written without faking the game. The headless game keeps no
+  copy of a rule of the play: a clean touch arms the judge, an AI player has its
+  aim assist, and the player is walked back between reps, steps onto a set and
+  goes up for it, all by the simulation and the seat, with the settings a new
+  player has.
 - **Two players in one simulation** (`tests/seats.test.ts`): two seats, each
   handed its own intents, and the game replays from the log of both.
+- **What the game does for a player, on a bare seat** (`tests/seatRules.test.ts`):
+  the last steps onto a set, the walk back between reps and the auto jump set,
+  in a simulation with no app. The trace cannot see the set-step assist (every
+  autopilot turns it off) and sees a walk back's snap only if an autopilot is
+  late, so these tests are their proof.
 - **Property tests** (`tests/properties.test.ts`). A fact that must hold for
   every input, tried on hundreds of seeded ones. They are for the bugs nobody
   wrote a case for. The inputs are seeded, so the tests are as repeatable as any

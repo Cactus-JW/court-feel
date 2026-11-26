@@ -44,7 +44,6 @@ import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
 import type { Kit } from '../character/rig';
 import { wheelPlays } from '../game/playbook';
-import { autoSetJump } from '../game/setJump';
 import { aimTargetFromLook, ContactSystem, tossGroove, type ContactEvent, type IdealInfo, type SetPreview } from '../game/contact';
 import { SetGuide } from '../fx/setGuide';
 import { SetRing } from '../fx/setRing';
@@ -254,7 +253,6 @@ export class Game implements AiHost {
       floatBreak: (strength) => this.events.emit('floatBreak', { strength }),
       outcome: (o) => this.events.emit('outcome', o),
       setLevel: () => this.settings.setLevel,
-      userSetJump: () => this.userSetJump(),
     });
     this.venueSetting = settings.venue;
     setVenue(venueOverride ?? settings.venue);
@@ -324,6 +322,7 @@ export class Game implements AiHost {
         drive: (me) => this.tutorial.drive(me),
       },
       notePress: (err, contactT) => this.notePress(err, contactT),
+      autoJumpSet: () => this.settings.autoJumpSet,
       placed: (yaw, snapped) => this.userPlaced(yaw, snapped),
     });
     this.me.place(-3.2, 4.5, 0);
@@ -1115,20 +1114,6 @@ export class Game implements AiHost {
    */
   inputTime(): number {
     return this.simTime - 1 / SIM.hz + this.accum;
-  }
-
-  /**
-   * Your jump set (Settings: Auto jump set): a pass in system is yours to set, so your body goes
-   * up for it by itself, timed so the top of the jump is in the middle of the touch. The catch and
-   * the release stay yours. Off, or out of system, you set from the floor (or jump yourself: Space).
-   */
-  private userSetJump(): void {
-    const me = this.me;
-    const sets = !this.inMenu && !!this.mode?.userSetsNext?.();
-    me.jumpSets = sets && this.settings.autoJumpSet;
-    // what the arms get ready for in the air, chosen on the floor (a jump keeps what it went up for)
-    if (me.grounded) me.airIntent = sets ? 'set' : 'attack';
-    if (me.jumpSets) autoSetJump(me, this.contact.setCatch(me)?.jump ?? null, this.simTime);
   }
 
   fixedStep(dt: number): void {

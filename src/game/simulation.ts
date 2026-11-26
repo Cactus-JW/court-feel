@@ -43,8 +43,6 @@ export interface SimulationHooks {
   outcome(o: Outcome): void;
   /** how hard the player's set is to time (a setting; Easy without one) */
   setLevel?(): SetLevel;
-  /** before the athletes move: the player's body goes up for a set by itself (Settings: Auto jump set) */
-  userSetJump?(): void;
 }
 
 /** the drill being played, as the simulation sees it */
@@ -58,7 +56,7 @@ export interface SimDrill {
   /** the hitter the player picked for this set, if any */
   setPick?(a: Athlete): SetPick | null;
   canServe?(a: Athlete): boolean;
-  /** the next ball is the player's to set (a pass is in the air for them): their seat takes the last steps onto it */
+  /** the next ball is the player's to set (a pass is in the air for them): their seat takes the last steps onto it, and takes them up for it */
   userSetsNext?(): boolean;
 }
 
@@ -154,11 +152,12 @@ export class Simulation implements AiHost {
     this.hooks.aiContact(a, kind, speed);
   }
 
-  /** one fixed step: brains, athletes, the player's actions, contacts, the ball, the judge, the drill, in that order */
+  /** one fixed step: brains, each player's seat (the auto jump set), athletes, the players' actions, contacts, the ball, the judge, the drill, in that order */
   step(dt: number): void {
     this.simTime += dt;
     for (const [, b] of this.brains) b.step(dt, this);
-    this.hooks.userSetJump?.();
+    // each player's arms get ready, and their body goes up for a set by itself (Auto jump set)
+    for (const seat of this.seats) seat.beforeStep();
     // assist magnet for a player's mid-air drift
     for (const seat of this.seats) this.contact.magnet(seat.athlete);
     for (const a of this.athletes) a.step(dt, this.simTime);

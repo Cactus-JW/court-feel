@@ -73,7 +73,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
   const me = new Athlete(pos, 1);
   me.place(-3.2, 4.5, 0);
   sim.athletes.push(me);
-  const seat = sim.addSeat(me);
+  const seat = sim.addSeat(me, { autoJumpSet: () => settings.autoJumpSet });
 
   const host: DrillHost = {
     get simTime() {

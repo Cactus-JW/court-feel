@@ -3,7 +3,7 @@ import type { Athlete } from './athlete';
 import type { ContactSystem } from './contact';
 import type { Intent } from './intent';
 import { setStepAssist } from './setAssist';
-import { takeoffSpot } from './setJump';
+import { autoSetJump, takeoffSpot } from './setJump';
 import type { Tutorial } from './tutorial';
 import { UserActions } from './userActions';
 import { UserController } from './userController';
@@ -19,6 +19,8 @@ export interface SeatHost {
   tutorial?: Pick<Tutorial, 'ownsButtons' | 'quiet' | 'drive'>;
   /** a swing was released: how far from the ideal moment, and when it meets the ball (the debug overlay shows it) */
   notePress?(err: number, contactT: number): void;
+  /** the body goes up for a set by itself (Settings: Auto jump set). Off without an answer */
+  autoJumpSet?(): boolean;
   /**
    * The athlete was put on a spot, facing `yaw`: the camera turns with them. `snapped`: a walk back
    * that ran out of time (the screen dips), not a drill placing its player.
@@ -32,7 +34,11 @@ const NO_LESSON: Pick<Tutorial, 'ownsButtons' | 'quiet' | 'drive'> = { ownsButto
 export interface SeatSim {
   readonly simTime: number;
   readonly contact: ContactSystem;
-  /** the drill being played: it says when the next ball is this player's to set */
+  /**
+   * The drill being played: it says when the next ball is the player's to set. It answers for one
+   * player, as the drills have one: with a second seat it has to be asked about an athlete
+   * (docs/adr/0011, not built).
+   */
   readonly drill: { userSetsNext?(): boolean } | null;
 }
 
@@ -44,9 +50,9 @@ export interface SeatSim {
  * or a player on another machine (docs/adr/0011). Seat 0 is this machine's player.
  *
  * What the game does for a player is here too, written for this seat's athlete and this seat's
- * intent: the last steps onto a set and the walk back between reps (`frame`). The controller only
- * turns an intent into commands; these are the game acting for the player, so every seat has its
- * own.
+ * intent: the last steps onto a set and the walk back between reps (`frame`, once a frame), and
+ * the auto jump set (`beforeStep`, once a fixed step). The controller only turns an intent into
+ * commands; these are the game acting for the player, so every seat has its own.
  */
 export class Seat {
   readonly controller = new UserController();
@@ -125,6 +131,25 @@ export class Seat {
     // the lesson's together rep: the coach holds the player's line (what they hold decides whether time runs)
     this.lesson.drive(this.body);
     this.stepWalk(dt);
+  }
+
+  /**
+   * Before the athletes move in a fixed step: what the arms get ready for, and the player's jump
+   * set (Settings: Auto jump set). A pass in system is theirs to set, so their body goes up for it
+   * by itself, timed so the top of the jump is in the middle of the touch. The catch and the
+   * release stay theirs. Off, or out of system, they set from the floor (or jump themselves).
+   *
+   * Whether a ball is theirs to set is the drill's to say, and nothing else is asked: the game
+   * used to ask too whether a menu was up, but under a menu the only drill running is the start
+   * screen's demo, the Spike Drill, which never says so.
+   */
+  beforeStep(): void {
+    const me = this.body;
+    const sets = !!this.sim.drill?.userSetsNext?.();
+    me.jumpSets = sets && !!this.host.autoJumpSet?.();
+    // what the arms get ready for in the air, chosen on the floor (a jump keeps what it went up for)
+    if (me.grounded) me.airIntent = sets ? 'set' : 'attack';
+    if (me.jumpSets) autoSetJump(me, this.sim.contact.setCatch(me)?.jump ?? null, this.sim.simTime);
   }
 
   /** put the athlete on a spot, facing `yaw` (a teleport): their look turns with their body. Ends a walk back */

@@ -149,3 +149,27 @@ describe('Spike Drill: back to the start of the approach', () => {
     expect(game.sim.ball.active).toBe(true);
   });
 });
+
+describe('Setter Drill: the jump set', () => {
+  // a setter meets a pass in system at the top of a small jump. Auto jump set (on for a new player)
+  // takes the body up for it; with the setting off the setter sets from the floor unless they jump
+  /** how many times the setter left the floor in 40 seconds of the drill, hands off */
+  function hops(autoJumpSet: boolean): number {
+    const game = headlessGame('setter', 'S');
+    game.host.settings.autoJumpSet = autoJumpSet;
+    const me = game.seat.athlete;
+    let n = 0;
+    let up = false;
+    for (let f = 0; f < 40 * 60; f++) {
+      game.frame();
+      if (me.state === 'air' && !up) n++;
+      up = me.state === 'air';
+    }
+    return n;
+  }
+
+  it('with Auto jump set on, the setter’s body leaves the floor for a pass in system. With it off it stays down', () => {
+    expect(hops(true)).toBeGreaterThan(0);
+    expect(hops(false)).toBe(0);
+  });
+});
