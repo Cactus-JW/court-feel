@@ -6,6 +6,7 @@
 # An admin can still merge past it, which then takes a deliberate click.
 
 /tests/architecture.*          @LemonPhase
+/tests/verification.map.test.ts @LemonPhase
 /scripts/rules-from-base.mjs   @LemonPhase
 /scripts/brings-a-check.*      @LemonPhase
 /scripts/red-on-base.*         @LemonPhase

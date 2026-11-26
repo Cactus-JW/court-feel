@@ -58,6 +58,7 @@ Why the checks are arranged as they are, and where a new rule should live, is in
 - The pull request: for a change to the feel, say what was reported, the cause, the fix and how it was measured. That write-up lives in the pull request, not in a file.
 - `docs/screenshots/`: real frames only. Retake a shot when the moment it shows changes.
 - [docs/verification.md](docs/verification.md): when a check is added, moved or removed, or a rule gets a check it did not have.
+- `tests/verification.map.json`: when you add a drill, a serve, a lesson, a setting, a graphics level, a venue or a section of config, add its entry: the unit tests, trace runs and end-to-end checks that hold it, or `manual` and why no check can. `npm test` fails until it is there, and when a check an entry names is renamed or removed.
 
 ## Git
 

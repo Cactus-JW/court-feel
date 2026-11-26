@@ -101,6 +101,16 @@ Ask these in order and stop at the first yes.
   it has a name in `src/config/`. It does not move the ones already there:
   that is the work the count is the measure of.
 - **Unit tests that state a real-court fact**, in the test's name.
+- **The verification map** (`tests/verification.map.json`, held by
+  `tests/verification.map.test.ts`). For each drill and the position it is
+  played as, each serve, lesson, setting, graphics level and venue, and each
+  section of config, it names the unit tests, trace runs and end-to-end checks
+  that hold it, or says `manual` and why no check can. The test reads what
+  exists from the code and fails when something has no entry, and when an entry
+  names a check that is not there. So a new setting or drill cannot arrive
+  without saying what holds it, and what still needs a person is the map's
+  `manual` lines, counted and not remembered. What it cannot tell: whether a
+  check that is named holds the thing as well as the entry says.
 - **CI on every pull request.**
 
 ### 3. Verification
