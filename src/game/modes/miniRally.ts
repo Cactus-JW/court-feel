@@ -1,4 +1,4 @@
-import { AI } from '../../config';
+import { AI, MINI_RALLY } from '../../config';
 import { netYaw } from '../../ai/brain';
 import { serveAim } from '../../ai/server';
 import { PASSERS, SLOT_ROLE, SLOTS, TeamAI, USER_SLOT, type SetterRead } from '../../ai/team';
@@ -87,7 +87,7 @@ export class MiniRally extends Mode {
     this.home.playPool = wheelPlays;
     this.away.playsOn = true;
     const userSlot = USER_SLOT[this.position];
-    let seed = 50;
+    let seed: number = MINI_RALLY.cast.seed;
     for (const slot of SLOTS) {
       if (slot === userSlot) {
         if (g.autoUser) g.me.isUser = false;
@@ -125,7 +125,7 @@ export class MiniRally extends Mode {
       this.setterCalls.onAsk = (k) => askFast(g, g.me, this.hitters, this.setterCalls, k);
       this.setterCalls.canHold = (k) => holdForHigh(this.hitters, k);
     }
-    this.pickRing = g.markers.ring(0xffffff, 1.0);
+    this.pickRing = g.markers.ring(MINI_RALLY.ring.colour, MINI_RALLY.ring.size);
     this.pickRing.visible = false;
     g.hud.setTitle('Mini Rally · you are the ' + g.me.stats.name);
     this.plays = g.autoUser ? null : (SET_PLAYS[this.position] ?? null);
@@ -136,7 +136,7 @@ export class MiniRally extends Mode {
       this.plays
         ? `Play your position · win the point · 1-${this.plays.length} call your route · C see them`
         : 'Play your position · win the point',
-      2.5,
+      MINI_RALLY.say.intro,
       true,
     );
   }
@@ -147,7 +147,7 @@ export class MiniRally extends Mode {
     this.callIdx = i;
     const play = this.plays[i];
     this.home.userPlay = play;
-    this.g.hud.message(`Calling ${i + 1}: ${play.name}`, 1.6);
+    this.g.hud.message(`Calling ${i + 1}: ${play.name}`, MINI_RALLY.say.call);
     this.updateScore();
   }
 
@@ -186,6 +186,7 @@ export class MiniRally extends Mode {
       sub = this.yourFreeBall ? 'YOUR BALL · bump it high or set a pin' : "can't get there · no set";
     }
     const s = r.setter;
+    // (the 0.42 m a call's bubble sits over a head stays written in these callbacks: see MINI_RALLY in config)
     g.hud.call(this.setterName(s), word, sub, r.call === 'in' ? 'in' : 'out', (out) =>
       out.set(s.rpos.x, s.rpos.y + s.height + 0.42, s.rpos.z),
     );
@@ -228,7 +229,7 @@ export class MiniRally extends Mode {
     const spot = this.home.formSpot(homeForm, USER_SLOT[this.position]);
     const me = g.me;
     if (first) g.placeUser(spot.x, spot.z, 0);
-    else if (Math.hypot(me.pos.x - spot.x, me.pos.z - spot.z) > 0.6) g.returnUser(spot.x, spot.z, 0, 1.5);
+    else if (Math.hypot(me.pos.x - spot.x, me.pos.z - spot.z) > MINI_RALLY.slack) g.returnUser(spot.x, spot.z, 0, MINI_RALLY.walkBackMax);
     this.phase = 'prepare';
     this.t = 0;
     this.userTouches = 0;
@@ -283,7 +284,7 @@ export class MiniRally extends Mode {
         g.hud.call('YOU', 'HELP!', "can't get there", 'out', (out) => out.set(g.me.rpos.x, g.me.rpos.y + g.me.height + 0.42, g.me.rpos.z));
         g.events.emit('setterCall', { athlete: g.me, call: 'help' });
       }
-      if (c.takeLate()) g.hud.message('Too late to change it · they are committed', 1.2);
+      if (c.takeLate()) g.hud.message('Too late to change it · they are committed', MINI_RALLY.say.late);
       const yours = this.userSetsNext();
       const oos = this.outOfSystem || !this.userSetter;
       const keys = this.userSetter ? SETTER_KEYS : PIN_PICKS;
@@ -299,9 +300,9 @@ export class MiniRally extends Mode {
       this.pickRing.visible = show;
       if (show) {
         const spot = callSpot(c, lit, oos);
-        this.pickRing.place(spot.x, spot.z + 0.15);
+        this.pickRing.place(spot.x, spot.z + MINI_RALLY.ring.back);
         this.pickRing.colour(CALL_COLOR[lit]);
-        this.pickRing.fade(0.95, dt);
+        this.pickRing.fade(MINI_RALLY.ring.lit, dt);
       }
     }
     if (!this.plays) return;
@@ -333,7 +334,8 @@ export class MiniRally extends Mode {
       // third contact without an attack: a free ball over, deep into their court (the AI aims it
       // where it is hard to play: a deep corner, or short over the net)
       if (!a.isUser && a.state !== 'dive' && a.speed < AI.freeOver.aimSpeed) return team.freeOverTarget();
-      return { x: (this.g.rng.next() - 0.5) * 5, y: 0.5, z: -s * 6.5, apex: 5.2 };
+      const O = MINI_RALLY.freeOver;
+      return { x: (this.g.rng.next() - 0.5) * O.width, y: O.y, z: -s * O.depth, apex: O.apex };
     }
     // an AI dive keeps the ball alive and no more: a bit up, toward the middle (a team-mate plays it)
     if (a.state === 'dive' && !a.isUser) return team.diveUpTarget(this.g.ball.pos);
@@ -420,7 +422,7 @@ export class MiniRally extends Mode {
       : this.userSetter
         ? ` · ${kbd('1')}-${kbd('4')} pick a hitter, again: their next set${this.phase === 'prepare' ? ` · ${kbd('C')} plays` : ''}`
         : '';
-    if (Math.abs(me.pos.z) < 1.4) return `${kbd('RMB')} hands + ${kbd('Space')} block · ${kbd('V')} camera${calls}`;
+    if (Math.abs(me.pos.z) < MINI_RALLY.netHint) return `${kbd('RMB')} hands + ${kbd('Space')} block · ${kbd('V')} camera${calls}`;
     return `${kbd('WASD')} move · ${kbd('E')} pass · ${kbd('LMB')} attack · ${kbd('RMB')} block/set · ${kbd('V')} camera${calls}`;
   }
 
@@ -483,7 +485,7 @@ export class MiniRally extends Mode {
     if (this.userSetter) syncRuns(this.hitters, this.setterCalls);
     if (yours && this.lastReceiverMsg !== g.ball.lastTouch) {
       this.lastReceiverMsg = g.ball.lastTouch;
-      g.hud.message(backup ? 'Your set!' : 'Your ball!', 0.9);
+      g.hud.message(backup ? 'Your set!' : 'Your ball!', MINI_RALLY.say.yours);
     }
     // the libero takes a free ball, or a ball off someone else (you too): it calls it
     const lib = this.home.players.get('L');
@@ -496,7 +498,7 @@ export class MiniRally extends Mode {
         'the libero takes it',
         'in',
         (out) => out.set(lib.rpos.x, lib.rpos.y + lib.height + 0.42, lib.rpos.z),
-        1.0,
+        MINI_RALLY.say.mine,
       );
     }
     // their server tosses for a jump serve: the passers call it and step back (only they do). The
@@ -513,10 +515,12 @@ export class MiniRally extends Mode {
       this.jumpCallUp = false;
       g.hud.topCall(null);
     }
-    g.ball.markerColor.setRGB(...((yours ? [0.35, 1.0, 0.45] : [0.3, 0.85, 1.0]) as [number, number, number]));
+    const marker = yours ? MINI_RALLY.marker.yours : MINI_RALLY.marker.other;
+    g.ball.markerColor.setRGB(marker[0], marker[1], marker[2]);
+    const T = MINI_RALLY.timing;
     switch (this.phase) {
       case 'prepare':
-        if (this.t > 1.6 && !g.wheelOpen) {
+        if (this.t > T.prepare && !g.wheelOpen) {
           this.phase = 'serve';
           this.t = 0;
           this.tossAfter = g.ball.lastLaunchT;
@@ -534,31 +538,31 @@ export class MiniRally extends Mode {
         }
         break;
       case 'serve':
-        if (this.t > 6) this.prepare();
+        if (this.t > T.serveMax) this.prepare();
         break;
       case 'live': {
-        // service fault (the serving team played its own serve) and four-touch fault
+        // service fault (the serving team played its own serve) and four-touch fault (FIVB rule 9.1)
         for (const team of [this.home, this.away]) {
           if (team.serveFault) {
             this.reason = 'SERVE FAULT';
             this.endPoint(-team.side as 1 | -1);
             return;
           }
-          if (team.touches > 3) {
+          if (team.touches > MINI_RALLY.maxTouches) {
             this.reason = 'FOUR TOUCHES';
             this.endPoint(-team.side as 1 | -1);
             return;
           }
         }
         // a rally has no time limit: it ends on a fault, the judge's call, or a ball that has come to rest
-        if (g.ball.state.rest && this.t > 1) {
+        if (g.ball.state.rest && this.t > T.rest) {
           this.reason = 'BALL DOWN';
           this.endPoint(g.ball.pos.z > 0 ? -1 : 1);
         }
         break;
       }
       case 'dead':
-        if (this.t > 2.6) this.prepare();
+        if (this.t > T.dead) this.prepare();
         break;
     }
   }
@@ -613,7 +617,8 @@ export class MiniRally extends Mode {
     this.bumpStreak(mine);
     this.score = this.scoreHome;
     g.hud.showBanner(`${mine ? 'POINT YOU' : 'POINT THEM'} · ${this.reason}`, mine ? 'good' : 'bad');
-    g.crowd(mine ? (this.reason === 'YOUR KILL' ? 1.2 : 0.7) : 0.25, mine);
+    const C = MINI_RALLY.crowd;
+    g.crowd(mine ? (this.reason === 'YOUR KILL' ? C.yourKill : C.yours) : C.theirs, mine);
     this.updateScore();
     // everyone relaxes towards their spots while the banner shows
     for (const team of [this.home, this.away]) {

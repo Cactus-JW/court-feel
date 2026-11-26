@@ -1206,6 +1206,50 @@ export const SPIKE_DRILL = {
   slack: 0.6,
 } as const;
 
+/**
+ * The Mini Rally (src/game/modes/miniRally.ts): six against six, with you in your position.
+ * Tuned by play and first seen in the drill's first commit (9472bd3, 2026-11-02), apart from the
+ * ones said otherwise. How the two teams play is `AI`, not here.
+ * - `cast.seed`: the kit seeds of your five team-mates, then of their six, count up from here.
+ * - `maxTouches`: a rule of the sport, not a number to tune: a team has at most three hits to
+ *   return the ball, and a fourth is the fault FOUR HITS (FIVB rule 9.1).
+ * - `freeOver`: a third ball sent over without an attack, by you or by an AI player who is diving
+ *   or on the run (one standing aims it: `AI.freeOver`), is aimed `depth` m into their court,
+ *   anywhere across `width` m of it, to come down to `y` m after topping out at `apex` m.
+ * - `ring`: the ring at the spot you are setting to, as in the Setter drill: its first colour
+ *   (the hitter's colour replaces it) and size, `back` m further from the net than the spot
+ *   (050f289, 2026-11-07), lit to `lit`.
+ * - `marker`: the colour of the ball's landing marker (red, green, blue): green when the ball is
+ *   yours, and the marker's own cyan otherwise (the cyan: 0ef3e42, 2026-11-03).
+ * - `netHint`: within this distance (m) of the net the hint line is the blocker's.
+ * - `timing`: the serve comes `prepare` s after the teams are set. A serve not hit `serveMax` s
+ *   later is taken again. A ball lying on the floor ends the point once the rally is `rest` s old,
+ *   and the next point is set up `dead` s after one ends.
+ * - `crowd`: for your own kill, any other point of yours, and a point of theirs.
+ * - `say`: the opening line, the line when you call a set (f234f1e, 2026-11-03), when a call
+ *   comes too late (449976b, 2026-11-14), "Your ball!" and the libero's MINE!
+ * - `slack`, and `walkBackMax`: the walk back to your spot is given this long (s), in place of
+ *   `PLAYER.walkBack.maxT` (142263c, 2026-11-02).
+ * One number stays in the drill, written three times: the 0.42 m a call's bubble sits over the
+ * head of whoever calls. It is inside a callback handed to the HUD, and the trace compares the
+ * text of that callback (scripts/trace.mjs), so giving it a name reads as a change to what is
+ * shown, although the bubble is where it was. It gets its name in a change that is not a
+ * `refactor`, or once the trace reads where the callback puts the bubble.
+ */
+export const MINI_RALLY = {
+  cast: { seed: 50 },
+  maxTouches: 3,
+  freeOver: { width: 5, depth: 6.5, y: 0.5, apex: 5.2 },
+  ring: { colour: 0xffffff, size: 1, back: 0.15, lit: 0.95 },
+  marker: { yours: [0.35, 1, 0.45], other: [0.3, 0.85, 1] },
+  netHint: 1.4,
+  timing: { prepare: 1.6, serveMax: 6, rest: 1, dead: 2.6 },
+  crowd: { yourKill: 1.2, yours: 0.7, theirs: 0.25 },
+  say: { intro: 2.5, call: 1.6, late: 1.2, yours: 0.9, mine: 1 },
+  slack: 0.6,
+  walkBackMax: 1.5,
+} as const;
+
 export const ASSIST = {
   /** 0..1 default aim assist strength */
   aim: 0.55,
