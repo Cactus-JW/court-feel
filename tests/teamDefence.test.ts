@@ -1,91 +1,58 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { AI, COURT, SIM } from '../src/config';
-import { Rng, wrapAngle, yawFromDir } from '../src/core/mathx';
-import { Athlete } from '../src/game/athlete';
-import type { Touch, TouchKind } from '../src/game/ballEntity';
-import type { AiHost } from '../src/game/brains';
-import { MiniRally } from '../src/game/modes/miniRally';
+import { AI, COURT, SIM, type PositionId } from '../src/config';
+import { wrapAngle, yawFromDir } from '../src/core/mathx';
+import type { Athlete } from '../src/game/athlete';
+import type { TouchKind } from '../src/game/ballEntity';
+import { idleIntent } from '../src/game/intent';
+import type { MiniRally } from '../src/game/modes/miniRally';
 import { laneFor, SETTER_SPOT, setterTouchY } from '../src/game/plays';
-import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
-import { solveApex } from '../src/physics/solve';
+import { makeBall, stepBall, type V3 } from '../src/physics/ball';
+import { netYaw } from '../src/ai/brain';
 import { SetterBrain } from '../src/ai/setter';
-import { SLOT_ROLE, SLOTS, TeamAI, type Slot } from '../src/ai/team';
+import { SLOTS, type Slot } from '../src/ai/team';
+import { headlessGame } from './headlessGame';
+import { scene } from './scene';
 
 const DT = 1 / SIM.hz;
 // (the book spots: each player's own habit, a little off them every rally, is tested on its own)
 AI.sit.personal = 0;
-const NO_SPIN: V3 = { x: 0, y: 0, z: 0 };
 const D = AI.defence;
 const W = COURT.halfWidth;
 
 /**
- * An all-AI home team (+z) on a stand-in for the Game: the ball (state and prediction), the clock,
- * the rng, and contacts that never happen. Every tick the players step, then the coordinator,
- * as in the game.
+ * An all-AI home team (+z) in a real simulation: six brains, the ball, the clock and the dice.
+ * `you`: a player has that slot (a seat, and hands that do nothing). `seed`: the dice (3 when not
+ * given). `away`: a real team across the net too (`theirs` is then its outside), with a player in
+ * that slot if one is named.
  */
-function homeTeam() {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  const env: BallEnv = { netTop: COURT.netHeightMen };
-  let version = 0;
-  let predicted = -1;
-  const ball = {
-    state,
-    active: true,
-    lastTouch: null as Touch | null,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    speed: () => Math.hypot(state.v.x, state.v.y, state.v.z),
-    hit(v: V3) {
-      Object.assign(state.v, v);
-      version++;
-    },
-    ensurePrediction(e: BallEnv, t: number) {
-      if (predicted !== version) {
-        predictor.compute(state, e, t);
-        predicted = version;
-      }
-      return predictor;
-    },
+function homeTeam(o: { you?: Slot; seed?: number; away?: { you?: Slot } } = {}) {
+  // no touches: nobody's pass, set or block meets the ball, so what is read here is what the players
+  // read and where they go, with the ball never played
+  const s = scene({ seed: o.seed ?? 3, touches: 'none' });
+  const { sim } = s;
+  const ball = sim.ball;
+  const team = s.team(1, { user: o.you });
+  const away = o.away ? s.team(-1, { user: o.away.you }) : null;
+  /** one of theirs, who plays their touches: their outside, where its approach starts */
+  const theirs = away ? away.players.get('OH1')! : s.athlete('OH', -1, { x: laneFor('OH', -1).sx, z: laneFor('OH', -1).sz });
+  /** a team (ours when not given) in a formation, its player in it too (a team places its own brains' bodies, never the player's) */
+  const place = (form: 'receive' | 'defense' | 'offense', of = team) => {
+    of.place(form);
+    const you = of.user;
+    if (!you || !of.userSlot) return;
+    const p = of.formSpot(form, of.userSlot);
+    you.place(p.x, p.z, netYaw(of.side));
   };
-  const g = {
-    simTime: 0,
-    env,
-    rng: new Rng(3),
-    athletes: [] as Athlete[],
-    ballLive: true,
-    ball,
-    setBrain() {},
-    onAiContact() {},
-    contact: { lastSet: null, tryPass: () => false, tryBlock: () => false },
-  };
-  const game = g as unknown as AiHost;
-  const team = new TeamAI(1, game);
-  for (const slot of SLOTS) team.add(slot, new Athlete(SLOT_ROLE[slot], 1), false);
-  team.place('defense');
-  const theirs = new Athlete('OH', -1);
+  place('defense');
+  if (away) place('defense', away);
   /** a touch: the ball leaves `from` for `to` with this apex */
   const touch = (kind: TouchKind, side: 1 | -1, from: V3, to: V3, apex: number, athlete: Athlete | null = theirs) => {
-    const v = { x: 0, y: 0, z: 0 };
-    solveApex(from, to, apex, NO_SPIN, v);
-    Object.assign(state.p, from);
-    Object.assign(state.v, v);
-    state.rest = false;
-    version++;
-    ball.lastTouch = { athlete, kind, t: g.simTime, side };
+    s.send({ from, to, apex }, { athlete, kind, side });
   };
   /** the ball at `p` moving at `v`, just played by `athlete` */
   const put = (p: V3, v: V3, athlete: Athlete | null, kind: TouchKind = 'pass', side: 1 | -1 = 1) => {
-    Object.assign(state.p, p);
-    Object.assign(state.v, v);
-    state.rest = false;
-    version++;
-    ball.lastTouch = { athlete, kind, t: g.simTime, side };
+    s.send({ from: p, v }, { athlete, kind, side });
   };
   /** a hard spike from `from` straight at `to` (ball centre on the floor) at `speed` m/s */
   const spike = (from: V3, to: V3, speed: number) => {
@@ -94,24 +61,36 @@ function homeTeam() {
     const flat = Math.hypot(dx, dz);
     const t = flat / speed;
     const vy = (to.y - from.y + 0.5 * 9.81 * t * t) / t;
-    Object.assign(state.p, from);
-    Object.assign(state.v, { x: dx / t, y: vy, z: dz / t });
-    state.rest = false;
-    version++;
-    ball.lastTouch = { athlete: theirs, kind: 'spike', t: g.simTime, side: -1 };
+    s.send({ from, v: { x: dx / t, y: vy, z: dz / t } }, { athlete: theirs, kind: 'spike', side: -1 });
   };
+  /** play for `seconds`, calling `each` after every step */
   const run = (seconds: number, each?: () => void) => {
-    for (let i = 0; i < seconds * SIM.hz; i++) {
-      g.simTime += DT;
-      stepBall(state, DT, env, []);
-      for (const b of team.brains.values()) b.step(DT, game);
-      for (const a of team.players.values()) a.step(DT, g.simTime);
-      team.step();
+    s.run(seconds, () => {
       each?.();
-    }
+      return false;
+    });
   };
   const brain = (slot: Slot) => team.brains.get(team.players.get(slot)!)!;
-  return { g, team, ball, touch, put, spike, run, brain, theirs };
+  /**
+   * Play for up to `seconds` with this player sent to the ball (`job`), or until `until` is true
+   * after a step. The coordinator hands out the jobs at the end of every step, to whoever it would
+   * send: this player is given theirs again after each. Returns whether `until` became true.
+   */
+  const sent = (slot: Slot, job: 'receive' | 'free' | 'set', seconds: number, until: () => boolean) => {
+    const b = brain(slot);
+    b.job = job;
+    return s.run(seconds, () => {
+      b.job = job;
+      return until();
+    });
+  };
+  return { s, team, away, ball, touch, put, spike, run, brain, sent, theirs, place };
+}
+
+/** a whole Mini Rally with nobody watching, you in `pos`: the drill itself says where a ball that is only kept up goes */
+function miniRally(pos: PositionId) {
+  const h = headlessGame('rally', pos, 3);
+  return { sim: h.sim, rally: h.mode as MiniRally };
 }
 
 /**
@@ -181,7 +160,7 @@ describe('the defence reads their set (Mini Rally, perimeter)', () => {
     t.run(1.1);
     const lane = laneFor('OH', -1);
     t.spike({ x: lane.x, y: 3.25, z: lane.z }, { x: -1.0, y: 0.1, z: 7.0 }, 20);
-    const hitT = t.g.simTime;
+    const hitT = t.s.sim.simTime;
     // the moment the digger steers for the ball, or dives for it (it may still be moving from its read when the hit comes)
     let steers = -1;
     let receiver: Athlete | null = null;
@@ -196,7 +175,7 @@ describe('the defence reads their set (Mini Rally, perimeter)', () => {
         steers < 0 &&
         (Math.hypot(receiver.cmd.moveX, receiver.cmd.moveZ) > 0.05 || receiver.state === 'dive')
       )
-        steers = t.g.simTime - hitT;
+        steers = t.s.sim.simTime - hitT;
     });
     expect(receiver).not.toBeNull();
     expect(steers).toBeGreaterThan(D.hitReact - 3 * D.hitReactSd);
@@ -261,9 +240,8 @@ describe('going for every ball (Mini Rally)', () => {
 describe('who takes the ball (Mini Rally)', () => {
   /** our receive formation (or defence), `user` marked as the user, and their serve (or roll shot) down at `to` */
   const ballAt = (to: { x: number; z: number }, user: Slot | null, serve = true) => {
-    const t = homeTeam();
-    t.team.place(serve ? 'receive' : 'defense');
-    if (user) t.team.players.get(user)!.isUser = true;
+    const t = homeTeam({ you: user ?? undefined });
+    t.place(serve ? 'receive' : 'defense');
     if (serve) t.touch('serve', -1, { x: 0, y: 2.8, z: -10 }, { x: to.x, y: 0.75, z: to.z }, 4.0);
     else t.touch('spike', -1, { x: -4.0, y: 3.25, z: -0.9 }, { x: to.x, y: 0.75, z: to.z }, 3.6);
     t.run(0.05);
@@ -278,10 +256,9 @@ describe('who takes the ball (Mini Rally)', () => {
 
   it('a serve coming down on you is yours, even when the libero could run over and take it: serve receive goes by lanes', () => {
     // a high, slow float 0.2 m from you (the outside, in left back), 4.8 m from the libero
-    const t = homeTeam();
-    t.team.place('receive');
+    const t = homeTeam({ you: 'OH1' });
+    t.place('receive');
     const you = t.team.players.get('OH1')!;
-    you.isUser = true;
     t.touch('serve', -1, { x: 0, y: 2.8, z: -10 }, { x: -2.3, y: 0.75, z: 6.1 }, 6.0);
     t.run(0.05);
     expect(t.team.receiver).toBe(you);
@@ -364,9 +341,8 @@ describe('who takes the ball (Mini Rally)', () => {
     });
 
     it('never when you are the libero', () => {
-      const t = homeTeam();
-      t.team.place('defense');
-      t.team.players.get('L')!.isUser = true;
+      const t = homeTeam({ you: 'L' });
+      t.place('defense');
       t.touch('pass', -1, { x: 0, y: 1.0, z: -5 }, { x: -2.6, y: 0.75, z: 6.0 }, 5.5);
       t.run(0.05);
       expect(t.team.liberoCall).toBeNull();
@@ -380,10 +356,9 @@ describe('who takes the ball (Mini Rally)', () => {
 
   /** their block sends our attack back down at (-1.8, 3.0); you (our outside) 0.6 m from it, the libero at `L` */
   const offTheirBlock = (L: { x: number; z: number }, apex = 3.6) => {
-    const t = homeTeam();
-    t.team.place('defense');
+    const t = homeTeam({ you: 'OH1' });
+    t.place('defense');
     const you = t.team.players.get('OH1')!;
-    you.isUser = true;
     you.place(-1.9, 2.4, 0);
     t.team.players.get('L')!.place(L.x, L.z, 0);
     t.touch('block', -1, { x: -1.5, y: 3.0, z: -0.2 }, { x: -1.8, y: 0.75, z: 3.0 }, apex);
@@ -478,21 +453,15 @@ describe('moving with the play: the situations (Mini Rally)', () => {
   });
 
   it('a pin blocker fronts its hitter once they have the ball', () => {
-    const t = homeTeam();
+    // (their team is on the court; their outside is a player whose hands do nothing, so it stands where it is put)
+    const t = homeTeam({ away: { you: 'OH1' } });
+    const away = t.away!;
     // their opposite (on our left) wide at its approach start, their outside (on our right) inside
-    const wide = new Athlete('OPP', -1);
+    const wide = away.players.get('OPP')!;
     wide.place(-4.6, -3.4, Math.PI);
-    const inside = new Athlete('OH', -1);
+    const inside = away.players.get('OH1')!;
     inside.place(2.4, -3.6, Math.PI);
-    (t.team as unknown as { opponents: unknown }).opponents = {
-      players: new Map([
-        ['OPP', wide],
-        ['OH1', inside],
-      ]),
-      brains: new Map(),
-      frontRow: () => [],
-    };
-    t.touch('dig', -1, { x: 0, y: 0.8, z: -6 }, { x: 0, y: 2.4, z: -2 }, 4.5);
+    t.touch('dig', -1, { x: 0, y: 0.8, z: -6 }, { x: 0, y: 2.4, z: -2 }, 4.5, away.players.get('L')!);
     t.run(0.2);
     const left = t.brain('OH1').spot;
     const right = t.brain('OPP').spot;
@@ -613,11 +582,9 @@ describe('running a ball down (Mini Rally)', () => {
 
   it('a coverer sent running for a ball off the block is up and running, not low; the ones still watching stay low', () => {
     const t = homeTeam();
-    for (const b of t.team.brains.values()) {
-      b.job = 'cover';
-      b.step(DT, t.g as unknown as AiHost);
-      expect(b.athlete.low).toBe(1);
-    }
+    for (const b of t.team.brains.values()) b.job = 'cover';
+    t.s.step();
+    for (const b of t.team.brains.values()) expect(b.athlete.low).toBe(1);
     // off their block, fast over the cover and down in our deep right corner
     t.touch('block', -1, { x: 0, y: 2.9, z: 0.2 }, { x: 3.8, y: 0.75, z: 8.4 }, 3.2, t.theirs);
     t.run(0.3);
@@ -646,20 +613,11 @@ describe('running a ball down (Mini Rally)', () => {
       AI.dive.anyway = anyway;
       const t = homeTeam();
       const L = t.team.players.get('L')!;
-      const b = t.brain('L');
       L.place(0, 8.5, 0);
       t.put({ x: 0, y: 2.0, z: 8.5 - d }, { x: 0, y: 0, z: 0 }, t.theirs, 'spike', -1);
       // (seen a while ago: the run is what is measured here)
       t.ball.lastTouch!.t -= 1;
-      b.job = 'receive';
-      let dived = false;
-      for (let k = 0; k < 0.9 * SIM.hz && !dived; k++) {
-        t.g.simTime += DT;
-        stepBall(t.ball.state, DT, t.g.env, []);
-        b.step(DT, t.g as unknown as AiHost);
-        L.step(DT, t.g.simTime);
-        dived = L.state === 'dive';
-      }
+      const dived = t.sent('L', 'receive', 0.9, () => L.state === 'dive');
       AI.dive.anyway = keep;
       return dived;
     };
@@ -675,23 +633,15 @@ describe('running a ball down (Mini Rally)', () => {
     // 4 m in front of the libero, dropping from 2 m: past both arms at the end of the dive, within one
     const t = homeTeam();
     const L = t.team.players.get('L')!;
-    const b = t.brain('L');
     L.place(0, 8.5, 0);
     t.put({ x: 0, y: 2.0, z: 8.5 - 4 }, { x: 0, y: 0, z: 0 }, t.theirs, 'spike', -1);
     t.ball.lastTouch!.t -= 1;
-    b.job = 'receive';
     const keep = AI.dive.anyway;
     // (no throwing themselves at a hopeless one: this one is reached)
     AI.dive.anyway = 0;
-    let dived = false;
+    let dived: boolean;
     try {
-      for (let k = 0; k < 0.9 * SIM.hz && !dived; k++) {
-        t.g.simTime += DT;
-        stepBall(t.ball.state, DT, t.g.env, []);
-        b.step(DT, t.g as unknown as AiHost);
-        L.step(DT, t.g.simTime);
-        dived = L.state === 'dive';
-      }
+      dived = t.sent('L', 'receive', 0.9, () => L.state === 'dive');
     } finally {
       AI.dive.anyway = keep;
     }
@@ -735,7 +685,7 @@ describe('the second ball (Mini Rally)', () => {
     // the libero's pass sails over the net, coming down 3 m into their court
     t.touch('pass', 1, { x: L.pos.x, y: 0.8, z: L.pos.z }, { x: 0.5, y: 0.5, z: -3 }, 4.6, L);
     t.run(AI.setterRead + 0.2);
-    expect(t.team.overpass(t.g as unknown as AiHost)).toBe(true);
+    expect(t.team.overpass(t.s.sim)).toBe(true);
     expect(t.brain('S').job).not.toBe('set');
     expect(t.team.read).toBeNull();
     for (const slot of ['OH1', 'MB', 'OPP'] as const) expect(t.brain(slot).job).toBe('block');
@@ -747,22 +697,21 @@ describe('the second ball (Mini Rally)', () => {
     const L = t.team.players.get('L')!;
     t.touch('pass', 1, { x: L.pos.x, y: 0.8, z: L.pos.z }, { x: SETTER_SPOT.x, y: 2.4, z: SETTER_SPOT.z }, 4.6, L);
     t.run(AI.setterRead + 0.2);
-    expect(t.team.overpass(t.g as unknown as AiHost)).toBe(false);
+    expect(t.team.overpass(t.s.sim)).toBe(false);
     expect(t.brain('S').job).toBe('set');
   });
 
   it('a pass the setter calls HELP on, nearest to you: it is your ball (someone always plays it)', () => {
-    const t = homeTeam();
-    t.team.place('offense');
+    const t = homeTeam({ you: 'OH2' });
+    t.place('offense');
     const L = t.team.players.get('L')!;
     const you = t.team.players.get('OH2')!;
-    you.isUser = true;
     you.place(-3.4, 8.0, 0);
     // a shanked pass, deep into our left corner: the setter at the net can't get there
     t.touch('pass', 1, { x: L.pos.x, y: 0.8, z: L.pos.z }, { x: -3.8, y: 0.75, z: 8.2 }, 5.5, L);
     t.run(AI.setterRead + 0.2);
     expect(t.team.read?.call).toBe('help');
-    expect(t.team.freeBall(t.g as unknown as AiHost)).toBe(you);
+    expect(t.team.freeBall(t.s.sim)).toBe(you);
   });
 
   it("a shanked dig flying metres out of everyone's reach is their point: the setter calls nothing on it", () => {
@@ -791,7 +740,7 @@ describe('the second ball (Mini Rally)', () => {
     expect(t.team.read?.call).toBe('help');
     expect(t.brain('L').job).toBe('set');
     expect(t.team.secondBy).toBe(L);
-    expect(t.team.freeBall(t.g as unknown as AiHost)).toBeNull();
+    expect(t.team.freeBall(t.s.sim)).toBeNull();
   });
 
   it('a shanked pass the libero runs down by the end line is still set to a pin: a much rougher set than one from a few metres off the net', () => {
@@ -800,7 +749,7 @@ describe('the second ball (Mini Rally)', () => {
     expect(far.t.team.read?.call).toBe('help');
     expect(far.t.brain('L').job).toBe('set');
     expect(far.t.team.secondBy).toBe(far.L);
-    expect(far.t.team.freeBall(far.t.g as unknown as AiHost)).toBeNull();
+    expect(far.t.team.freeBall(far.t.s.sim)).toBeNull();
     expect(far.t.brain('L').setter.sloppy).toBeGreaterThan(near.t.brain('L').setter.sloppy + 0.3);
   });
 
@@ -817,11 +766,11 @@ describe('the second ball (Mini Rally)', () => {
     expect(t.team.read?.call).toBe('help');
     expect(t.brain('OH1').job).toBe('set');
     expect(t.team.secondBy).toBe(oh1);
-    expect(t.team.freeBall(t.g as unknown as AiHost)).toBeNull();
+    expect(t.team.freeBall(t.s.sim)).toBeNull();
     // a hitter is no setter: never as clean as the libero's easiest
     expect(t.brain('OH1').setter.sloppy).toBeGreaterThanOrEqual(AI.backupSet.otherBase);
     // and the high ball goes to the other pin (the one setting it can't hit it)
-    const call = t.team.callSet(t.g as unknown as AiHost, oh1);
+    const call = t.team.callSet(t.s.sim, oh1);
     expect(call.hitter).toBe(t.team.players.get('OPP'));
   });
 
@@ -848,12 +797,15 @@ describe('the second ball (Mini Rally)', () => {
   });
 
   it('a second ball nobody could set is just kept up: somewhere in our court off the net, never the same place or the same height twice; yours goes up high behind the 3 m line', () => {
-    const t = homeTeam();
-    const mate = t.team.players.get('OH2')!;
-    t.team.touches = 1;
+    // (you are our outside at the net; the back-row outside is the team-mate who keeps it up)
+    const { sim, rally } = miniRally('OH');
+    const team = rally.home;
+    const mate = team.players.get('OH2')!;
+    team.touches = 1;
     // (played from deep in the left corner)
-    t.put({ x: -3.5, y: 0.7, z: 7.5 }, { x: 0, y: -2, z: 0 }, t.team.players.get('L')!, 'dig');
-    const target = () => MiniRally.prototype.passTarget.call({ home: t.team, away: t.team, g: t.g }, mate);
+    sim.ball.launch({ x: -3.5, y: 0.7, z: 7.5 }, { x: 0, y: -2, z: 0 });
+    sim.ball.lastTouch = { athlete: team.players.get('L')!, kind: 'dig', t: sim.simTime, side: 1 };
+    const target = () => rally.passTarget(mate);
     const ups = Array.from({ length: 60 }, target);
     for (const T of ups) {
       expect(T.z).toBeGreaterThanOrEqual(AI.up.net);
@@ -872,21 +824,20 @@ describe('the second ball (Mini Rally)', () => {
     // most of them go towards the middle of the court, where the team is
     const mid = (q: { x: number; z: number }) => Math.hypot(q.x, q.z - COURT.halfLength / 2);
     expect(ups.filter((T) => mid(T) < mid({ x: -3.5, z: 7.5 })).length).toBeGreaterThan(40);
-    mate.isUser = true;
-    const yours = target();
+    const yours = rally.passTarget(sim.me);
     expect(yours.z).toBeGreaterThan(COURT.attackLine + AI.backRow.clear);
     expect(yours.z).toBeLessThan(4.5);
     expect(yours.apex).toBeGreaterThan(5);
   });
 
   it("an AI free ball over goes where they aren't: short over the net when they are deep, to a deep corner when they are up", () => {
-    const t = homeTeam();
-    const mate = t.team.players.get('OH1')!;
-    t.team.touches = 2;
-    const target = () => MiniRally.prototype.passTarget.call({ home: t.team, away: t.team, g: t.g }, mate);
-    const xs = [-3, -1.5, 0, 1.5, 3];
-    const them = xs.map(() => new Athlete('OH', -1));
-    t.g.athletes.push(...them);
+    const { rally } = miniRally('S');
+    const mate = rally.home.players.get('OH1')!;
+    rally.home.touches = 2;
+    const target = () => rally.passTarget(mate);
+    // (their whole team, spread across their court)
+    const xs = [-3, -1.8, -0.6, 0.6, 1.8, 3];
+    const them = [...rally.away.players.values()];
     // all of them back, deep in their court
     them.forEach((a, i) => a.place(xs[i], -7.5, 0));
     for (let i = 0; i < 5; i++) {
@@ -907,31 +858,52 @@ describe('the second ball (Mini Rally)', () => {
 describe('a hard ball is played as well as it can be, and no better (Mini Rally)', () => {
   const avg = (m: number[]) => m.reduce((a, b) => a + b, 0) / m.length;
   /**
+   * The libero behind the 3 m line with a setter's brain, the ball as hard to set as `sloppy`, and
+   * its call: a high ball to the outside's pin (`toUser`: the outside is you). `drop` drops the
+   * ball onto its hands and plays the step it is set in.
+   */
+  const liberoSetting = (sloppy: number, toUser = false) => {
+    const s = scene({ seed: 3 });
+    const lane = laneFor('OH', 1);
+    const target = { x: lane.x, y: 3.25, z: lane.z };
+    const hitter = s.athlete('OH', 1, { x: lane.sx, z: lane.sz }, { user: toUser });
+    const passer = s.athlete('OH', 1, { x: 0, z: 8.5 });
+    const L = s.athlete(
+      'L',
+      1,
+      { x: 0, z: 4 },
+      {
+        brain: (a) => {
+          const sb = new SetterBrain(a, { x: 0, z: 4 }, Math.PI / 2);
+          sb.sloppy = sloppy;
+          sb.call = () => ({ target, apex: target.y + lane.apexAbove, hitter });
+          return sb;
+        },
+      },
+    );
+    const drop = () => {
+      L.place(0, 4);
+      s.send({ from: { x: -0.14, y: L.height + 0.22, z: 4 }, v: { x: 0, y: -2, z: 0 } }, { athlete: passer, kind: 'pass', side: 1 });
+      s.step();
+    };
+    return { s, L, target, drop };
+  };
+  /**
    * `n` sets by the libero from behind the 3 m line to the outside's pin, `sloppy` as hard as the
    * ball made it: how far each passes from where it was meant to meet the hitter's hand
    */
   const liberoSets = (sloppy: number, toUser: boolean, n = 30) => {
-    const t = homeTeam();
-    const L = t.team.players.get('L')!;
-    const hitter = t.team.players.get('OH1')!;
-    hitter.isUser = toUser;
-    const sb = new SetterBrain(L, { x: 0, z: 4 }, Math.PI / 2);
-    sb.sloppy = sloppy;
-    const lane = laneFor('OH', 1);
-    const target = { x: lane.x, y: 3.25, z: lane.z };
-    sb.call = () => ({ target, apex: target.y + lane.apexAbove, hitter });
+    const { s, L, target, drop } = liberoSetting(sloppy, toUser);
     const misses: number[] = [];
     for (let i = 0; i < n; i++) {
-      L.place(0, 4);
       // the ball drops onto the libero's hands
-      t.put({ x: -0.14, y: L.height + 0.22, z: 4 }, { x: 0, y: -2, z: 0 }, t.team.players.get('OH2')!);
-      sb.step(DT, t.g as unknown as AiHost);
-      expect(t.ball.lastTouch?.athlete).toBe(L);
+      drop();
+      expect(s.sim.ball.lastTouch?.athlete).toBe(L);
       // where the set comes down through the hitter's contact height
       const b = makeBall();
-      Object.assign(b.p, t.ball.state.p);
-      Object.assign(b.v, t.ball.state.v);
-      for (let k = 0; k < 4 * SIM.hz && !(b.v.y < 0 && b.p.y < target.y); k++) stepBall(b, DT, t.g.env, []);
+      Object.assign(b.p, s.sim.ball.state.p);
+      Object.assign(b.v, s.sim.ball.state.v);
+      for (let k = 0; k < 4 * SIM.hz && !(b.v.y < 0 && b.p.y < target.y); k++) stepBall(b, DT, s.sim.env, []);
       misses.push(Math.hypot(b.p.x - target.x, b.p.z - target.z));
     }
     return misses;
@@ -943,24 +915,15 @@ describe('a hard ball is played as well as it can be, and no better (Mini Rally)
   });
 
   it('however rough, a backup set is still a high ball: it never comes off flat, a line drive over the net', () => {
-    const t = homeTeam();
-    const L = t.team.players.get('L')!;
-    const hitter = t.team.players.get('OH1')!;
-    const sb = new SetterBrain(L, { x: 0, z: 4 }, Math.PI / 2);
-    sb.sloppy = 1;
-    const lane = laneFor('OH', 1);
-    const target = { x: lane.x, y: 3.25, z: lane.z };
-    sb.call = () => ({ target, apex: target.y + lane.apexAbove, hitter });
+    const { s, target, drop } = liberoSetting(1);
     for (let i = 0; i < 60; i++) {
-      L.place(0, 4);
-      t.put({ x: -0.14, y: L.height + 0.22, z: 4 }, { x: 0, y: -2, z: 0 }, t.team.players.get('OH2')!);
-      sb.step(DT, t.g as unknown as AiHost);
+      drop();
       const b = makeBall();
-      Object.assign(b.p, t.ball.state.p);
-      Object.assign(b.v, t.ball.state.v);
+      Object.assign(b.p, s.sim.ball.state.p);
+      Object.assign(b.v, s.sim.ball.state.v);
       let top = b.p.y;
       for (let k = 0; k < 2 * SIM.hz && b.v.y > 0; k++) {
-        stepBall(b, DT, t.g.env, []);
+        stepBall(b, DT, s.sim.env, []);
         top = Math.max(top, b.p.y);
       }
       // (the setter's own apex wobble on top: a few centimetres)
@@ -975,12 +938,14 @@ describe('a hard ball is played as well as it can be, and no better (Mini Rally)
   });
 
   it('an AI dive keeps the ball alive and no more: it pops up somewhere toward the middle, never the same place twice, not to the setter; your own dive still passes to the setter', () => {
-    const t = homeTeam();
-    const L = t.team.players.get('L')!;
+    // (you are our libero; the team-mate who dives is the back-row outside)
+    const { sim, rally } = miniRally('L');
+    const mate = rally.home.players.get('OH2')!;
     const at = { x: 4, y: 0.35, z: 8 };
-    t.put(at, { x: 2, y: -4, z: 3 }, t.theirs, 'spike', -1);
-    L.state = 'dive';
-    const target = () => MiniRally.prototype.passTarget.call({ home: t.team, away: t.team, g: t.g }, L);
+    sim.ball.launch(at, { x: 2, y: -4, z: 3 });
+    sim.ball.lastTouch = { athlete: rally.away.players.get('OH1')!, kind: 'spike', t: sim.simTime, side: -1 };
+    mate.state = 'dive';
+    const target = () => rally.passTarget(mate);
     const ups = Array.from({ length: 40 }, target);
     const fromMid = (q: { x: number; z: number }) => Math.hypot(q.x, q.z - COURT.halfLength / 2);
     const U = AI.diveUp;
@@ -994,8 +959,8 @@ describe('a hard ball is played as well as it can be, and no better (Mini Rally)
     }
     expect(Math.max(...ups.map((q) => q.x)) - Math.min(...ups.map((q) => q.x))).toBeGreaterThan(1.5);
     expect(Math.max(...ups.map((q) => q.apex)) - Math.min(...ups.map((q) => q.apex))).toBeGreaterThan((U.apex[1] - U.apex[0]) / 2);
-    L.isUser = true;
-    const yours = target();
+    sim.me.state = 'dive';
+    const yours = rally.passTarget(sim.me);
     expect(yours.apex).toBeGreaterThan(at.y + U.apex[1] + 0.5);
     expect(Math.abs(yours.z)).toBeLessThan(2.5);
   });
@@ -1003,21 +968,12 @@ describe('a hard ball is played as well as it can be, and no better (Mini Rally)
   it('a setter who gets there after the ball has dropped below their hands digs it up (platform or dive) instead of watching it drop', () => {
     const t = homeTeam();
     const S = t.team.players.get('S')!;
-    const b = t.brain('S');
     S.place(2, 2.5, 0);
     // a pass that got away: 1.5 m beside the setter, already under the hands, going away
     t.put({ x: 3.5, y: S.height - 0.1, z: 2.5 }, { x: 1.2, y: 0, z: 0 }, t.team.players.get('OH2')!);
     // (seen a while ago)
     t.ball.lastTouch!.t -= 1;
-    b.job = 'set';
-    let dug = false;
-    for (let i = 0; i < 0.6 * SIM.hz && !dug; i++) {
-      t.g.simTime += DT;
-      stepBall(t.ball.state, DT, t.g.env, []);
-      b.step(DT, t.g as unknown as AiHost);
-      S.step(DT, t.g.simTime);
-      dug = S.action?.kind === 'pass' || S.state === 'dive';
-    }
+    const dug = t.sent('S', 'set', 0.6, () => S.action?.kind === 'pass' || S.state === 'dive');
     expect(dug).toBe(true);
   });
 });
@@ -1035,11 +991,12 @@ describe('early transition (Mini Rally)', () => {
   });
 
   /** their first ball, then their second: `second` ('set', or 'pass' for a bump-up) to their own 3 m line */
-  const theirSecond = (second: 'set' | 'pass') => {
-    const t = homeTeam();
-    t.touch('dig', -1, { x: 0, y: 0.8, z: -6 }, { x: 1, y: 2.4, z: -2 }, 4.5);
+  const theirSecond = (second: 'set' | 'pass', o: Parameters<typeof homeTeam>[0] = {}) => {
+    const t = homeTeam(o);
+    // (with their team on the court, their libero digs and their setter plays the second)
+    t.touch('dig', -1, { x: 0, y: 0.8, z: -6 }, { x: 1, y: 2.4, z: -2 }, 4.5, t.away?.players.get('L') ?? t.theirs);
     t.run(0.2);
-    t.touch(second, -1, { x: 1, y: 1.0, z: -2 }, { x: 0.5, y: 0.8, z: -3.4 }, 5.0);
+    t.touch(second, -1, { x: 1, y: 1.0, z: -2 }, { x: 0.5, y: 0.8, z: -3.4 }, 5.0, t.away?.players.get('S') ?? t.theirs);
     return t;
   };
 
@@ -1076,15 +1033,17 @@ describe('early transition (Mini Rally)', () => {
   });
 
   it('a bumped second ball one of theirs goes up to hit after all: we stay in defence', () => {
-    const t = theirSecond('pass');
-    const theirs = new Athlete('OH', -1);
+    // (their outside is a player: under the ball as it is bumped up, they press jump and go up for it)
+    const t = theirSecond('pass', { away: { you: 'OH1' } });
+    const theirs = t.theirs;
     theirs.place(0.5, -3.6, Math.PI);
-    theirs.state = 'air';
-    (t.team as unknown as { opponents: unknown }).opponents = {
-      players: new Map([['OH1', theirs]]),
-      brains: new Map(),
-    };
-    t.run(AI.transition.read + 0.2);
+    t.s.sim.seatOf(theirs)!.hear(DT, { ...idleIntent(), yaw: Math.PI, pressed: ['jump'], held: ['jump'] });
+    let up = true;
+    t.run(AI.transition.read + 0.2, () => {
+      up &&= theirs.state === 'load' || theirs.state === 'air';
+    });
+    // (off the floor from the bump until we have read it, and after)
+    expect(up).toBe(true);
     expect(t.team.freeCall).toBe(false);
   });
 
@@ -1140,8 +1099,7 @@ describe('early transition (Mini Rally)', () => {
     const forms = (z: number) => {
       const seen = new Set<string>();
       for (let seed = 1; seed <= 12; seed++) {
-        const t = homeTeam();
-        t.g.rng = new Rng(seed);
+        const t = homeTeam({ seed });
         const L = t.team.players.get('L')!;
         const mate = t.team.players.get('OH2')!;
         L.place(0, z, 0);
@@ -1237,8 +1195,6 @@ describe('the front row transitions after every block (Mini Rally)', () => {
     t.run(1.6, () => {
       if (hb.phase === 'ready') maxOff = Math.max(maxOff, Math.abs(mb.pos.z));
       if (started < 0 && hb.phase === 'approach' && mb.speed > 0.5) started = Math.abs(mb.pos.z);
-      // (the harness has no contacts: stop before the jump)
-      if (hb.phase === 'air') hb.enabled = false;
     });
     expect(maxOff).toBeGreaterThanOrEqual(AI.transition.approachOff);
     expect(started).toBeGreaterThan(AI.transition.approachOff - 0.3);
@@ -1250,7 +1206,8 @@ describe('covering our hitter (Mini Rally)', () => {
   const setTo = (slot: 'OH1' | 'OPP') => {
     const t = homeTeam();
     t.team.place('offense');
-    // (the harness has no contacts: the hitters don't run their approaches here)
+    // (the set is sent here a moment after the pass, long before the pass would be at the setter:
+    // the hitters' runs are timed to the pass, so they don't run their approaches here)
     for (const b of t.team.brains.values()) if (b.hitter) b.hitter.enabled = false;
     const S = t.team.players.get('S')!;
     const hitter = t.team.players.get(slot)!;
@@ -1325,7 +1282,7 @@ describe('the back-row setter releases after their attack (Mini Rally)', () => {
     t.run(6 * D.hitReactSd + 0.07);
     expect(S.job).toBe('base');
     expect(S.spot).toEqual(target);
-    expect(t.g.ball.lastTouch?.kind).toBe('spike');
+    expect(t.ball.lastTouch?.kind).toBe('spike');
   });
 
   it('the release comes a reaction time after their hit, not on the hit', () => {
@@ -1362,8 +1319,8 @@ describe('the middle back reads our block as it goes up (Mini Rally)', () => {
     let up = -1;
     setOutside(t);
     const hold = () => {
-      if (t.g.simTime < upAt) return;
-      if (up < 0) up = t.g.simTime;
+      if (t.s.sim.simTime < upAt) return;
+      if (up < 0) up = t.s.sim.simTime;
       for (const [a, x, r] of [
         [pin, pinX, 0],
         [mid, midX, reach],
@@ -1385,7 +1342,7 @@ describe('the middle back reads our block as it goes up (Mini Rally)', () => {
     expect(OH2.spot.z).toBeCloseTo(D.middleBack, 1);
     t.run(0.5, hold);
     // still their set in the air: the step up comes before the hit
-    expect(t.g.ball.lastTouch?.kind).toBe('set');
+    expect(t.ball.lastTouch?.kind).toBe('set');
     expect(OH2.spot.z).toBeCloseTo(D.middleBackSeam, 1);
     // on the line from their hitter through the seam: cross of the pin blocker (within the middle back's range)
     expect(OH2.spot.x).toBeLessThan(pinX);
@@ -1464,10 +1421,8 @@ describe('the setter releases on every ball that is not its own (Mini Rally)', (
 
 describe("your ball or the libero's (Mini Rally)", () => {
   it("a serve between you and the libero that the libero gets to is the libero's", () => {
-    const t = homeTeam();
-    t.team.place('receive');
-    const you = t.team.players.get('OH2')!;
-    you.isUser = true;
+    const t = homeTeam({ you: 'OH2' });
+    t.place('receive');
     // 0.9 m from you (the middle passer), 1.6 m from the libero
     t.touch('serve', -1, { x: 0, y: 2.8, z: -10 }, { x: 0.9, y: 0.75, z: 6.4 }, 4.0);
     t.run(0.05);
@@ -1475,10 +1430,9 @@ describe("your ball or the libero's (Mini Rally)", () => {
   });
 
   it('a serve at you that the libero cannot get to in time is yours, and nobody steps at it', () => {
-    const t = homeTeam();
-    t.team.place('receive');
+    const t = homeTeam({ you: 'OH1' });
+    t.place('receive');
     const you = t.team.players.get('OH1')!;
-    you.isUser = true;
     t.touch('serve', -1, { x: 2, y: 2.6, z: -9 }, { x: -2.6, y: 0.8, z: 6.1 }, 3.6);
     t.run(AI.sit.serveRead + 0.1);
     expect(t.team.receiver).toBe(you);
@@ -1488,11 +1442,10 @@ describe("your ball or the libero's (Mini Rally)", () => {
 
   it('a ball called yours stays yours: the libero takes it early or not at all', () => {
     const ball = (late: boolean) => {
-      const t = homeTeam();
-      t.team.place('defense');
+      const t = homeTeam({ you: 'OH1' });
+      t.place('defense');
       const you = t.team.players.get('OH1')!;
       const L = t.team.players.get('L')!;
-      you.isUser = true;
       you.place(-1.9, 2.4, 0);
       L.place(4, 8.5, 0);
       // their free ball dropping next to you, the libero too far off to call it
@@ -1513,12 +1466,18 @@ describe("your ball or the libero's (Mini Rally)", () => {
 describe('a jump serve is read off the toss (Mini Rally)', () => {
   /** our receive formation with their server tossing: for a jump serve, or a float */
   const tossed = (jump: boolean) => {
-    const t = homeTeam();
+    const t = homeTeam({ away: {} });
+    const away = t.away!;
     t.team.place('receive');
-    t.g.ballLive = false;
-    const server = { job: 'serve', server: { phase: 'toss', jump } };
-    t.team.opponents = { brains: new Map([[t.theirs, server]]), players: new Map(), frontRow: () => [] } as unknown as TeamAI;
+    away.serving = true;
+    t.s.sim.ballLive = false;
+    // their server walks back behind the line, waits and tosses
+    const server = away.brains.get(away.serve(new THREE.Vector3(0, 0, 6), jump))!.server;
+    const up = t.s.run(8, () => server.phase !== 'walk' && server.phase !== 'wait');
+    expect(up).toBe(true);
     t.run(0.3);
+    // (the toss still in the air, the serve not yet hit)
+    expect(t.ball.lastTouch?.kind).toBe('feed');
     return t;
   };
 
@@ -1547,20 +1506,11 @@ describe('nobody dives backwards at a serve or a spike (Mini Rally)', () => {
     AI.dive.anyway = 1;
     const t = homeTeam();
     const L = t.team.players.get('L')!;
-    const b = t.brain('L');
     L.place(0, 6, 0);
     t.put({ x: dx, y: 2.0, z: 6 + dz }, { x: 0, y: 0, z: 0 }, t.theirs, kind, -1);
     // (seen a while ago: the run is what is measured here)
     t.ball.lastTouch!.t -= 1;
-    b.job = 'receive';
-    let dived = false;
-    for (let k = 0; k < 0.9 * SIM.hz && !dived; k++) {
-      t.g.simTime += DT;
-      stepBall(t.ball.state, DT, t.g.env, []);
-      b.step(DT, t.g as unknown as AiHost);
-      L.step(DT, t.g.simTime);
-      dived = L.state === 'dive';
-    }
+    const dived = t.sent('L', 'receive', 0.9, () => L.state === 'dive');
     AI.dive.anyway = keep;
     return dived;
   };
@@ -1603,31 +1553,30 @@ describe('a dive is a reaction, and backwards only at the end of a chase (Mini R
       L.place(0, 6, 0);
       t.put(p, v, side === 1 ? t.team.players.get('OH2')! : t.theirs, kind, side);
       t.ball.lastTouch!.t -= ago;
-      if (cover) b.coverT = t.g.simTime;
-      b.job = 'receive';
-      for (let k = 0; k < 1.5 * SIM.hz; k++) {
-        const vx = L.vel.x;
-        const vz = L.vel.z;
-        const yaw = L.yaw;
-        t.g.simTime += DT;
-        stepBall(t.ball.state, DT, t.g.env, []);
-        b.step(DT, t.g as unknown as AiHost);
-        L.step(DT, t.g.simTime);
-        if (L.state === 'dive') {
-          // (the dive's way: where the body goes off the floor)
-          const dl = Math.hypot(L.vel.x, L.vel.z);
-          const dx = L.vel.x / dl;
-          const dz = L.vel.z / dl;
-          return {
-            after: t.g.simTime - t.ball.lastTouch!.t,
-            back: dz,
-            run: vx * dx + vz * dz,
-            shuffle: L.stats.shuffleSpeed,
-            turned: Math.cos(wrapAngle(yaw - yawFromDir(dx, dz))),
-          };
-        }
-      }
-      return null;
+      if (cover) b.coverT = t.s.sim.simTime;
+      // (how it was moving and turned going into the step it dives in)
+      let vx = L.vel.x;
+      let vz = L.vel.z;
+      let yaw = L.yaw;
+      const dived = t.sent('L', 'receive', 1.5, () => {
+        if (L.state === 'dive') return true;
+        vx = L.vel.x;
+        vz = L.vel.z;
+        yaw = L.yaw;
+        return false;
+      });
+      if (!dived) return null;
+      // (the dive's way: where the body goes off the floor)
+      const dl = Math.hypot(L.vel.x, L.vel.z);
+      const dx = L.vel.x / dl;
+      const dz = L.vel.z / dl;
+      return {
+        after: t.s.sim.simTime - t.ball.lastTouch!.t,
+        back: dz,
+        run: vx * dx + vz * dz,
+        shuffle: L.stats.shuffleSpeed,
+        turned: Math.cos(wrapAngle(yaw - yawFromDir(dx, dz))),
+      };
     } finally {
       AI.dive.anyway = keep;
     }
@@ -1691,7 +1640,7 @@ describe('given the ball (Mini Rally)', () => {
     b.hitter!.phase = 'approach';
     t.put({ x: -3, y: 3, z: 5 }, { x: 0, y: 0, z: 0 }, t.team.players.get('L')!, 'pass', 1);
     b.job = 'free';
-    b.step(DT, t.g as unknown as AiHost);
+    t.s.step();
     expect(b.hitter!.phase).toBe('ready');
   });
 });
@@ -1699,14 +1648,13 @@ describe('given the ball (Mini Rally)', () => {
 describe('who the setter sets (Mini Rally)', () => {
   it('never a hitter still on the floor after a dive: they are not up in time', () => {
     for (let seed = 1; seed <= 25; seed++) {
-      const t = homeTeam();
-      t.g.rng = new Rng(seed);
+      const t = homeTeam({ seed });
       t.team.place('offense');
       const S = t.team.players.get('S')!;
       const oh = t.team.players.get('OH1')!;
       oh.dive(0);
       t.put({ x: SETTER_SPOT.x, y: 2.6, z: SETTER_SPOT.z }, { x: 0, y: -1, z: 0 }, t.team.players.get('L')!);
-      expect(t.team.callSet(t.g as unknown as AiHost, S).hitter, `seed ${seed}`).not.toBe(oh);
+      expect(t.team.callSet(t.s.sim, S).hitter, `seed ${seed}`).not.toBe(oh);
     }
   });
 });
@@ -1718,8 +1666,6 @@ describe('a set the hitter cannot get to (Mini Rally)', () => {
     t.team.place('offense');
     const S = t.team.players.get('S')!;
     const oh = t.team.players.get('OH1')!;
-    // (in the air the hitter draws the arm back and looks for the ball: nothing to hit in this stand-in)
-    Object.assign(t.g.contact, { ideal: () => null, beginWindup() {} });
     t.team.touches = 2;
     t.team.setFor = oh;
     t.touch('set', 1, { x: S.pos.x, y: 2.6, z: S.pos.z }, to, apex, S);
@@ -1746,24 +1692,24 @@ describe('a set the hitter cannot get to (Mini Rally)', () => {
 });
 
 describe('a ball at the net (Mini Rally)', () => {
-  /** their dig drops just on our side of the net; their setter can still play it, or it is a real overpass */
+  /**
+   * Their dig drops just on our side of the net. Their setter can still play it (it comes down on
+   * the tape: 0.1 m over at their setter's hands, 0.7 m into our court by the time it is low), or
+   * it is a real overpass (0.65 m over at their setter's hands, 1.5 m into our court).
+   */
   const tightPass = (over: boolean) => {
-    const t = homeTeam();
-    t.team.opponents = {
-      touches: 1,
-      setFor: null,
-      overpass: () => over,
-      players: new Map(),
-      brains: new Map(),
-      frontRow: () => [],
-    } as unknown as TeamAI;
-    t.touch('dig', -1, { x: 0, y: 0.8, z: -6 }, { x: 1.5, y: 0.75, z: 1.5 }, 5.0);
+    const t = homeTeam({ away: {} });
+    const to = over ? { x: 1.5, y: 0.75, z: 1.5 } : { x: 1.5, y: 0.75, z: 0.7 };
+    t.touch('dig', -1, { x: 0, y: 0.8, z: -6 }, to, over ? 5.0 : 6.0, t.away!.players.get('L')!);
     t.run(0.6);
+    expect(t.away!.overpass(t.s.sim)).toBe(over);
     return t;
   };
 
   it('their tight pass that their setter still plays is not ours: nobody is sent to it, the blockers stay, the setter stays back', () => {
     const t = tightPass(false);
+    // (left alone it would come down on our side)
+    expect(t.team.focus!.z).toBeGreaterThan(0);
     expect(t.team.receiver).toBeNull();
     expect(t.team.situation).toBe('theirFirstBall');
     for (const slot of SLOTS) expect(t.brain(slot).job, slot).not.toBe('receive');
@@ -1779,19 +1725,16 @@ describe('a ball at the net (Mini Rally)', () => {
   });
 
   it('their tight set their hitter is going up for is not ours until it has crossed the net', () => {
-    const t = homeTeam();
-    t.team.opponents = {
-      touches: 2,
-      setFor: t.theirs,
-      overpass: () => false,
-      players: new Map(),
-      brains: new Map(),
-      frontRow: () => [],
-    } as unknown as TeamAI;
+    const t = homeTeam({ away: {} });
+    const away = t.away!;
+    // (their second touch, their setter's: it is for their outside)
+    away.touches = 1;
+    away.onSet(t.theirs);
     const lane = laneFor('OH', -1);
     // a set drifting over the tape: left alone it would come down on our side
-    t.touch('set', -1, { x: -SETTER_SPOT.x, y: 2.6, z: -SETTER_SPOT.z }, { x: lane.x, y: 0.75, z: 1.2 }, 5.0);
+    t.touch('set', -1, { x: -SETTER_SPOT.x, y: 2.6, z: -SETTER_SPOT.z }, { x: lane.x, y: 0.75, z: 1.2 }, 5.0, away.players.get('S')!);
     t.run(0.4);
+    expect(away.setFor).toBe(t.theirs);
     expect(t.team.focus!.z).toBeGreaterThan(0);
     expect(t.team.receiver).toBeNull();
     expect(t.team.situation).toBe('theirSet');
@@ -1822,21 +1765,14 @@ describe('a ball at the net (Mini Rally)', () => {
       AI.dive.anyway = 1;
       const t = homeTeam();
       const L = t.team.players.get('L')!;
-      const b = t.brain('L');
       L.place(0, off + 2.5, 0);
       t.put({ x: 0, y: 2.0, z: off }, { x: 0, y: 0, z: 0 }, t.team.players.get('OH2')!, 'pass', 1);
       t.ball.lastTouch!.t -= 1;
-      b.job = 'free';
-      let dived = false;
-      for (let k = 0; k < 0.9 * SIM.hz && !dived; k++) {
-        t.g.simTime += DT;
-        stepBall(t.ball.state, DT, t.g.env, []);
-        b.step(DT, t.g as unknown as AiHost);
-        L.step(DT, t.g.simTime);
-        dived = L.state === 'dive';
+      const dived = t.sent('L', 'free', 0.9, () => {
         // (and never through the net)
         expect(L.pos.z).toBeGreaterThan(0);
-      }
+        return L.state === 'dive';
+      });
       AI.dive.anyway = keep;
       return dived;
     };
@@ -1849,18 +1785,16 @@ describe('after the ball (Mini Rally)', () => {
   it('a platform put out for a ball that never came comes back in: nobody runs back to their spot in a passing crouch', () => {
     const t = homeTeam();
     const L = t.team.players.get('L')!;
-    L.startAction('pass', t.g.simTime);
-    t.g.ballLive = false;
+    L.startAction('pass', t.s.sim.simTime);
+    t.s.sim.ballLive = false;
     t.run(AI.passDrop + 0.1);
     expect(L.action).toBeNull();
   });
 
   it('serve receive is played in lanes: a serve short of the middle passer is theirs, not yours two metres to the side', () => {
-    const t = homeTeam();
-    t.team.place('receive');
-    const you = t.team.players.get('OH1')!;
+    const t = homeTeam({ you: 'OH1' });
+    t.place('receive');
     const mid = t.team.players.get('OH2')!;
-    you.isUser = true;
     // the middle passer has stepped back for a jump serve; it comes down 0.6 m to their side, 2.4 m in front
     mid.place(0, 7.6, 0);
     t.touch('serve', -1, { x: 0, y: 3.2, z: -9.5 }, { x: -0.6, y: 0.75, z: 5.3 }, 3.6);
