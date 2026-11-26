@@ -387,7 +387,8 @@ describe('a feat or a fix says how it is held and what no check holds', () => {
 describe('every failure ends with how to have the gate look again', () => {
   /** the id of the CI run a failure is printed in (`GITHUB_RUN_ID`) */
   const RUN = '45871704444';
-  const RERUN = /run `gh run rerun 45871704444 --failed`: editing a description starts no run\.$/;
+  const RERUN =
+    /run the whole run again, `gh run rerun 45871704444`, or push a commit: editing a description starts no run, and every job has to read it as it is now, not only the one that failed\.$/;
   const inCi = (paths: string[], more: { body?: string | null; title?: string } = {}) =>
     decide({ title: 'feat(block): the ball comes off the hands the way it met them', paths, body: described(), runId: RUN, ...more });
 
@@ -400,13 +401,13 @@ describe('every failure ends with how to have the gate look again', () => {
   /** the failures a new test or trace run mends: the play with no check, the play with tests that are green on the base, the shown tier with no check */
   const ofTheChecks = () => [...inCi([PLAY]).failures, ...inCi([PLAY, TEST]).failures, ...inCi([SHOWN]).failures];
 
-  it('a failure only the description can mend ends with the command that runs the job again, with the id of the run it failed in', () => {
+  it('a failure only the description can mend ends with the command that runs the whole run again, with the id of the run it failed in', () => {
     const failures = ofTheDescription();
     expect(failures).toHaveLength(4);
     for (const failure of failures) {
       expect(failure).toMatch(RERUN);
-      // a push would run it again too, but nothing here needs a commit
-      expect(failure).not.toMatch(/push/);
+      // nothing here needs a commit of its own: the push is for someone who may not run a workflow again
+      expect(failure).not.toMatch(/then push the commit: that runs this again/);
     }
   });
 
@@ -421,7 +422,20 @@ describe('every failure ends with how to have the gate look again', () => {
 
   it('outside CI there is no run to name, and the command shows where its id goes', () => {
     for (const failure of [...feat([PLAY]).failures, ...decide({ title: 'fix: x', paths: [], body: '' }).failures])
-      expect(failure).toMatch(/`gh run rerun <run id> --failed`/);
+      expect(failure).toMatch(/`gh run rerun <run id>`/);
+  });
+
+  it('a fix that is retitled docs after the gate fails it: the command the gate gave runs the whole run, so the comparison reads the docs too', () => {
+    // the comparison passed it as a fix; run again alone, the gate would ask nothing of a docs and that pass would stand
+    const failures = [
+      ...inCi([PLAY], { title: 'fix(block): the hands' }).failures,
+      ...inCi([], { title: 'fix: the whistle', body: '' }).failures,
+    ];
+    expect(failures).toHaveLength(3);
+    for (const failure of failures) {
+      expect(failure).toMatch(/run the whole run again, `gh run rerun 45871704444`, or push a commit/);
+      expect(failure).not.toMatch(/--failed/);
+    }
   });
 
   it('no failure says "run this job again" without saying how', () => {

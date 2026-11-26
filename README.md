@@ -146,7 +146,7 @@ npm run build      # typecheck + static build in dist/ (open with any static ser
 npm run check      # typecheck, lint, formatting and unit tests: run this before pushing
 npm run e2e        # end-to-end check in headless Chromium (see Testing)
 npm run trace      # does this checkout give the same play every run? (see Testing)
-npm run trace:compare   # for a refactor: does it play exactly like main? (see Testing)
+npm run trace:compare   # does it play exactly like main? Anything but a feat or a fix must (see Testing)
 npm run format     # format the code with Prettier
 ```
 
@@ -1131,10 +1131,13 @@ The principle behind these checks, and where a new rule should live, is in
 
 CI (`.github/workflows/ci.yml`) runs three jobs on every pull request and on
 `main`: **check** (typecheck, ESLint, Prettier, unit tests, production build),
-**e2e** and **trace** (both below). Check and e2e should be required checks for
+**e2e** and **trace** (both below). All three are required checks for
 merging into `main`. **trace** plays every drill twice and the two runs have to
-be the same (`npm run trace`). For a `refactor` pull request it goes on to
-compare with `main`: the change has to play exactly like it (`npm run trace:compare`).
+be the same (`npm run trace`). On a pull request it goes on to compare with the
+commit the pull request goes into (`npm run trace:compare`): only a `feat` or a
+`fix` may differ, and every other type has to play exactly like it
+(`scripts/same-play-as-base.mjs`). **check** fails a title that starts with none
+of the types in [AGENTS.md](AGENTS.md#git) (`scripts/title-has-a-type.mjs`).
 On a pull request, **check** also runs the architecture rules as they are on the
 branch it goes into and fails when the known lists grow
 (`scripts/rules-from-base.mjs`), so a change cannot pass by loosening its own checks.
@@ -1241,7 +1244,8 @@ a new trace run, or a line `Unchecked: <reason>` that says why no check can hold
   changes it; `SOAK` sets the soak length in seconds and `PERF_FRAMES` the
   frames the perf numbers are taken over, 120 each; CI runs 30 of both). First time: `npx
   playwright install chromium`.
-* `npm run trace:compare` — for a refactor, which must change nothing for the
+* `npm run trace:compare` — for every change that is not a `feat` or a `fix`: a
+  refactor above all, which must change nothing for the
   player ([decision record 0010](docs/adr/0010-the-simulation-runs-on-its-own.md)).
   It builds this checkout and the commit it left `main` at, plays every drill on
   both with a seeded autopilot (a minute each, on the manual clock, in headless
