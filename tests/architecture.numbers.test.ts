@@ -3,7 +3,7 @@ import ts from 'typescript';
 import { DETERMINISTIC, filesUnder, layerOf, read } from './architecture.scan';
 import known from './architecture.numbers.json';
 
-// Every tunable number lives in src/config.ts (AGENTS.md), so the feel can be tuned in one place
+// Every tunable number lives in src/config/ (AGENTS.md), so the feel can be tuned in one place
 // and a difficulty can change it without touching game code. The game code is not there yet: it
 // still holds numbers of its own. This is the ratchet. Each file's count is written down
 // (tests/architecture.numbers.json) and only goes down: a new number in physics, the simulation,
