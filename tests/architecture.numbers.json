@@ -20,7 +20,6 @@
     "src/game/callRuns.ts": 8,
     "src/game/contact.ts": 192,
     "src/game/intent.ts": 1,
-    "src/game/modes/blockDrill.ts": 26,
     "src/game/modes/freePlay.ts": 39,
     "src/game/modes/miniRally.ts": 28,
     "src/game/modes/receiveDrill.ts": 63,

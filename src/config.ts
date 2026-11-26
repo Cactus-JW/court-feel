@@ -895,6 +895,72 @@ export const SERVE_DRILL = {
   result: 1.5,
 } as const;
 
+/**
+ * Every drill has a section of its own here, as the Serve drill has above, so a drill's feel is
+ * tuned in this file and a difficulty can override it by name (docs/adr/0012). Where a drill has
+ * them, the keys come in this order:
+ * - `cast`: who is on court. `seed` is the look of each athlete's kit (`addAthlete`), and a spot
+ *   is in metres on the court (the net is z = 0, the home team plays on +z).
+ * - `feed`: the ball the drill sends.
+ * - `timing` (s): how long each part of a rep lasts.
+ * - `points`: what a rep scores.
+ * - `crowd`: how much each result lifts the crowd (`DrillHost.crowd`: 1 is a full cheer).
+ * - `say` (s): how long each of the drill's lines stays on the HUD.
+ * - `slack` (m): how far off the start spot the player may end a rep before they are walked back.
+ *
+ * Where no reason is written for a number, none was recorded when it went in: it was tuned by
+ * play, and the comment names the commit it was first seen in (`git log -S`).
+ *
+ * The coach's toss to the setter starts a rep in the Spike drill, and in the Block and Receive
+ * drills on the far side (mirrored there). The ball leaves `hand.x` m to the side of the coach's
+ * feet and `hand.z` m nearer the net, `hand.y` m up. It is solved to come down through `targetY` m
+ * over the setter's target (`SETTER_TARGET`, src/game/plays.ts) and to top out `apexAbove` m over
+ * that target's height, rolling forward at `spin` rad/s. The same six numbers were written into
+ * each of the three drills; they have one name so the three stay one toss. Tuned by play: first
+ * seen in the Spike drill (8c7183c, 2026-11-02), then copied to the Block drill (0e1afe2) and the
+ * Receive drill (9dee160).
+ */
+export const COACH_TOSS = {
+  hand: { x: 0.1, y: 1.35, z: 0.3 },
+  targetY: 2.1,
+  apexAbove: 0.4,
+  spin: 3,
+} as const;
+
+/**
+ * The Block drill (src/game/modes/blockDrill.ts): their coach tosses (`COACH_TOSS`), their setter
+ * sets one of three hitters, and you block. Its numbers were tuned by play and first seen in the
+ * drill's first commit (0e1afe2, 2026-11-02), apart from the two said otherwise.
+ * - `cast`: you start `baseZ` m off the net (along the net: in front of their middle, where their
+ *   quick is hit). Their setter's kit seed is `seed.setter`, the three hitters count up from
+ *   `seed.hitters`, and their coach, at `coach` in their back court, has `seed.coach`.
+ * - `feed.mine`: the share of sets that go to the hitter your position blocks in a match. The
+ *   rest go to any of the three.
+ * - `timing`: the first toss comes `intro` s after the drill starts. In each rep the coach's arm
+ *   starts `toss` s in and the ball leaves the hand at `release`. A rep nobody ended is over
+ *   `liveMax` s after the toss, and the result stays up `result` s.
+ * - `points`: `stuff` for a Perfect block that lands on their floor and `block` for any other that
+ *   does, `soft` for a touch that stays in play or lands on yours, `tooled` when the ball goes out
+ *   off your hands, `hitterError` when they hit it out untouched.
+ * - `crowd`: for a stuff, a block point and a soft block.
+ * - `say.intro`: the opening line (142263c, 2026-11-02).
+ * - `slack`: small, so you are walked back to the same spot after nearly every rep and every read
+ *   starts from the same place (8259b6b, 2026-11-03: it was 0.8 m).
+ */
+export const BLOCK_DRILL = {
+  cast: {
+    baseZ: 0.5,
+    seed: { setter: 21, hitters: 22, coach: 4 },
+    coach: { x: -3.4, z: -6.6 },
+  },
+  feed: { mine: 0.45 },
+  timing: { intro: 1.2, toss: 0.3, release: 0.57, liveMax: 8, result: 2 },
+  points: { stuff: 150, block: 100, soft: 60, tooled: 20, hitterError: 10 },
+  crowd: { stuff: 1.2, block: 0.8, soft: 0.3 },
+  say: { intro: 3.6 },
+  slack: 0.15,
+} as const;
+
 export const ASSIST = {
   /** 0..1 default aim assist strength */
   aim: 0.55,
