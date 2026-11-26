@@ -33,7 +33,9 @@ export interface SceneOptions {
   hooks?: Partial<SimulationHooks>;
   /**
    * What the drill being played answers: where a pass goes, the setter's options and pick, who may
-   * serve. The scene is the drill: its `step` runs the scene's teams, then this one's.
+   * serve. The scene is the drill: its `step` runs the scene's teams, then this one's. A harness
+   * that plays a real drill gives the simulation that drill in the scene's place
+   * (tests/headlessGame.ts).
    */
   drill?: Partial<SimDrill>;
   /**

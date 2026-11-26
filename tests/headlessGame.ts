@@ -1,13 +1,11 @@
 import * as THREE from 'three';
 import { DEFAULT_SETTINGS, type PositionId, type ServeKind, type Settings } from '../src/config';
-import { Athlete } from '../src/game/athlete';
 import type { ContactEvent } from '../src/game/contact';
 import { takeKey } from '../src/game/intent';
 import { NO_MARKERS } from '../src/game/modes/markers';
 import type { DrillHost, DrillHud, ModeId } from '../src/game/modes/mode';
 import { createMode } from '../src/game/modes/registry';
-import { Simulation } from '../src/game/simulation';
-import { NO_HOOKS } from './simHooks';
+import { scene } from './scene';
 
 /** a HUD nobody reads: every line a drill writes is kept, so a test can ask what was said */
 function silentHud(said: string[]): DrillHud {
@@ -59,21 +57,21 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
   const outcomes: string[] = [];
 
   const settings: Settings = { ...DEFAULT_SETTINGS };
-  const sim = new Simulation({
-    ...NO_HOOKS,
-    aimAssist: () => settings.aimAssist,
-    setAssist: () => settings.setAimAssist,
-    aimTargetFor: (a, out) => (a.isUser ? out.set(a.pos.x, 0, -a.side * 6) : out.copy(a.aiAim)),
-    contact: (ev: ContactEvent) =>
-      touches.push(`${sim.simTime.toFixed(4)} ${ev.athlete.role}${ev.athlete.side === 1 ? 'H' : 'A'} ${ev.kind} ${ev.grade}`),
-    aiContact: (a, kind) => touches.push(`${sim.simTime.toFixed(4)} ${a.role}${a.side === 1 ? 'H' : 'A'} ${kind} ai`),
-    outcome: (o) => outcomes.push(`${sim.simTime.toFixed(4)} ${o.kind} ${o.side}`),
+  const s = scene({
+    seed,
+    hooks: {
+      aimAssist: () => settings.aimAssist,
+      setAssist: () => settings.setAimAssist,
+      aimTargetFor: (a, out) => (a.isUser ? out.set(a.pos.x, 0, -a.side * 6) : out.copy(a.aiAim)),
+      contact: (ev: ContactEvent) =>
+        touches.push(`${sim.simTime.toFixed(4)} ${ev.athlete.role}${ev.athlete.side === 1 ? 'H' : 'A'} ${ev.kind} ${ev.grade}`),
+      aiContact: (a, kind) => touches.push(`${sim.simTime.toFixed(4)} ${a.role}${a.side === 1 ? 'H' : 'A'} ${kind} ai`),
+      outcome: (o) => outcomes.push(`${sim.simTime.toFixed(4)} ${o.kind} ${o.side}`),
+    },
   });
-  sim.rng.reseed(seed);
-  const me = new Athlete(pos, 1);
-  me.place(-3.2, 4.5, 0);
-  sim.athletes.push(me);
-  const seat = sim.addSeat(me, { autoJumpSet: () => settings.autoJumpSet });
+  const { sim } = s;
+  const me = s.athlete(pos, 1, { x: -3.2, z: 4.5, yaw: 0 }, { user: { autoJumpSet: () => settings.autoJumpSet } });
+  const seat = sim.seatOf(me)!;
 
   const host: DrillHost = {
     get simTime() {
@@ -132,6 +130,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     fx: { replay: { contact: new THREE.Vector3() } },
   };
 
+  // a real drill plays here: it takes the scene's place as the simulation's drill
   const mode = createMode(id, host, pos);
   sim.drill = mode;
   mode.setup();
@@ -147,7 +146,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     /** play one frame: the seat plays the intent it holds (and walks its player back between reps), the simulation steps twice (120 Hz under 60 fps) and the drill's frame runs */
     frame(): void {
       seat.frame(1 / 60);
-      for (let i = 0; i < 2; i++) sim.step(1 / 120);
+      s.step(2);
       mode.frame(1 / 60);
     },
   };
