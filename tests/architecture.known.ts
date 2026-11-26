@@ -26,7 +26,6 @@ export const KNOWN_FAKE_GAME: readonly string[] = [
   'tests/greenSet.test.ts',
   'tests/jumpSet.test.ts',
   'tests/middleBlock.test.ts',
-  'tests/serve.test.ts',
   'tests/serveRun.ts',
   'tests/setterCall.test.ts',
   'tests/teamDefence.test.ts',
