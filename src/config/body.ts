@@ -34,8 +34,6 @@ export interface PositionStats {
   power: number;
   /** passing/defence skill (reduces pass error) */
   ballControl: number;
-  /** jersey colour for libero override etc. */
-  jersey?: number;
 }
 
 export const POSITIONS: Record<PositionId, PositionStats> = {

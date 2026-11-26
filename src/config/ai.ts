@@ -742,7 +742,7 @@ export const AI = {
   /** an out-of-system set (and a backup's set, when the setter played the first ball) goes this much (m) higher */
   outOfSystemApex: 0.4,
   /**
-   * An AI hitter's run across the court curves (src/ai/approach.ts, bendFor): a run more than
+   * An AI hitter's run across the court curves (src/game/approach.ts, bendFor): a run more than
    * `straight` rad off square to the net bends by `share` of the excess, at most `maxBend` rad,
    * leaving that much flatter along the net and arriving that much squarer to it. Runs shorter
    * than `minRun` m stay straight. The turn is done over the first `ground` of the way (the run

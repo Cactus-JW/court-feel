@@ -502,9 +502,9 @@ export const SERVE_KINDS: readonly ServeKind[] = ['float', 'jumpFloat', 'jump'];
  * and 95 km/h for an Outside Hitter.
  */
 export const SERVE = {
-  float: { name: 'Standing float', short: 'Float', back: 1.1, toss: 0.25, tossHigh: 0.8, ahead: 0, spin: false },
-  jumpFloat: { name: 'Jump float', short: 'Jump float', back: 2.3, toss: 2.0, tossHigh: 1.7, ahead: 0.5, spin: false },
-  jump: { name: 'Jump serve', short: 'Jump', back: 3.4, toss: 4.0, tossHigh: 2.8, ahead: 0.5, spin: true },
+  float: { name: 'Standing float', back: 1.1, toss: 0.25, tossHigh: 0.8, ahead: 0, spin: false },
+  jumpFloat: { name: 'Jump float', back: 2.3, toss: 2.0, tossHigh: 1.7, ahead: 0.5, spin: false },
+  jump: { name: 'Jump serve', back: 3.4, toss: 4.0, tossHigh: 2.8, ahead: 0.5, spin: true },
   hold: { full: 0.8, low: 0.5, high: 1.6 },
   /** a float hit in the air off a full run-up (m/s); `CONTACT.serveFloatSpeed` with no run-up at all */
   jumpFloatSpeed: 20,

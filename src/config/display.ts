@@ -426,7 +426,6 @@ export const FX = {
   shakeBlock: 0.6,
   shakeLand: 0.15,
   sparkCount: 70,
-  trailLength: 28,
   crackLife: 7,
   replayEnabled: true,
   replaySlow: 0.32,
