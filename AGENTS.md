@@ -87,7 +87,7 @@ Why the checks are arranged as they are, and where a new rule should live, is in
 - **Always:** run `npm run check` before committing, and verify user-facing changes in the app.
 - **Ask first:** anything that changes how the game plays (timing windows, physics constants, controls, AI decisions, a new drill or mechanic), a new dependency, and any art or audio asset. Assets need an MIT-compatible licence and an entry in [CREDITS.md](CREDITS.md).
 - **Never:** skip, weaken or delete a test to get CI green, or commit directly to `main` or `release`.
-- **The checks are not yours to loosen.** A pull request never loosens a check: CI judges it with the architecture rules as they are on `main` and fails when `tests/architecture.known.ts` grows (`scripts/rules-from-base.mjs`). A check that a change needs rides with that change, in a commit of its own. A change to a check that no change needs is a pull request of its own. Either way, a change to a file that judges every change ([.github/CODEOWNERS](.github/CODEOWNERS)) is the owner's to approve.
+- **The checks are not yours to loosen.** A check that a change needs (a new guard, a shorter list, a lower count) rides with that change, in a commit of its own. Loosening one (raising a count, lengthening a known list, weakening or removing a test) is never part of the change it would let through: it is a pull request of its own, for the owner to approve. CI holds part of this: it runs the architecture rules and the scripts that judge a pull request as they are on the branch it goes into, and fails when `tests/architecture.known.ts` grows. The owner's review holds the rest ([.github/CODEOWNERS](.github/CODEOWNERS)).
 
 ## Agent conventions
 

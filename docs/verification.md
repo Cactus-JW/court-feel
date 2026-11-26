@@ -247,9 +247,11 @@ A check is worth nothing if the change it judges can rewrite it.
   puts entries in and takes more out. Fix new code; do not list it.
 - **The files that judge every change** are listed in
   [.github/CODEOWNERS](../.github/CODEOWNERS). A change to one of them is the
-  owner's to approve. A check that a change needs rides with that change, in a
-  commit of its own. A change to a check that no change needs is a pull request
-  of its own.
+  owner's to approve. A check that a change needs (a new guard, a shorter list,
+  a lower count) rides with that change, in a commit of its own. Loosening one
+  (raising a count, lengthening a known list, weakening or removing a test) is
+  never part of the change it would let through: it is a
+  pull request of its own, for the owner to approve.
 - **A test is never skipped, weakened or deleted to get CI green.**
 
 ## What a passing run does not tell you
