@@ -1475,6 +1475,9 @@ describe('a jump serve is read off the toss (Mini Rally)', () => {
     const server = away.brains.get(away.serve(new THREE.Vector3(0, 0, 6), jump))!.server;
     const up = t.s.run(8, () => server.phase !== 'walk' && server.phase !== 'wait');
     expect(up).toBe(true);
+    // the toss tells it, on the step the ball leaves the hand: nobody waits for the run-up to know
+    expect(server.phase).toBe('toss');
+    expect(t.team.jumpServe).toBe(jump);
     t.run(0.3);
     // (the toss still in the air, the serve not yet hit)
     expect(t.ball.lastTouch?.kind).toBe('feed');
