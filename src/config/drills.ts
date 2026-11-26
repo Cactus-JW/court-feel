@@ -456,3 +456,21 @@ export const TUTORIAL = {
   /** a rep where you moved less than this (m) from the start never ran */
   ranDist: 1,
 };
+
+/**
+ * What a drill reads of the player's settings. It is handed them by whoever runs it
+ * (`DrillHost.settings`), and it sees these and no others: the rest of `Settings` is the app's and
+ * the display's. A setting a drill starts to read is moved here from `Settings`, which extends this.
+ */
+export interface DrillSettings {
+  /** your body jumps by itself to set a pass in system (the jump set; on by default). Off: the jump is yours (Space) */
+  autoJumpSet: boolean;
+  /** when you set: the hitter you picked stays picked for the next ball (off: back to the outside) */
+  keepSetPick: boolean;
+  /** when you set: rings on the floor where your hitters hit from (off by default: the marker over the hitter and the arc say it) */
+  hitterSpots: boolean;
+  /** the Spike and Serve Drills: the spot your run-up takes off from, and GO when to start it */
+  runUpGuide: boolean;
+  /** the view is from the player's eyes (the Serve drill aims its first look by it) */
+  firstPerson: boolean;
+}
