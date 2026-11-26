@@ -244,8 +244,10 @@ A check is worth nothing if the change it judges can rewrite it.
   shorter than it was: a refactor that moves a breach nearer to where it ends
   puts entries in and takes more out. Fix new code; do not list it.
 - **The files that judge every change** are listed in
-  [.github/CODEOWNERS](../.github/CODEOWNERS). A change to one of them is its
-  own pull request and the owner's to approve.
+  [.github/CODEOWNERS](../.github/CODEOWNERS). A change to one of them is the
+  owner's to approve. A check that a change needs rides with that change, in a
+  commit of its own. A change to a check that no change needs is a pull request
+  of its own.
 - **A test is never skipped, weakened or deleted to get CI green.**
 
 ## What a passing run does not tell you
