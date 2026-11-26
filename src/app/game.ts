@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import {
-  ASSIST,
   CAMERA,
   CHARACTER,
   COURT,
@@ -45,8 +44,6 @@ import { AthleteView } from '../character/athleteView';
 import { makeKit } from '../character/kits';
 import type { Kit } from '../character/rig';
 import { wheelPlays } from '../game/playbook';
-import { setStepAssist } from '../game/setAssist';
-import { autoSetJump, takeoffSpot } from '../game/setJump';
 import { aimTargetFromLook, ContactSystem, tossGroove, type ContactEvent, type IdealInfo, type SetPreview } from '../game/contact';
 import { SetGuide } from '../fx/setGuide';
 import { SetRing } from '../fx/setRing';
@@ -245,17 +242,17 @@ export class Game implements AiHost {
   ) {
     // first: the venue, the settings and the display below all read the simulation's ball and net
     this.sim = new Simulation({
-      aimAssist: (a) => (a.isUser ? this.settings.aimAssist : ASSIST.ai),
-      setAssist: (a) => (a.isUser ? this.settings.setAimAssist : ASSIST.ai),
+      aimAssist: () => this.settings.aimAssist,
+      setAssist: () => this.settings.setAimAssist,
       setByFeel: () => !this.settings.setRing,
       aimTargetFor: (a, out) => this.aimTargetFor(a, out),
-      contact: (ev) => this.onContact(ev),
+      touched: (ev) => this.showTouch(ev),
+      contact: (ev) => this.events.emit('contact', ev),
       aiContact: (athlete, kind, speed) => this.events.emit('aiContact', { athlete, kind, speed }),
       ballEvent: (e) => this.events.emit('ballEvent', e),
       floatBreak: (strength) => this.events.emit('floatBreak', { strength }),
       outcome: (o) => this.events.emit('outcome', o),
       setLevel: () => this.settings.setLevel,
-      userSetJump: () => this.userSetJump(),
     });
     this.venueSetting = settings.venue;
     setVenue(venueOverride ?? settings.venue);
@@ -319,8 +316,14 @@ export class Game implements AiHost {
 
     this.seat = this.sim.addSeat(new Athlete('OH', 1, { body: settings.bodies.OH, hand: settings.hand }), {
       inputTime: () => this.inputTime(),
-      tutorial: { ownsButtons: () => this.tutorial.ownsButtons(), quiet: () => this.tutorial.quiet() },
+      tutorial: {
+        ownsButtons: () => this.tutorial.ownsButtons(),
+        quiet: () => this.tutorial.quiet(),
+        drive: (me) => this.tutorial.drive(me),
+      },
       notePress: (err, contactT) => this.notePress(err, contactT),
+      autoJumpSet: () => this.settings.autoJumpSet,
+      placed: (yaw, snapped) => this.userPlaced(yaw, snapped),
     });
     this.me.place(-3.2, 4.5, 0);
     this.addAthlete(this.me);
@@ -453,58 +456,28 @@ export class Game implements AiHost {
 
   /** set the user's body + camera facing (teleport) */
   placeUser(x: number, z: number, yaw: number): void {
-    this.ret = null;
-    this.me.place(x, z, yaw);
-    this.rig.yaw = yaw;
-    // a teleport turns the player's look with their body
-    this.user.intent.yaw = yaw;
-    this.rig.snap();
-    this.user.clear();
-    this.eyeInit = false;
+    this.seat.place(x, z, yaw);
   }
 
-  /** the user's athlete jogs back to a drill spot between reps (no teleport, no black cut) */
-  private ret: { x: number; z: number; yaw: number; t: number; maxT: number; userDriven: boolean } | null = null;
-
-  returnUser(x: number, z: number, yaw: number, maxT = PLAYER.walkBack.maxT): void {
-    this.ret = { x, z, yaw, t: 0, maxT, userDriven: false };
+  /** the user's athlete jogs back to a drill spot between reps (no teleport, no black cut): the seat walks them (`Seat.walkTo`) */
+  returnUser(x: number, z: number, yaw: number, maxT?: number): void {
+    this.seat.walkTo(x, z, yaw, maxT);
   }
 
   /** a drill should hold its next feed while this is true */
   get userReturning(): boolean {
-    return this.ret !== null;
+    return this.seat.walking;
   }
 
-  private stepReturn(dt: number): void {
-    const r = this.ret;
-    if (!r) return;
-    const me = this.me;
-    const W = PLAYER.walkBack;
-    r.t += dt;
-    const d = Math.hypot(me.pos.x - r.x, me.pos.z - r.z);
-    const keys = this.user.intent.steering;
-    if (keys) r.userDriven = true;
-    if (d < W.near || (r.userDriven && d < W.nearSteered)) {
-      this.ret = null;
-      return;
-    }
-    if (r.t > r.maxT) {
-      // still far (or the player wandered off): snap with a soft dip, not a black cut
-      if (!r.userDriven || r.t > r.maxT + W.giveUp) {
-        if (!r.userDriven) {
-          this.hud.dip();
-          this.placeUser(r.x, r.z, r.yaw);
-        }
-        this.ret = null;
-      }
-      return;
-    }
-    if (keys || me.state !== 'ground' || Math.hypot(me.cmd.moveX, me.cmd.moveZ) > W.idle) return;
-    // jog back (body keeps facing where the camera looks: a backpedal when looking at the net)
-    const m = Math.min(1, d / W.ease);
-    me.cmd.moveX = ((r.x - me.pos.x) / d) * m;
-    me.cmd.moveZ = ((r.z - me.pos.z) / d) * m;
-    me.cmd.sprint = d > W.sprintFrom;
+  /**
+   * The seat put the user's athlete on a spot: the camera turns with them and starts from there.
+   * A walk back that ran out of time (`snapped`) dips the screen softly, it does not cut to black.
+   */
+  private userPlaced(yaw: number, snapped: boolean): void {
+    if (snapped) this.hud.dip();
+    this.rig.yaw = yaw;
+    this.rig.snap();
+    this.eyeInit = false;
   }
 
   /** change the user's position stats (height, jump, etc; your custom body for that position from the settings) */
@@ -710,7 +683,12 @@ export class Game implements AiHost {
     return out.copy(a.aiAim);
   }
 
-  private onContact(ev: ContactEvent): void {
+  /**
+   * The player's touch, in words: its grade and its speed. The simulation tells of a touch here
+   * first (`SimulationHooks.touched`), before it arms the judge and tells the drill, so the grade
+   * goes up ahead of anything the drill says about the same touch.
+   */
+  private showTouch(ev: ContactEvent): void {
     if (ev.athlete.isUser) {
       if (ev.grade) {
         const kmh = ev.speed * 3.6;
@@ -725,9 +703,6 @@ export class Game implements AiHost {
       }
       if (ev.speed > 0) this.hud.setSpeed(ev.speed * 3.6);
     }
-    if (ev.grade !== 'Miss' && ev.speed > 0) this.judge.arm(this.ball);
-    this.mode?.onContact(ev);
-    this.events.emit('contact', ev);
   }
 
   /** AI touches (sets, digs, blocks) for audio/FX */
@@ -942,23 +917,6 @@ export class Game implements AiHost {
     this.post.render(dt);
   }
 
-  /** frame-level input: look, toggles, immediate action starts (same frame as the input) */
-  /**
-   * Set aim assist for your footwork: the ball is yours to set and you are on the floor near
-   * the spot, so your body takes the last steps onto it (setStepAssist; off at assist 0, and
-   * once the ball is in your hands).
-   */
-  private assistSetStep(): void {
-    const me = this.me;
-    if (!this.user.intent.helped || this.settings.setAimAssist <= 0 || me.state !== 'ground' || !this.mode?.userSetsNext?.()) return;
-    if (me.action?.kind === 'set' && me.action.absorbing) return;
-    // going up for it: the steps go to where the hop takes off from (the spot, less what your run carries)
-    const jump = this.contact.setCatch(me)?.jump;
-    const spot = jump ? takeoffSpot(me, jump, this.stepP) : this.contact.setSpot(me, this.stepP);
-    if (spot) setStepAssist(me.cmd, me.pos, spot, this.settings.setAimAssist);
-  }
-  private stepP = { x: 0, y: 0, z: 0 };
-
   /**
    * The play wheel (C, while the mode lets you call a play): hold C and move the mouse to a
    * play, let go to call it; or press C, then the play's number (a tap on touch) or click.
@@ -999,6 +957,7 @@ export class Game implements AiHost {
     return this.mode && !this.inMenu ? (this.mode.routes?.() ?? null) : null;
   }
 
+  /** frame-level input: look, toggles, immediate action starts (same frame as the input) */
   private frameInput(dt: number): void {
     if (this.input.consumePress('F3')) {
       this.debug.toggle();
@@ -1018,8 +977,7 @@ export class Game implements AiHost {
       if (this.bot && this.mode) {
         this.bot.step(dt);
         this.user.intent = this.hands();
-        this.user.frame(dt);
-        this.stepReturn(dt);
+        this.seat.frame(dt);
       } else readKeys(this.input, this.user.intent);
       return;
     }
@@ -1042,11 +1000,8 @@ export class Game implements AiHost {
         if (!this.fx.startPointReplay()) this.fx.startReplay();
       }
     }
-    this.user.frame(dt);
-    this.assistSetStep();
-    // the lesson's together rep: the coach holds your line (what you hold decides whether time runs)
-    this.tutorial.drive(this.me);
-    this.stepReturn(dt);
+    // the seat plays it: the controller, the last steps onto a set, the lesson's line, the walk back
+    this.seat.frame(dt);
   }
 
   /**
@@ -1159,20 +1114,6 @@ export class Game implements AiHost {
    */
   inputTime(): number {
     return this.simTime - 1 / SIM.hz + this.accum;
-  }
-
-  /**
-   * Your jump set (Settings: Auto jump set): a pass in system is yours to set, so your body goes
-   * up for it by itself, timed so the top of the jump is in the middle of the touch. The catch and
-   * the release stay yours. Off, or out of system, you set from the floor (or jump yourself: Space).
-   */
-  private userSetJump(): void {
-    const me = this.me;
-    const sets = !this.inMenu && !!this.mode?.userSetsNext?.();
-    me.jumpSets = sets && this.settings.autoJumpSet;
-    // what the arms get ready for in the air, chosen on the floor (a jump keeps what it went up for)
-    if (me.grounded) me.airIntent = sets ? 'set' : 'attack';
-    if (me.jumpSets) autoSetJump(me, this.contact.setCatch(me)?.jump ?? null, this.simTime);
   }
 
   fixedStep(dt: number): void {

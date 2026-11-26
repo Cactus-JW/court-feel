@@ -1206,7 +1206,11 @@ branch it goes into and fails when the known lists grow
   grade and speed with either hand, the stored hand is sanitised), the block
   shadow (and how it is drawn: its outline a surface with the patch's own depth offset, no line or
   point asked for one), the touch pad model, the pointer-lock fallback, the replay of
-  athletes added mid-recording (the Spike Drill's blockers), stored-settings
+  athletes added mid-recording (the Spike Drill's blockers), what the simulation and a
+  player's seat do with no app there (a clean touch arms the judge and the drill hears of
+  it, an AI player reaches as far as in the game, the last steps onto a set, the walk
+  back between reps: jogged, the player's once they take the stick, put there when time
+  runs out, one seat's never moving another's athlete; the auto jump set), stored-settings
   and quick-start-link validation, and the error reporter.
 * `npm run e2e` — starts Vite, loads the game in headless Chromium and plays
   every drill with an autopilot through the real input path (it plans its
