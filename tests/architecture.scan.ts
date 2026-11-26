@@ -223,3 +223,31 @@ export function clocksAndDiceIn(file: string): string[] {
   visit(ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true));
   return [...found].sort();
 }
+
+/**
+ * The shapes a hand-made stand-in for the game takes in a test, found in the test's text. Each is
+ * something tests/scene.ts gives for real, so no test has a reason to write one:
+ *
+ * - a ball of its own: a method, a property or a field called `ensurePrediction` (a call on a real
+ *   ball, `ball.ensurePrediction(...)`, is not one);
+ * - a host for the contact system: any use of the `ContactHost` type (`satisfies`, a cast, an
+ *   annotation: a test of the play is handed the simulation's own contact system and never needs
+ *   the type);
+ * - a contact system of its own: `new ContactSystem`;
+ * - a stub written over the simulation's dice or its contact system: an assignment to a member of
+ *   something called `rng` or `contact`, or an `Object.assign` onto one. What the game itself
+ *   leaves there as state may be set (`lastSet`, `lastSetResult`). `knobs`: the file is
+ *   tests/scene.ts, the one place that holds the dice and the touch still, so this shape is its own.
+ *
+ * It reads text, so it is fooled by another name: a stub written through an alias
+ * (`const cs = sim.contact; cs.tryPass = ...`), or a ball faked with no `ensurePrediction` at all.
+ */
+export function standInsIn(text: string, knobs = false): string[] {
+  const found: string[] = [];
+  if (/(?<![.\w])ensurePrediction\s*[:=(]/.test(text)) found.push('a ball of its own');
+  if (/\bContactHost\b/.test(text)) found.push('a host for the contact system');
+  if (/\bnew\s+ContactSystem\b/.test(text)) found.push('a contact system of its own');
+  const stub = /\b(rng|contact)\s*\.\s*(?!lastSet\b|lastSetResult\b)\w+\s*=(?![=>])|Object\.assign\(\s*[\w.!?]*\b(rng|contact)\s*,/;
+  if (!knobs && stub.test(text)) found.push('a stub on the dice or the contact system');
+  return found;
+}
