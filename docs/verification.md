@@ -139,9 +139,24 @@ Ask these in order and stop at the first yes.
   and a real drill in Node, with no renderer, no DOM, no HUD and no camera
   (`tests/headlessGame.ts`), invariants checked at every step. It fails the
   moment a drill needs the browser to play, and it is where a test of a drill's
-  rules can now be written without faking the game.
+  rules can now be written without faking the game. The headless game keeps no
+  copy of a rule of the play: a clean touch arms the judge, an AI player has its
+  aim assist, and the player is walked back between reps, steps onto a set and
+  goes up for it, all by the simulation and the seat, with the settings a new
+  player has.
 - **Two players in one simulation** (`tests/seats.test.ts`): two seats, each
   handed its own intents, and the game replays from the log of both.
+- **What the game does for a player, on a bare seat** (`tests/seatRules.test.ts`):
+  the last steps onto a set, the walk back between reps and the auto jump set,
+  in a simulation with no app. These rules are held twice. The runs with a
+  person's keys (above) hold them in the app, as the same play on two builds.
+  These tests state each one as a fact, guard by guard: legs off the floor are
+  asked for no step, the steps go to where a hop takes off from, the feet are
+  left alone once the ball is in the hands, a body in the air is not jogged, a
+  player who took the stick is never put anywhere. They are also the only
+  check of the two rules no key can reach: the walk back giving way to feet
+  that something else is already moving, and every seat being stepped (the app
+  has one).
 - **Property tests** (`tests/properties.test.ts`). A fact that must hold for
   every input, tried on hundreds of seeded ones. They are for the bugs nobody
   wrote a case for. The inputs are seeded, so the tests are as repeatable as any
@@ -157,9 +172,12 @@ Ask these in order and stop at the first yes.
   the body goes up for a pass in system, and with it off it stays down; a player
   who is not back on their spot in time is put there and the screen dips once;
   one who took the stick is never put anywhere; the Mini Rally waits less long
-  than a drill. They live here and not in a unit test because on `main` these
-  rules are in `Game`, which only a browser can build. Where a unit test can
-  reach a rule, it is the cheaper place.
+  than a drill. They were written while these rules were in `Game`, which only
+  a browser can build. The rules are the seat's now, and
+  `tests/seatRules.test.ts` states them in the cheaper place. These stay as
+  the check that the app, with its settings and a person's keys, still brings
+  them to the player. Where a unit test can reach a rule, it is the cheaper
+  place.
 - **Driving the app.** The `verify-court-feel` skill lets an agent run the game
   and look, before it says a change works.
 
@@ -208,14 +226,18 @@ Say these out loud in a pull request when they apply.
   giving way to feet that something else is already moving (with a keyboard a
   move key is the only thing that moves them, and a move key already makes the
   walk back the player's), and every seat being stepped (the app has one seat).
-  A unit test on a bare seat is their place.
+  A unit test on a bare seat holds each (`tests/seatRules.test.ts`: "feet
+  already going somewhere are left to it", "every seat's player goes up for
+  their own set"). A run that prints `same play` says nothing about them.
 - **First person is never played.** Every pass of the trace sets the camera to
   third person. Where a walk back that runs out of time leaves the player
   looking is held in third person (two runs look away first). What the same
   placement does to the first-person view (the eye is started again from the
-  new spot) is held by nothing: a refactor that drops it prints `same play`.
-  Until a run plays in first person, that is a look by a person: look away,
-  get put back on the spot, in first person.
+  new spot, in `Game.userPlaced`) is held by nothing: a refactor that drops it
+  prints `same play`. The seat's half is tested: it tells whoever runs the game
+  of every placement and whether it was a snap. Until a run plays in first
+  person, the rest is a look by a person: look away, get put back on the spot,
+  in first person.
 - **The trace sees one painted frame**, of the Spike Drill with a block on, and
   only that eight paints of it are one picture. It does not say the picture is
   the right one, and no other drill or moment is painted.
