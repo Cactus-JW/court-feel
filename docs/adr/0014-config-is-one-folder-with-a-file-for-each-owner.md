@@ -22,8 +22,8 @@ and the simulation nothing of the display's or the app's.
 - **A file for each section** (`TIMING`, `CONTACT`, `SERVE` and some thirty
   more). Turned down because a section is not an owner: "who may read this"
   would need a second list saying which thirty files are whose. An owner's
-  file is split when it has grown too large to read (the skills, by skill),
-  behind the same index.
+  file can be split later, behind the same index, when it has grown too large
+  to read. None is split today: the skills, by skill, are the likely first.
 - **A file beside each drill.** Record 0012 turned this down and it stands.
   The drills' numbers are one file, `drills.ts`: the feel is tuned across
   drills, and they share numbers (`COACH_TOSS`, `RUN_UP_GO`).
