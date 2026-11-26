@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COURT, type PositionId } from '../../config';
+import { COACH_TOSS, COURT, RUN_UP_GO, SPIKE_DRILL, type PositionId } from '../../config';
 import { R } from '../../physics/ball';
 import { solveApex } from '../../physics/solve';
 import { SetterBrain } from '../../ai/setter';
@@ -30,8 +30,6 @@ import type { RouteView } from '../routes';
 /** block practice: nobody, one blocker fronting your lane, or that blocker plus a middle closing */
 export type BlockLevel = 0 | 1 | 2;
 const BLOCK_NAMES = ['off', 'single', 'double'] as const;
-/** how far above the net top the blockers' hands are taken to reach (the shadow's wall height) */
-const HANDS_ABOVE_NET = 0.35;
 
 interface Zone {
   name: string;
@@ -42,22 +40,11 @@ interface Zone {
 }
 
 /** opponent-court target zones (far side, z < 0) for a left-side attacker */
-const ZONES: Zone[] = [
-  { name: 'Deep line', x0: -4.5, x1: -1.8, z0: -9, z1: -6 },
-  { name: 'Deep cross', x0: 1.8, x1: 4.5, z0: -9, z1: -6 },
-  { name: 'Seam', x0: -1.5, x1: 1.5, z0: -7.5, z1: -4.5 },
-  { name: 'Sharp cut', x0: 1.5, x1: 4.5, z0: -4.2, z1: -1.5 },
-  { name: 'Line short', x0: -4.5, x1: -2, z0: -4.5, z1: -2 },
-];
+const ZONES: readonly Zone[] = SPIKE_DRILL.zones.pin;
 
 /** target zones for this position: mirrored for right-side attackers; a middle hits zone 1 or 5 */
-function zonesFor(pos: PositionId): Zone[] {
-  if (pos === 'MB') {
-    return [
-      { name: 'Zone 1 (deep left)', x0: -4.5, x1: -1.5, z0: -9, z1: -5.6 },
-      { name: 'Zone 5 (deep right)', x0: 1.5, x1: 4.5, z0: -9, z1: -5.6 },
-    ];
-  }
+function zonesFor(pos: PositionId): readonly Zone[] {
+  if (pos === 'MB') return SPIKE_DRILL.zones.middle;
   if (pos === 'OPP' || pos === 'S') return ZONES.map((z) => ({ ...z, x0: -z.x1, x1: -z.x0 }));
   return ZONES;
 }
@@ -127,7 +114,7 @@ export class SpikeDrill extends Mode {
     this.g.hud.setTitle('Spike Drill · ' + this.lane.label + block);
   }
 
-  /** B: cycle the opposing block off → single → double */
+  /** B: cycle the opposing block off → single → double (the 3 is how many levels there are, not a number to tune) */
   cycleBlock(): void {
     this.setBlock(((this.blockLevel + 1) % 3) as BlockLevel);
   }
@@ -140,21 +127,22 @@ export class SpikeDrill extends Mode {
     this.updateScore();
     const what =
       level === 0 ? 'Block off' : level === 1 ? 'Block: single · hit around it' : 'Block: double · line or cross, or over the top';
-    this.g.hud.message(what, 1.8);
+    this.g.hud.message(what, SPIKE_DRILL.say.block);
   }
 
   /** spawn the two opposing blockers the first time the block is turned on */
   private ensureBlockers(): void {
     if (this.blockers.length || this.blockLevel === 0) return;
     const g = this.g;
+    const B = SPIKE_DRILL.block;
     const specs: { role: PositionId; range: number; closeInside: number; seed: number }[] = [
       // a pin blocker fronting your lane, and a middle running to close next to them
-      { role: 'OPP', range: 1.5, closeInside: 0, seed: 47 },
-      { role: 'MB', range: 4.6, closeInside: 0.95, seed: 48 },
+      { role: 'OPP', ...B.pin },
+      { role: 'MB', ...B.middle },
     ];
     for (const sp of specs) {
       const a = new Athlete(sp.role, -1);
-      a.place(0, -0.5, Math.PI);
+      a.place(0, B.homeZ, Math.PI);
       g.addAthlete(a, sp.seed);
       this.spawned.push(a);
       const brain = new BlockerBrain(a, 0, sp.range);
@@ -169,6 +157,7 @@ export class SpikeDrill extends Mode {
   /** each rep: the active blockers back at home facing you, the rest parked in the free zone */
   private placeBlockers(): void {
     const laneX = this.play?.inFront !== undefined ? quickSpot(SETTER_TARGET.x, 1, this.play.inFront).x : this.lane.x;
+    const B = SPIKE_DRILL.block;
     this.blockers.forEach((b, i) => {
       const active = i < this.blockLevel;
       b.brain.enabled = active;
@@ -176,8 +165,8 @@ export class SpikeDrill extends Mode {
       b.a.endAction();
       if (active) {
         b.brain.homeX = i === 0 ? laneX : 0;
-        b.a.place(b.brain.homeX, -0.5, Math.PI);
-      } else b.a.place(i === 0 ? -6.3 : 6.3, -2.5, Math.PI);
+        b.a.place(b.brain.homeX, B.homeZ, Math.PI);
+      } else b.a.place(i === 0 ? -B.park.x : B.park.x, B.park.z, Math.PI);
     });
   }
 
@@ -230,7 +219,9 @@ export class SpikeDrill extends Mode {
       return;
     }
     const spans: HandSpan[] = handsX.map((x) => ({ x0: x - HANDS_WIDTH / 2, x1: x + HANDS_WIDTH / 2 }));
-    this.shadow.draw(blockShadowOnCourt(contact, spans, this.g.env.netTop + HANDS_ABOVE_NET, COURT.halfWidth, COURT.halfLength));
+    this.shadow.draw(
+      blockShadowOnCourt(contact, spans, this.g.env.netTop + SPIKE_DRILL.block.handsAboveNet, COURT.halfWidth, COURT.halfLength),
+    );
   }
 
   /** your routes and the one you are calling (the route strip and panel) */
@@ -245,12 +236,12 @@ export class SpikeDrill extends Mode {
     this.callIdx = i;
     const g = this.g;
     this.setTitle();
-    g.hud.message(`Next set: ${i + 1} · ${this.plays[i].name}`, 1.6);
+    g.hud.message(`Next set: ${i + 1} · ${this.plays[i].name}`, SPIKE_DRILL.say.call);
     this.updateScore();
     // not tossed yet: head to the new approach start
     if ((this.phase === 'intro' || this.phase === 'feed') && !this.tossed) {
       const l = this.lane;
-      if (Math.hypot(g.me.pos.x - l.sx, g.me.pos.z - l.sz) > 0.6) g.returnUser(l.sx, l.sz, 0);
+      if (Math.hypot(g.me.pos.x - l.sx, g.me.pos.z - l.sz) > SPIKE_DRILL.slack) g.returnUser(l.sx, l.sz, 0);
       this.placeBlockers();
     }
   }
@@ -258,6 +249,7 @@ export class SpikeDrill extends Mode {
   setup(): void {
     const g = this.g;
     const me = g.me;
+    const cast = SPIKE_DRILL.cast;
     this.plays = SET_PLAYS[this.position] ?? null;
     this.callIdx = 0;
     const lane = this.lane;
@@ -266,7 +258,7 @@ export class SpikeDrill extends Mode {
     if (this.position !== 'S') {
       const s = new Athlete('S', 1);
       s.place(SETTER_SPOT.x, SETTER_SPOT.z, Math.PI / 2);
-      g.addAthlete(s, 11);
+      g.addAthlete(s, cast.seed.setter);
       this.spawned.push(s);
       this.setter = s;
       const b = new SetterBrain(s, SETTER_SPOT, Math.PI / 2);
@@ -283,8 +275,8 @@ export class SpikeDrill extends Mode {
     }
     // coach on the right-back of our court, tossing to the setter
     this.coach = new Athlete('OPP', 1);
-    this.coach.place(3.6, 6.4, 0.35);
-    g.addAthlete(this.coach, 3, 'coach');
+    this.coach.place(cast.coach.x, cast.coach.z, cast.coach.yaw);
+    g.addAthlete(this.coach, cast.seed.coach, 'coach');
     this.spawned.push(this.coach);
     this.coach.airIntent = 'neutral';
 
@@ -305,7 +297,7 @@ export class SpikeDrill extends Mode {
           : this.plays
             ? `Approach: Shift + W · plant: Space · hold LMB, release to hit${routes}`
             : 'Approach: Shift + W · plant: Space · hold LMB to wind up, release to hit',
-        3.6,
+        SPIKE_DRILL.say.intro,
         true,
       );
     }
@@ -350,6 +342,7 @@ export class SpikeDrill extends Mode {
 
   step(dt: number): void {
     const g = this.g;
+    const T = SPIKE_DRILL.timing;
     this.t += dt;
     // coach faces the setter
     this.coach.cmd.faceYaw = Math.atan2(-(SETTER_TARGET.x - this.coach.pos.x), -(SETTER_TARGET.z - this.coach.pos.z));
@@ -360,18 +353,18 @@ export class SpikeDrill extends Mode {
           this.t = 0;
           break;
         }
-        if (this.t > (g.tutorial.active ? 0.45 : 1.2)) this.toPhase('feed');
+        if (this.t > (g.tutorial.active ? T.lessonIntro : T.intro)) this.toPhase('feed');
         break;
       case 'feed': {
         if (g.userReturning) {
           this.t = 0;
           break;
         }
-        if (!this.tossed && this.t > 0.35) {
+        if (!this.tossed && this.t > T.toss) {
           this.coach.startAction('toss', g.simTime);
           this.tossed = true;
         }
-        if (this.tossed && this.t > 0.62) {
+        if (this.tossed && this.t > T.release) {
           this.coach.endAction();
           this.feedBall();
           this.toPhase('live');
@@ -380,13 +373,13 @@ export class SpikeDrill extends Mode {
       }
       case 'live': {
         const ball = g.ball;
-        if (ball.state.rest || this.t > 7) this.endRep(null);
+        if (ball.state.rest || this.t > T.liveMax) this.endRep(null);
         break;
       }
       case 'result':
         // the lesson: the next toss waits until the coach's line about this rep has been read
         if (g.tutorial.holdingResult()) break;
-        if (this.t > 1.9) this.nextRep();
+        if (this.t > T.result) this.nextRep();
         break;
     }
     // approach ring: where your feet should be when you hit (fades once the set is up)
@@ -395,7 +388,7 @@ export class SpikeDrill extends Mode {
     const play = this.play;
     const quick = play?.inFront !== undefined;
     // fast sets (quicks, go / fast back) need the run to start before the set: plan them from the pass
-    const early = !!play && (quick || lane.apexAbove < 1.0);
+    const early = !!play && (quick || lane.apexAbove < SPIKE_DRILL.guide.fastSetApex);
     const off = new THREE.Vector3();
     me.idealContact(off, new THREE.Vector3(0, 0, 0)).setY(0);
     const spot = quick ? quickSpot(SETTER_TARGET.x, 1, play!.inFront) : lane;
@@ -427,7 +420,7 @@ export class SpikeDrill extends Mode {
         this.earlyPlan = plan;
         this.earlyFor = lt;
       } else plan = planApproach(me, pred, g.simTime, 0, 0);
-      this.goAt = plan && plan.error < 0.6 ? plan.tStart : -1;
+      this.goAt = plan && plan.error < SPIKE_DRILL.guide.goError ? plan.tStart : -1;
       if (plan) {
         const l = this.line;
         l.tGo = plan.tStart;
@@ -449,7 +442,7 @@ export class SpikeDrill extends Mode {
         this.ringPulse = 1;
       }
     }
-    this.ringPulse = Math.max(0, this.ringPulse - dt * 2.5);
+    this.ringPulse = Math.max(0, this.ringPulse - dt * RUN_UP_GO.fade);
     this.updateShadow();
   }
 
@@ -492,7 +485,7 @@ export class SpikeDrill extends Mode {
 
   private feedBall(): void {
     const g = this.g;
-    const from = { x: this.coach.pos.x - 0.1, y: 1.35, z: this.coach.pos.z - 0.3 };
+    const from = { x: this.coach.pos.x - COACH_TOSS.hand.x, y: COACH_TOSS.hand.y, z: this.coach.pos.z - COACH_TOSS.hand.z };
     let target: { x: number; y: number; z: number };
     let apex: number;
     if (this.position === 'S') {
@@ -500,14 +493,14 @@ export class SpikeDrill extends Mode {
       const lane = laneFor('S', 1);
       const y = attackHeight(g.me);
       target = { x: lane.x, y, z: lane.z };
-      apex = y + lane.apexAbove + 0.6;
+      apex = y + lane.apexAbove + SPIKE_DRILL.feed.setterApexAbove;
     } else {
-      target = { x: SETTER_TARGET.x, y: 2.1, z: SETTER_TARGET.z };
-      apex = SETTER_TARGET.height + 0.4;
+      target = { x: SETTER_TARGET.x, y: COACH_TOSS.targetY, z: SETTER_TARGET.z };
+      apex = SETTER_TARGET.height + COACH_TOSS.apexAbove;
     }
     const v = { x: 0, y: 0, z: 0 };
     solveApex(from, target, apex, { x: 0, y: 0, z: 0 }, v);
-    g.ball.launch(from, v, { x: -3, y: 0, z: 0 }, 0, g.simTime);
+    g.ball.launch(from, v, { x: -COACH_TOSS.spin, y: 0, z: 0 }, 0, g.simTime);
     g.ball.lastTouch = { athlete: this.coach, kind: 'feed', t: g.simTime, side: 1 };
     g.judge.arm(g.ball);
     this.userTouched = false;
@@ -538,6 +531,8 @@ export class SpikeDrill extends Mode {
     this.toPhase('result');
     this.reps++;
     const ev = this.lastGrade;
+    const P = SPIKE_DRILL.points;
+    const C = SPIKE_DRILL.crowd;
     let pts = 0;
     let label = 'NO ATTACK';
     let good = false;
@@ -551,22 +546,23 @@ export class SpikeDrill extends Mode {
       if (o && o.kind === 'in' && o.side === 1) label = 'BLOCKED';
       else {
         tooled = true;
-        pts += (ev.grade === 'Perfect' ? 100 : ev.grade === 'Good' ? 60 : 30) + 50;
+        pts += (ev.grade === 'Perfect' ? P.perfect : ev.grade === 'Good' ? P.good : P.other) + P.tooled;
         label = 'TOOLED';
       }
     } else if (ev && ev.grade !== 'Miss') {
-      const gradePts = ev.grade === 'Perfect' ? 100 : ev.grade === 'Good' ? 60 : 30;
+      const gradePts = ev.grade === 'Perfect' ? P.perfect : ev.grade === 'Good' ? P.good : P.other;
       pts += gradePts;
+      // (3.6: m/s to km/h, not a number to tune)
       const kmh = ev.speed * 3.6;
-      pts += Math.max(0, Math.round(kmh - 70));
+      pts += Math.max(0, Math.round(kmh - P.speedOver));
       if (o) {
         label = outcomeLabel(o, 1);
         if (o.kind === 'in' && o.side === -1) {
-          pts += 50;
+          pts += P.kill;
           const z = this.zone;
           const inZone = o.x >= z.x0 - R && o.x <= z.x1 + R && o.z >= z.z0 - R && o.z <= z.z1 + R;
           if (inZone) {
-            pts += 100;
+            pts += P.onTarget;
             label = 'KILL · ON TARGET';
           } else label = 'KILL';
           good = ev.grade === 'Perfect' || ev.grade === 'Good';
@@ -581,7 +577,7 @@ export class SpikeDrill extends Mode {
       pts > 0 ? `${label}  +${pts}` : label,
       good ? 'good' : tooled || (o && o.kind === 'in' && o.side === -1) ? 'neutral' : 'bad',
     );
-    g.crowd(good ? (ev?.perfect ? 1 : 0.6) : 0.1, good);
+    g.crowd(good ? (ev?.perfect ? C.perfect : C.good) : C.other, good);
     this.updateScore();
     g.tutorial.noteRepEnd(!!o && o.kind === 'in' && o.side === -1);
   }
@@ -598,7 +594,8 @@ export class SpikeDrill extends Mode {
     this.updateScore();
     // Skip puts them on the ground at the start. N jogs back, including after a landing.
     if (snap) g.placeUser(lane.sx, lane.sz, 0);
-    else if (Math.hypot(me.pos.x - lane.sx, me.pos.z - lane.sz) > 0.6 || me.state !== 'ground') g.returnUser(lane.sx, lane.sz, 0);
+    else if (Math.hypot(me.pos.x - lane.sx, me.pos.z - lane.sz) > SPIKE_DRILL.slack || me.state !== 'ground')
+      g.returnUser(lane.sx, lane.sz, 0);
     // N during the lesson's welcome must not toss the ball early
     if (g.tutorial.holdingFeed()) this.toPhase('intro');
     else this.toPhase('feed');

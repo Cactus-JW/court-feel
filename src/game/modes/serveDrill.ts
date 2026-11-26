@@ -1,4 +1,4 @@
-import { COURT, SERVE, SERVE_DRILL, SERVE_KINDS, type ServeKind } from '../../config';
+import { COURT, RUN_UP_GO, SERVE, SERVE_DRILL, SERVE_KINDS, type ServeKind } from '../../config';
 import { planApproach, simulateApproach } from '../approach';
 import { SLOT_ROLE, TeamAI, type Slot } from '../../ai/team';
 import { Athlete } from '../athlete';
@@ -97,7 +97,7 @@ export class ServeDrill extends Mode {
   setup(): void {
     const g = this.g;
     this.away = new TeamAI(-1, g);
-    let seed = 70;
+    let seed: number = SERVE_DRILL.cast.seed;
     for (const slot of RECEIVERS) {
       const a = new Athlete(SLOT_ROLE[slot], -1);
       g.addAthlete(a, seed++);
@@ -116,7 +116,8 @@ export class ServeDrill extends Mode {
     this.refreshHud();
     // (on touch the key names become the buttons': "toss: Q" reads "toss: TOSS")
     // the lesson speaks through the coach line: the drill's own intro stays down
-    if (!g.tutorial.serving) g.hud.message('Pick your serve: 1 2 3 · hold to toss higher: Q · serve at the seams', 3.5, true);
+    if (!g.tutorial.serving)
+      g.hud.message('Pick your serve: 1 2 3 · hold to toss higher: Q · serve at the seams', SERVE_DRILL.say.intro, true);
   }
 
   refreshHud(): void {
@@ -136,7 +137,7 @@ export class ServeDrill extends Mode {
     this.kindIdx = i;
     const g = this.g;
     g.serveKind = this.kind;
-    g.hud.message(`Serve ${i + 1}: ${SERVE[this.kind].name}`, 1.6);
+    g.hud.message(`Serve ${i + 1}: ${SERVE[this.kind].name}`, SERVE_DRILL.say.pick);
     this.updateScore();
     // nothing tossed yet: walk to where this serve starts
     if (this.phase === 'ready') this.toStart();
@@ -256,7 +257,7 @@ export class ServeDrill extends Mode {
     const g = this.g;
     this.t += dt;
     this.away.step();
-    this.pulse = Math.max(0, this.pulse - dt * 2.5);
+    this.pulse = Math.max(0, this.pulse - dt * RUN_UP_GO.fade);
     switch (this.phase) {
       case 'ready':
         // a serve lesson's rep starts once the ball is in the server's hand and the coach is quiet
@@ -376,7 +377,7 @@ export class ServeDrill extends Mode {
     this.last = { rating, label, kmh: fault ? 0 : this.kmh };
     this.bumpStreak(!fault);
     g.hud.showBanner(`${label} · ${rating}`, rating >= 3 ? 'good' : rating === 0 ? 'bad' : 'neutral');
-    if (rating >= 3) g.crowd(rating === 4 ? 0.8 : 0.4);
+    if (rating >= 3) g.crowd(rating === 4 ? SERVE_DRILL.crowd.ace : SERVE_DRILL.crowd.rated3);
     this.updateScore();
     g.tutorial.noteRepEnd(!fault, fault ? label.split(' · ')[0] : '');
   }
