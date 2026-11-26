@@ -13,10 +13,12 @@
 //     verify-court-feel feature file (or a trace run), or the same line.
 // Any other title is asked nothing here.
 
+// What a title's type is, and how a failure says to run the run again, are the same for every rule
+// that reads a pull request (scripts/pull-request.rule.mjs, as pure as this file).
+import { rerunAfter, typeOf } from './pull-request.rule.mjs';
+
 /** the titles the gate reads: a change the player notices (AGENTS.md, Git) */
 export const GATED = ['feat', 'fix'];
-/** the other types AGENTS.md lists: a title that starts with none of them gets a note */
-const OTHER_TYPES = ['refactor', 'perf', 'test', 'docs', 'ci', 'chore'];
 
 /** the sections a gated description must have, as headings (.github/pull_request_template.md) */
 export const SECTIONS = ['How it is held', 'What no check holds'];
@@ -191,11 +193,13 @@ function described(body) {
 /**
  * How a failure ends: with the way to have the gate look again, which depends on what mends it.
  * A new test or trace run is a commit, and the push runs every job again. An edit to the description
- * starts no run (the workflow does not listen for one), so the job has to be run again by hand: the
- * command is given, with the id of the run the failure is printed in when there is one.
+ * starts no run (the workflow does not listen for one), so the run has to be run again by hand: the
+ * command is given, with the id of the run the failure is printed in when there is one. It is the
+ * command for the whole run, because whoever retitles the pull request on the way needs every job
+ * to read the new title (scripts/pull-request.rule.mjs, `rerunAfter`).
  */
 const AFTER_PUSH = 'then push the commit: that runs this again';
-const afterEdit = (runId) => `then run \`gh run rerun ${runId || '<run id>'} --failed\`: editing a description starts no run`;
+const afterEdit = (runId) => rerunAfter(runId, 'a description');
 const SAY_WHY = `write a line "Unchecked: <why no check can hold it>" under "## ${NOT_HELD}" in the description`;
 const sentence = (text) => `${text[0].toUpperCase()}${text.slice(1)}.`;
 
@@ -219,12 +223,6 @@ const SECTION_ASKS = {
   [HELD]: 'say, for each behaviour this change adds or alters, which check holds it',
   [NOT_HELD]: 'list what a person has to try, one line each, or write "Nothing" when every behaviour is held',
 };
-
-/** the type a title starts with, or null: "feat(rally): ..." is `feat` */
-function typeOf(title) {
-  const start = title.trim().toLowerCase();
-  return [...GATED, ...OTHER_TYPES].find((type) => start.startsWith(type)) ?? null;
-}
 
 /** whether the verdict on this change depends on which of its tests are red on the base */
 export function asksRedOnBase({ title, paths, removed = [] }) {

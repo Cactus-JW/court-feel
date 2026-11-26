@@ -13,12 +13,12 @@ npm test                          # unit tests only (Vitest, tests/)
 npm run format                    # fix formatting with Prettier
 npm run e2e                       # every drill in headless Chromium, several minutes, writes scripts/out/
 npm run trace                     # plays every drill twice and compares every frame: the same start gives the same play. CI runs it on every pull request.
-npm run trace:compare             # a refactor only: plays every drill here and on main and compares every frame, the play and what is drawn
+npm run trace:compare             # plays every drill here and on main and compares every frame, the play and what is drawn. CI runs it on every pull request: only a feat or a fix may differ.
 ```
 
 Run `npm run e2e` when a change touches a drill, the autopilots, input, touch controls or the menus. First time: `npx playwright install chromium`.
 
-Run `npm run trace:compare` for a `refactor`: it must print `same play`. A `feat` or a `fix` that changes the play will differ, and that is expected. CI plays every pull request twice with `npm run trace`, which must print `repeatable`: run it when a change touches the simulation, a drill or what is drawn.
+Run `npm run trace:compare` for anything that is not a `feat` or a `fix`: it must print `same play`, and CI fails a pull request of any other type that does not. A `feat` or a `fix` that changes the play will differ, and that is expected: read what it prints against what you meant to change. CI plays every pull request twice with `npm run trace`, which must print `repeatable`: run it when a change touches the simulation, a drill or what is drawn.
 
 ## Show it working in the app
 
@@ -63,7 +63,7 @@ Why the checks are arranged as they are, and where a new rule should live, is in
 
 - Branch from `main`. One change per pull request. Fill in `.github/pull_request_template.md`.
 - Name the branch `<type>/<short-description>`, in lowercase with hyphens: `feat/setter-calls-the-pass`, `fix/crash-screen-input`. If your tool will only push to a branch it named itself (`claude/…`, `cursor/…`), keep that name.
-- Commit and pull request titles are Conventional Commits, `type(area): what the player notices`, in plain words: `feat(rally): the setter calls the pass (HIGH! when out of system)`. For `feat`, `fix` and `perf` the description says what the player notices. For the other types it says what changes for the next contributor. Leave the area out when a change has no single one.
+- Commit and pull request titles are Conventional Commits, `type(area): what the player notices`, in plain words (CI fails a pull request whose title starts with none of the types below): `feat(rally): the setter calls the pass (HIGH! when out of system)`. For `feat`, `fix` and `perf` the description says what the player notices. For the other types it says what changes for the next contributor. Leave the area out when a change has no single one.
   - `feat`: something new the player can do, see, hear or feel.
   - `fix`: something that was wrong and is now right.
   - `perf`: the same behaviour, running faster or smoother.

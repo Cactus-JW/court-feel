@@ -11,6 +11,10 @@
 /scripts/red-on-base.*         @LemonPhase
 /tests/bringsACheck.test.ts    @LemonPhase
 /tests/redOnBase.test.ts       @LemonPhase
+/scripts/pull-request.*        @LemonPhase
+/scripts/title-has-a-type.mjs  @LemonPhase
+/scripts/same-play-as-base.mjs @LemonPhase
+/tests/pullRequest.test.ts     @LemonPhase
 /scripts/trace.mjs             @LemonPhase
 /scripts/e2e.mjs               @LemonPhase
 /.github/                      @LemonPhase
