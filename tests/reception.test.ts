@@ -1,16 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { CONTACT, COURT, SIM, TIMING } from '../src/config';
+import { CONTACT, COURT, PLAYER, TIMING } from '../src/config';
 import { lerp } from '../src/core/mathx';
-import { Athlete } from '../src/game/athlete';
-import { ContactSystem, type ContactEvent, type ContactHost } from '../src/game/contact';
-import { makeBall, stepBall, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
-import { solveFixedTime } from '../src/physics/solve';
+import type { Brain } from '../src/game/brains';
 import { serveAim } from '../src/ai/server';
 import { Rng } from '../src/core/mathx';
+import { DT, scene } from './scene';
 
-const DT = 1 / SIM.hz;
 const TARGET = { x: 1, y: 2.35, z: 0.9, apex: 4 };
 
 /**
@@ -19,74 +15,47 @@ const TARGET = { x: 1, y: 2.35, z: 0.9, apex: 4 };
  * Returns the contact and how far from the setter's target the pass was aimed.
  */
 function receive(speed: number, opts: { lead?: number; rand?: number; moving?: number; spikeBy?: 'user' | 'ai' } = {}) {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let pv = -1;
-  const ball = {
-    state,
-    active: true,
-    lastTouch: null as any,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    speed: () => Math.hypot(state.v.x, state.v.y, state.v.z),
-    ensurePrediction(env: { netTop: number }, t: number) {
-      if (pv !== version) {
-        predictor.compute(state, env, t);
-        pv = version;
-      }
-      return predictor;
-    },
-    hit(v: V3, w: V3) {
-      Object.assign(state.v, v);
-      Object.assign(state.w, w);
-      version++;
-    },
-  };
-  if (opts.spikeBy) {
-    const hitter = new Athlete('OH', -1);
-    hitter.isUser = opts.spikeBy === 'user';
-    ball.lastTouch = { athlete: hitter, kind: 'spike', t: 0, side: -1 };
-  }
-  const events: ContactEvent[] = [];
-  const host = {
-    ball: ball as any,
-    simTime: 0,
-    env: { netTop: COURT.netHeightMen },
-    aimAssist: () => 0,
-    aimTargetFor: (_a: Athlete, out: THREE.Vector3) => out.set(1, 0.105, -6),
-    emitContact: (e: ContactEvent) => events.push(e),
-    rand: () => opts.rand ?? 0.5,
-    passTarget: () => TARGET,
-    setOptions: () => [],
-    canServe: () => true,
-  } satisfies ContactHost;
-  const cs = new ContactSystem(host);
-  const a = new Athlete('L', 1);
-  a.place(0.5, 7.5, 0);
-  if (opts.moving) a.vel.set(opts.moving * a.stats.approachSpeed, 0, 0);
-  const P = cs.platformPoint(a, new THREE.Vector3());
-  // the ball comes over the net from 9 m away and arrives at the platform at T
+  // fixed dice: every roll comes up `rand` (a half when not given), so the pass is graded on the timing and
+  // the form alone, with the spread of the dice taken out, and a test says which side of a chance it falls
+  const s = scene({ dice: { roll: opts.rand ?? 0.5 }, drill: { passTarget: () => TARGET } });
+  const { sim } = s;
+  const a = s.athlete('L', 1, { x: 0.5, z: 7.5 });
+  // a passer still moving is shuffling along the end line at that much of a full run, and keeps going
+  const run = (opts.moving ?? 0) * a.stats.approachSpeed;
+  a.vel.set(run, 0, 0);
+  // the ball comes over the net from 9 m away and arrives at T at the platform, where the passer is by then
   const T = 9 / speed;
+  const P = sim.contact.platformPoint(a, new THREE.Vector3());
+  P.x += run * T;
   const from = { x: P.x, y: 3.3, z: P.z - 9 };
-  solveFixedTime(from, { x: P.x, y: P.y, z: P.z }, T, { x: 0, y: 0, z: 0 }, state.v);
-  Object.assign(state.p, from);
-  version++;
+  // (whoever spiked it stands where it was hit from; your spike is your seat's athlete's)
+  const hitter = opts.spikeBy ? s.athlete('OH', -1, { x: from.x, z: from.z }, { user: opts.spikeBy === 'user' }) : null;
+  s.send({ from, to: { x: P.x, y: P.y, z: P.z }, time: T }, hitter ? { athlete: hitter, kind: 'spike', side: -1 } : undefined);
   const fast = Math.min(1, Math.max(0, (speed - 12) / 10));
   const lead = opts.lead ?? lerp(TIMING.passLead, TIMING.digLead, fast);
-  let act: ReturnType<Athlete['startAction']> | null = null;
-  for (let i = 0; i < SIM.hz * 2 && !events.length; i++) {
-    if (!act && host.simTime >= T - lead - 1e-9) act = a.startAction('pass', host.simTime);
-    if (act) cs.tryPass(a, act);
-    host.simTime += DT;
-    stepBall(state, DT, host.env);
-  }
-  const e = events[0];
-  return { e, off: e ? Math.hypot(e.target.x - TARGET.x, e.target.z - TARGET.z) : NaN, v: { ...state.v }, vIn: speed };
+  // a step moves the clock first and the ball last: a brain sees the ball arrive at T + DT on the clock it reads
+  const press = sim.simTime + DT + T - lead;
+  let pressed = false;
+  // the passer's brain: it holds the run, puts the platform out on time, and plays the ball as every
+  // AI brain does (the contact system is asked each step, before the bodies and the ball move)
+  const passer: Brain = {
+    athlete: a,
+    step: (_dt, g) => {
+      if (opts.moving) {
+        a.cmd.moveX = opts.moving / PLAYER.sideScale;
+        a.cmd.sprint = true;
+      }
+      if (!pressed && g.simTime >= press - 1e-9) {
+        pressed = true;
+        a.startAction('pass', g.simTime);
+      }
+      if (a.action?.kind === 'pass' && !a.action.resolved) g.contact.tryPass(a, a.action);
+    },
+  };
+  sim.setBrain(a, passer);
+  s.run(2, () => s.touches.length > 0);
+  const e = s.touches[0]?.ev;
+  return { e, off: e ? Math.hypot(e.target.x - TARGET.x, e.target.z - TARGET.z) : NaN, v: { ...sim.ball.vel }, vIn: speed };
 }
 
 describe('serve reception (contact)', () => {

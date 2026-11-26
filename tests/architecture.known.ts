@@ -24,12 +24,7 @@ export const KNOWN_SCENE: readonly string[] = [];
 export const KNOWN_FAKE_GAME: readonly string[] = ['tests/greenBite.test.ts', 'tests/teamDefence.test.ts'];
 
 /** tests that hand-make a ball (an object with its own `ensurePrediction`) or cast a host for the contact system, when tests/scene.ts gives them a real one */
-export const KNOWN_HAND_MADE: readonly string[] = [
-  'tests/defenceForms.test.ts',
-  'tests/greenBite.test.ts',
-  'tests/reception.test.ts',
-  'tests/teamDefence.test.ts',
-];
+export const KNOWN_HAND_MADE: readonly string[] = ['tests/greenBite.test.ts', 'tests/teamDefence.test.ts'];
 
 /** files in the layers that must be repeatable (physics, the simulation, the brains, the drills) that read a clock or roll dice of their own */
 export const KNOWN_CLOCK: readonly string[] = [];
