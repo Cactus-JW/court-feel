@@ -270,7 +270,7 @@ Hold the phone sideways.
 | On a phone | Only the court, the buttons and the top bar: no title, speed, streak, camera name or drill intro line, and the set bar without its checklist. A drill's score sentence is a small line under the bar, the grade, the drill's message and a banner stack without covering each other (the grade, the banner and the calls over the players are small, so a rally stays in view), and the play wheel opens below the bar, scaled to fit. A replay says *tap to skip* at the bottom centre; REPLAY becomes CAM, which changes the view, and holding REPLAY plays the whole point in the Mini Rally. Key hints start off (Settings → Key hints). The field of view is a phone's own, 62° (Settings → Camera): a phone held sideways then sees about as wide as a 16:9 monitor at 72°. |
 
 Haptics (Android) tick at full charge and on a graded contact. Tunables are in
-`TOUCH` in `src/config.ts` (stick radius, run threshold, look scale, the
+`TOUCH` in `src/config/input.ts` (stick radius, run threshold, look scale, the
 "right half is HIT in the air" and "roll from JUMP to HIT" behaviours).
 
 ### Aiming
@@ -1086,7 +1086,8 @@ Two things are true to the place rather than the same everywhere
 
 ## Tuning the feel
 
-Every tunable number is in **[`src/config.ts`](src/config.ts)**:
+Every tunable number is in **[`src/config/`](src/config/)**, in a file for each owner of the numbers
+([`index.ts`](src/config/index.ts) lists them):
 
 | Section | What it controls |
 |---|---|
@@ -1122,7 +1123,7 @@ persist in `localStorage`. Camera shake also scales the
 impact FOV punch and camera kick (0 turns them off). Stored settings are
 checked on load: a value of the wrong type (say, from an older build) falls
 back to its default, and numbers are clamped to the slider ranges, which live
-in `SETTING_RANGES` in `src/config.ts`.
+in `SETTING_RANGES` in `src/config/app.ts`.
 
 ## Testing
 
@@ -1356,7 +1357,7 @@ drills. It has no renderer and no DOM, and it takes nothing from a player but
 their intent, so it can be built and stepped in a unit test.
 
 ```
-src/config.ts          all tunables
+src/config/            all tunables, a file for each owner behind index.ts
 src/core/              input (with buffering), touch pad model, error reporter, build info, math, events
 src/physics/           ball physics, predictor, trajectory solvers (pure, tested)
 src/game/              the simulation: athletes, the ball, contacts and timing, the judge, the plays;

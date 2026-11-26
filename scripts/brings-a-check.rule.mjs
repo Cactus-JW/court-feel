@@ -26,44 +26,12 @@ const HELD = SECTIONS[0];
 const NOT_HELD = SECTIONS[1];
 
 /**
- * The parts of config that are what is shown and heard. Every other part of config is the play, so
- * a new section is held to the stricter rule until it is listed here.
- *
- * THE ONE EDIT when config is split into `src/config/`: replace this list with the files that hold
- * the look and the sound, `['src/config/display.ts', 'src/config/venues.ts', 'src/config/app.ts']`
- * (and drop the `.map` that names a section). Nothing else changes: every other file of that folder
- * is the play by the last line of `TIERS`, and `SECTIONED` stops naming `src/config.ts` by itself.
+ * The files of config that are what is shown and heard: the display's two and the app's
+ * (`src/config/index.ts` says which file is whose). Every other file of `src/config/` is the play,
+ * by the last line of `TIERS`, so a new file is held to the stricter rule until it is listed here.
+ * So is the index.
  */
-export const CONFIG_SHOWN = [
-  'CAMERA',
-  'BALL_LOOK',
-  'ARENA',
-  // the venues
-  'VenueId',
-  'VenueSpec',
-  'HALL_BOARDS',
-  'VENUES',
-  'VENUE_IDS',
-  'isVenueId',
-  'CHARACTER',
-  'FX',
-  'AUDIO',
-  // the graphics levels
-  'GRAPHICS_LEVEL_IDS',
-  'GraphicsLevel',
-  'GraphicsSetting',
-  'GRAPHICS_SETTINGS',
-  'QualityLevel',
-  'QUALITY',
-  // the settings and their defaults
-  'Hand',
-  'Settings',
-  'DEFAULT_SETTINGS',
-  'NumericSettingKey',
-  'BooleanSettingKey',
-  'SETTING_RANGES',
-  'TOUCH_CONTROL_MODES',
-].map((section) => `src/config.ts#${section}`);
+export const CONFIG_SHOWN = ['src/config/display.ts', 'src/config/venues.ts', 'src/config/app.ts'];
 
 /**
  * Which tier a changed path is in. The first match wins. `play`: what happens on the court.
@@ -71,7 +39,7 @@ export const CONFIG_SHOWN = [
  * (tests, scripts, docs, the agent files).
  *
  * A pattern that ends in `/` is a folder, `*` stands for anything, and anything else is one file.
- * `file#SECTION` is one top-level declaration of a file that is judged by section.
+ * `file#SECTION` is one top-level declaration of a file that is judged by section (the trace tool).
  */
 export const TIERS = [
   // the autopilots stand in for a player: a change there changes what the trace plays, not the game
@@ -235,7 +203,7 @@ const afterEdit = (runId) => rerunAfter(runId, 'a description');
 const SAY_WHY = `write a line "Unchecked: <why no check can hold it>" under "## ${NOT_HELD}" in the description`;
 const sentence = (text) => `${text[0].toUpperCase()}${text.slice(1)}.`;
 
-/** `src/config.ts#AI` as a reader says it */
+/** `scripts/trace.mjs#RUNS` as a reader says it */
 const said = (path) => path.replace(/#(.*)$/, ' ($1)');
 const listed = (paths, most = 4) =>
   paths.slice(0, most).map(said).join(', ') + (paths.length > most ? ` and ${paths.length - most} more` : '');

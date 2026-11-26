@@ -81,8 +81,20 @@ describe('architecture: every import points down', () => {
     }
   });
 
+  it('config is one folder: no src/config.ts stands beside src/config/', () => {
+    // `'../config'` is a file before it is a folder's index. So a src/config.ts put back beside the
+    // folder takes every import, for the type checker and for the build, and the folder is dead
+    // code. The likely way there: a branch that was open across the move of config into the folder
+    // is rebased over it, and the conflict is settled by keeping the branch's own side.
+    const oldFileIsBack = SRC.includes('src/config.ts') && SRC.some((f) => f.startsWith('src/config/'));
+    expect(
+      oldFileIsBack,
+      "src/config.ts is back beside src/config/, so the game is built from the old file and the folder is dead code: move what src/config.ts has and the folder lacks into its owner's file under src/config/, then delete src/config.ts",
+    ).toBe(false);
+  });
+
   it('config imports nothing but config', () => {
-    // config is the lowest layer, one file or a folder of them: a file of it may read another, and nothing else
+    // config is the lowest layer, a folder with a file for each owner: a file of it may read another, and nothing else
     const config = SRC.filter((f) => layerOf(f) === 'config');
     expect(config, 'no file is in the config layer: name it in tests/architecture.layers.json').not.toEqual([]);
     for (const file of config) {

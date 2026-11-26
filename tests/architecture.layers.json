@@ -11,7 +11,6 @@
     "app": ["display", "drills", "ai", "sim", "physics", "core", "config"]
   },
   "folders": [
-    ["src/config.ts", "config"],
     ["src/config/", "config"],
     ["src/main.ts", "app"],
     ["src/app/", "app"],

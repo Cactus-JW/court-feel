@@ -26,7 +26,7 @@ Passing tests do not prove a change to the game, its menus, HUD or controls. Dri
 
 ## Rules the tools do not enforce
 
-- **Every tunable number lives in `src/config.ts`**, in its section, with a doc comment when the name does not say what it is. No magic numbers in game code, so the feel can be tuned in one place. The numbers the simulation still holds of its own are counted for each file in `tests/architecture.numbers.json`, and the count only goes down: a new one fails `npm test`.
+- **Every tunable number lives in `src/config/`**, in its owner's file (`src/config/index.ts` lists them, and everything is imported from `config`, never from a file inside it) and in its section, with a doc comment when the name does not say what it is. No magic numbers in game code, so the feel can be tuned in one place. The numbers the simulation still holds of its own are counted for each file in `tests/architecture.numbers.json`, and the count only goes down: a new one fails `npm test`.
 - **`src/physics/` stays pure**: no three.js scene, no DOM, only `config`. That keeps it deterministic and testable.
 - **Every import points down** ([docs/adr/0010](docs/adr/0010-the-simulation-runs-on-its-own.md)): `config`, then `core` and `physics`, then the simulation (`game`, `ai`, the drills in `game/modes`), then everything a player sees or hears, then `main.ts`. `tests/architecture.test.ts` enforces it, and ESLint flags a bad import as you type. No two files import each other in a circle. What still breaks it is listed in `tests/architecture.known.ts`: fix new code, do not add it to the list.
 - **The simulation has no clock and no dice of its own**: no `Math.random`, `Date.now` or `performance.now` in `physics`, `game`, `ai` or the drills. Time is `simTime` and chance is the simulation's seeded `rng`, so the same start gives the same play.
@@ -39,7 +39,7 @@ Passing tests do not prove a change to the game, its menus, HUD or controls. Dri
 
 ## Before changing a mechanic
 
-The reason a mechanic works the way it does is written down. Read the doc comments on its numbers in `src/config.ts` and on its code, the unit tests that state its real-court facts, and the records in [docs/adr/](docs/adr/README.md). Then check the change against the five rules of [the principle](README.md#the-principle). The pull request template asks one question for each.
+The reason a mechanic works the way it does is written down. Read the doc comments on its numbers in `src/config/` and on its code, the unit tests that state its real-court facts, and the records in [docs/adr/](docs/adr/README.md). Then check the change against the five rules of [the principle](README.md#the-principle). The pull request template asks one question for each.
 
 When you make a call that someone would otherwise argue about again, write the reason down: in a doc comment next to the code, saying what was turned down, or as a record in `docs/adr/` when no single place in the code can hold it. [docs/adr/README.md](docs/adr/README.md) has the test and the format.
 
@@ -54,7 +54,7 @@ Why the checks are arranged as they are, and where a new rule should live, is in
 
 ## Docs that move with a change
 
-- README: controls, modes, settings and `config.ts` sections. The start screen's key list (`src/ui/menu.ts`) and the in-game hints say the same things, so keep them in step.
+- README: controls, modes, settings and the sections of `src/config/`. The start screen's key list (`src/ui/menu.ts`) and the in-game hints say the same things, so keep them in step.
 - The pull request: for a change to the feel, say what was reported, the cause, the fix and how it was measured. That write-up lives in the pull request, not in a file.
 - `docs/screenshots/`: real frames only. Retake a shot when the moment it shows changes.
 - [docs/verification.md](docs/verification.md): when a check is added, moved or removed, or a rule gets a check it did not have.

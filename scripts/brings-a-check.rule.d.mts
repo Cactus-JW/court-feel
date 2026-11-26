@@ -10,7 +10,7 @@ export interface Change {
   title: string;
   /**
    * Every path that changed, added and deleted ones too. A file that is judged by section
-   * (`SECTIONED`) is given once for each section that changed, as `src/config.ts#AI`.
+   * (`SECTIONED`) is given once for each section that changed, as `scripts/trace.mjs#RUNS`.
    */
   paths: readonly string[];
   /** the ones of `paths` that the change deletes: they still touch a tier, and are no check */
