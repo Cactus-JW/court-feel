@@ -105,6 +105,31 @@ Ask these in order and stop at the first yes.
   play. It fails when the simulation takes something from a player that is not
   in the intent: a key read on the side, a camera read for aim, an autopilot
   rolling the simulation's dice. A second player rests on this (docs/adr/0011).
+- **A person's keys** (a pass of both). An autopilot says where its feet go
+  outright and is never late, so what the game does for a person never runs in
+  a drill it plays: the last steps onto a set, the jump set, the walk back when
+  the player jumps, takes the stick or is not back in time. So the trace also
+  plays runs with no autopilot (`KEY_RUNS` in `scripts/trace.mjs`): real keys go
+  down and come up in `Input`, pressed by habits (what a player does about what
+  is on the screen: runs off their spot, keeps jumping while they are walked
+  back, looks away with the mouse, runs under a ball that is theirs and sets
+  it), by scripts and by dice of the run's own. They play the Setter Drill, the Mini Rally, the other
+  drills, the four lessons with the rep started again part-way, and the start
+  screen's demo from the moment its page loads. They share a page of their own,
+  and the simulation, the player's move command, the walk back, the camera and
+  every call the HUD gets are compared after every frame. A run where what is
+  shown is part of the rule (the demo, a walk back that ends with a dip, a
+  lesson) is played a whole frame at a time; the others with the keys and the
+  simulation only, which costs a fifteenth. Each run also counts
+  what it reached, from outside (a screen dip, a step with no key down), and
+  fails when it no longer reaches what it is in the list for: a run that stopped
+  getting to its rule would be the same on two builds for the wrong reason.
+  That count fails on any pull request, so a few of them are plain facts too:
+  no step is taken for the player at Set aim assist 0, the body stays down with
+  Auto jump set off, the screen dips when a walk back runs out of time, and a
+  player who had looked away is then left looking where their spot faces (in
+  the Setter Drill that is across the court, the one spot that does not face
+  down it).
 - **One painted frame** (the last pass of both). The Spike Drill with a double
   block on is stopped three seconds in, and that one frame is painted eight
   times in a page of its own. Nothing moves between the paints, so it has to be
@@ -125,7 +150,16 @@ Ask these in order and stop at the first yes.
   every step: every number finite, nobody under the floor, the clock moving one
   step at a time. A rare bug fails at the step it happens.
 - **The end-to-end run** (`npm run e2e`): every drill in a real browser through
-  the real input path.
+  the real input path. It also states, with nobody playing for the player, the
+  facts of the help a person gets that hold whatever the code looks like: hands
+  off, the feet step onto a pass in reach and the hands are under it when it
+  arrives; at Set aim assist 0 nothing moves the body; with Auto jump set on
+  the body goes up for a pass in system, and with it off it stays down; a player
+  who is not back on their spot in time is put there and the screen dips once;
+  one who took the stick is never put anywhere; the Mini Rally waits less long
+  than a drill. They live here and not in a unit test because on `main` these
+  rules are in `Game`, which only a browser can build. Where a unit test can
+  reach a rule, it is the cheaper place.
 - **Driving the app.** The `verify-court-feel` skill lets an agent run the game
   and look, before it says a change works.
 
@@ -164,11 +198,24 @@ A check is worth nothing if the change it judges can rewrite it.
 
 Say these out loud in a pull request when they apply.
 
-- **The trace proves what the autopilots play**, in the repeat check and in the
-  comparison. A change they never reach passes. It does not cover the menus,
-  touch input, effects or sound, and a lesson is covered as far as its scripted
-  hands get: the spike and the float lesson to the end, the two jump serves to
-  their last rep.
+- **The trace proves what the autopilots and the runs with a person's keys
+  play**, in the repeat check and in the comparison. A change they never reach
+  passes. It does not cover the menus, touch input (the stick is a way to steer
+  that no run has), effects or sound, and a lesson is covered as far as its
+  scripted hands get: the spike and the float lesson to the end, the two jump
+  serves to their last rep.
+- **Two rules for a person that no key reaches**, so no run can: the walk back
+  giving way to feet that something else is already moving (with a keyboard a
+  move key is the only thing that moves them, and a move key already makes the
+  walk back the player's), and every seat being stepped (the app has one seat).
+  A unit test on a bare seat is their place.
+- **First person is never played.** Every pass of the trace sets the camera to
+  third person. Where a walk back that runs out of time leaves the player
+  looking is held in third person (two runs look away first). What the same
+  placement does to the first-person view (the eye is started again from the
+  new spot) is held by nothing: a refactor that drops it prints `same play`.
+  Until a run plays in first person, that is a look by a person: look away,
+  get put back on the spot, in first person.
 - **The trace sees one painted frame**, of the Spike Drill with a block on, and
   only that eight paints of it are one picture. It does not say the picture is
   the right one, and no other drill or moment is painted.
