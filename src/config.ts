@@ -887,7 +887,7 @@ export const SERVE = {
  * than `startSlack` m off. A serve nobody has played or called `flightMax` s after the hit is
  * out. The rep ends when the serve is rated (their pass, an ace or a fault): the ball is dead and
  * the next rep starts `result` s later, long enough to see the pass leave the passer's arms and
- * read the rating (the Spike Drill's next set comes 1.9 s after a rep). It used to wait for the
+ * read the rating (the Spike Drill's next set comes `SPIKE_DRILL.timing.result` s after a rep). It used to wait for the
  * receiving team to play the pass out to their attack; that made a rep twice as long, for what the
  * rating already says. Owner's call, after playing it.
  * A third-person camera starts the drill looking `lookDepth` m into their court, where a serve
@@ -1007,9 +1007,12 @@ export const BLOCK_DRILL = {
  *   between `apex` and `apex` + 1 m. The serve is a float at `speed` to `speed` + `speedRange` m/s,
  *   leaving between `angleMin` and `angleMax` rad of elevation. The attack is hit at `speed` to
  *   `speed` + `speedRange` m/s with `spin` rad/s of topspin.
- * - `timing`, with auto-feed on: the first ball comes `first` s after the drill starts, `picked` s
- *   after you pick a feed and `restart` s after N. The next comes `between` s after the last, and
- *   no later than `afterOutcome` s after the last one is down.
+ * - `timing`, with auto-feed on: the waits before a ball comes. A wait only runs down while no ball
+ *   is in play (the last one is gone or lying still) and you are not serving one yourself. It is
+ *   `first` s when the drill starts, `picked` s after you pick a feed and `restart` s after N.
+ *   When a ball leaves the machine the wait is set to `between` s, and when that ball is called
+ *   (in or out) it is cut to `afterOutcome` s: so the next ball comes `afterOutcome` s after a
+ *   called ball has stopped, and `between` s after one that stopped without a call.
  * - `points`: for each of your touches, by its grade (a Miss scores nothing).
  * - `crowd.in`: your ball lands in their court.
  * - `say.intro`: the opening line.
@@ -1061,6 +1064,7 @@ export const FREE_PLAY = {
  * - `crowd.kill`: your hitter's kill.
  * - `say`: the opening line, the line when you change row (449976b), the line when a call comes
  *   too late (449976b) and the line for a pass off the net (449976b).
+ * - `slack` (142263c, 2026-11-02: it was 2.2 m in the first commit).
  */
 export const SETTER_DRILL = {
   cast: {
@@ -1110,8 +1114,8 @@ export const SETTER_DRILL = {
  * - `feed`: a serve is aimed at you, off by a gaussian `spreadX` and `spreadZ` m, from up to
  *   `serveFrom` m either side of the middle of their end line.
  * - `timing`: the first rep starts after `intro` s. In a dig rep the coach tosses `toss` s in and
- *   their arm comes down `arm` s later. A rep is over after `liveMax` s, or once the ball has come
- *   to rest and `rest` s have passed, and the result stays up `result` s.
+ *   their arm comes down `arm` s later. A rep is over after `liveMax` s, or as soon as the ball
+ *   lies still and the rep is more than `rest` s old, and the result stays up `result` s.
  * - `points`: by the pass's rating, 0 to 3.
  * - `crowd`: `good` for a pass rated 2 or 3, `other` for any other pass.
  * - `say`: the opening line, the line that names the feed and the points.
@@ -1158,8 +1162,9 @@ export const RECEIVE_DRILL = {
  * - `feed.setterApexAbove`: as the setter you attack the coach's toss, which tops out this much
  *   higher than a set to that lane would.
  * - `guide`: a set that tops out less than `fastSetApex` m over your contact needs the run to
- *   start before the set, so its run is planned from the pass. GO is given only for a run that
- *   ends within `goError` m of the spot (659dff6, 2026-11-02); its pulse is `RUN_UP_GO`.
+ *   start before the set, so its run is planned from the pass (729d7bb, 2026-11-02, with the set
+ *   calls). GO is given only for a run that ends within `goError` m of the spot (659dff6,
+ *   2026-11-02); its pulse is `RUN_UP_GO`.
  * - `timing`: the first rep starts `intro` s after the drill does (`lessonIntro` in the first-run
  *   lesson, 1dd9e8a, 2026-11-04). The coach's arm starts `toss` s into a rep and the ball leaves
  *   at `release`. A rep nobody ended is over `liveMax` s after the toss and the result
@@ -1167,7 +1172,9 @@ export const RECEIVE_DRILL = {
  * - `points`: by the grade of your contact (`perfect`, `good`, `other`), one for every km/h over
  *   `speedOver`, `kill` when it lands in their court and `onTarget` more inside the zone. A ball
  *   tooled off their block scores the grade plus `tooled` (ce94650).
- * - `crowd`: for a kill off a Perfect contact, any other good kill, and everything else.
+ * - `crowd`: `perfect` for a good kill off a full Perfect (`ContactEvent.perfect`: a Perfect that
+ *   is not a tip and was at least half charged), `good` for any other good kill, and `other` for
+ *   everything else.
  * - `say`: the opening line (729d7bb), the line when you change the block (ce94650) and when you
  *   call a set (729d7bb).
  * - `slack` (142263c, 2026-11-02, and the same from 729d7bb when you call another set).
@@ -1229,7 +1236,8 @@ export const SPIKE_DRILL = {
  *   and the next point is set up `dead` s after one ends.
  * - `crowd`: for your own kill, any other point of yours, and a point of theirs.
  * - `say`: the opening line, the line when you call a set (f234f1e, 2026-11-03), when a call
- *   comes too late (449976b, 2026-11-14), "Your ball!" and the libero's MINE!
+ *   comes too late (449976b, 2026-11-14), "Your ball!" and the libero's MINE! (6ff2d88,
+ *   2026-11-14).
  * - `slack`, and `walkBackMax`: the walk back to your spot is given this long (s), in place of
  *   `PLAYER.walkBack.maxT` (142263c, 2026-11-02).
  * One number stays in the drill, written three times: the 0.42 m a call's bubble sits over the
