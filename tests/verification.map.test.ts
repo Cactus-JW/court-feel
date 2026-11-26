@@ -19,13 +19,20 @@
 //   - the trace's runs and the end-to-end run's checks from the text of the two scripts. Neither
 //     can be imported (each plays the game when it is loaded), so their lists are cut out of the
 //     text and worked out here, with the scripts' own way of naming a run;
+//   - the lessons from the type `Lesson`, as it is written in src/game/tutorial.ts: the game keeps
+//     no list of them;
 //   - the unit test files and the verify-court-feel feature files from the folders they are in.
+//
+// Nothing here is a list of what the game has. A feature that adds a drill, a position, a serve, a
+// lesson, a setting, a level, a venue or a section adds its entry to the data file and does not
+// touch this one.
 import { describe, expect, it } from 'vitest';
 import * as config from '../src/config';
 import { MODE_INFO } from '../src/game/modes/mode';
-import type { Lesson } from '../src/game/tutorial';
+import { isLesson } from '../src/game/tutorial';
 import e2eScript from '../scripts/e2e.mjs?raw';
 import traceScript from '../scripts/trace.mjs?raw';
+import tutorialSource from '../src/game/tutorial.ts?raw';
 import written from './verification.map.json';
 
 // ---- the shape of the map
@@ -134,27 +141,50 @@ function e2eChecks(script: string): string[] {
 /** `./gameplay.test.ts` and `../.agents/.../features/serve-drill.md` as the map names them */
 const named = (paths: string[], ending: string) => paths.map((path) => path.slice(path.lastIndexOf('/') + 1, -ending.length));
 
+const DRILLS = Object.keys(MODE_INFO);
+const POSITIONS = Object.keys(config.POSITIONS);
+
+/** the lists behind the types a lesson can be named after */
+const ID_LISTS: Record<string, readonly string[]> = { ServeKind: config.SERVE_KINDS, ModeId: DRILLS, PositionId: POSITIONS };
+
 /**
- * The lessons. The game has no list of them to read, only the type, so they are written here once
- * and the compiler holds the list to the type: a lesson that is added, or one that is gone, fails
- * the typecheck on this line until it is brought in step.
+ * The lessons. The game has no list of them, only the type, so the type is read as it is written:
+ * `export type Lesson = 'spike' | ServeKind` is the spike lesson and one for each serve. A lesson
+ * that is added to the type is then missing from the map, and the map's sentence says so.
  */
-const LESSONS: Record<Lesson, true> = { spike: true, float: true, jumpFloat: true, jump: true };
+function lessons(source: string): string[] {
+  const written = /^export type Lesson =([^;]+);/m.exec(source)?.[1];
+  if (!written)
+    throw new Error(
+      `src/game/tutorial.ts no longer says \`export type Lesson = ...;\`: ${MAP.replace('.json', '.test.ts')} reads the lessons from that line, so say there where they are named now.`,
+    );
+  return written
+    .split('|')
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+    .flatMap((part) => {
+      const one = /^'([^']+)'$/.exec(part)?.[1];
+      if (one) return [one];
+      if (!(part in ID_LISTS))
+        throw new Error(
+          `The type Lesson (src/game/tutorial.ts) now takes lessons from \`${part}\`, and ${MAP.replace('.json', '.test.ts')} does not know the list behind that type: add it to ID_LISTS there.`,
+        );
+      return ID_LISTS[part];
+    });
+}
 
 interface Exists {
   things: Record<Kind, string[]>;
   checks: Record<Check, string[]>;
 }
 
-const DRILLS = Object.keys(MODE_INFO);
-const POSITIONS = Object.keys(config.POSITIONS);
 const exists: Exists = {
   things: {
     drill: DRILLS,
     // every drill can be played as every position: the start screen offers all five for each
     drillAs: DRILLS.flatMap((drill) => POSITIONS.map((position) => `${drill}/${position}`)),
     serve: [...config.SERVE_KINDS],
-    lesson: Object.keys(LESSONS),
+    lesson: lessons(tutorialSource),
     setting: Object.keys(config.DEFAULT_SETTINGS),
     graphics: [...config.GRAPHICS_LEVEL_IDS],
     venue: [...config.VENUE_IDS],
@@ -231,25 +261,49 @@ describe('the verification map (tests/verification.map.json)', () => {
     expect(problems(written as VerificationMap, exists)).toEqual([]);
   });
 
-  it('reads what exists from the code: the numbers of today, so that a reading that came back empty is seen', () => {
-    // the drills and what a player can choose
-    expect(exists.things.drill).toEqual(['free', 'spike', 'block', 'receive', 'setter', 'serve', 'rally']);
-    expect(exists.things.drillAs).toHaveLength(35);
-    expect(exists.things.serve).toEqual(['float', 'jumpFloat', 'jump']);
-    expect(exists.things.setting).toContain('aimAssist');
-    expect(exists.things.setting.length).toBeGreaterThan(10);
-    expect(exists.things.config).toContain('CONTACT');
-    expect(exists.things.config).not.toContain('SERVE_KINDS');
-    // the scripts' lists, by the scripts' own names
-    expect(exists.checks.trace).toContain('spike/OH/good/double block');
-    expect(exists.checks.trace).toContain('lesson/jumpFloat');
-    expect(exists.checks.trace).toContain('keys/setter/S/hands off/set aim assist 0');
-    // more than a handful: a run taken out is the map's to notice (an entry names it), not this line's
-    expect(exists.checks.trace.length).toBeGreaterThan(10);
-    expect(exists.checks.e2e).toContain('serve_OH_call3');
-    expect(exists.checks.e2e).toContain('touch');
-    expect(exists.checks.unit).toContain('gameplay');
-    expect(exists.checks.skill).toContain('serve-drill');
+  it('reads something of every kind from the code: a reading that came back empty, or in another shape, is seen', () => {
+    // No list of the game is written here: a feature that adds a drill or takes a run out does not
+    // fail this test. It fails when one of the readings above has stopped finding its list, and the
+    // sentence says which, because the map's own sentences would then blame the map.
+    const reading = MAP.replace('.json', '.test.ts');
+    const empty = (what: string, from: string) =>
+      `The test read no ${what} from ${from}. The list has moved or changed its shape: say in ${reading} where it is now.`;
+    const read: [string, string, string[]][] = [
+      ['drills', 'MODE_INFO (src/game/modes/mode)', exists.things.drill],
+      ['positions', 'POSITIONS (src/config)', POSITIONS],
+      ['serves', 'SERVE_KINDS (src/config)', exists.things.serve],
+      ['lessons', 'the type Lesson (src/game/tutorial.ts)', exists.things.lesson],
+      ['settings', 'DEFAULT_SETTINGS (src/config)', exists.things.setting],
+      ['graphics levels', 'GRAPHICS_LEVEL_IDS (src/config)', exists.things.graphics],
+      ['venues', 'VENUE_IDS (src/config)', exists.things.venue],
+      ['sections', 'the exports of src/config', exists.things.config],
+      [
+        'autopilot runs',
+        'RUNS (scripts/trace.mjs)',
+        exists.checks.trace.filter((run) => !run.startsWith('lesson/') && !run.startsWith('keys/')),
+      ],
+      ['lesson runs', 'LESSONS (scripts/trace.mjs)', exists.checks.trace.filter((run) => run.startsWith('lesson/'))],
+      ["runs with a person's keys", 'KEY_RUNS (scripts/trace.mjs)', exists.checks.trace.filter((run) => run.startsWith('keys/'))],
+      ['drill runs', '`runs` (scripts/e2e.mjs)', exists.checks.e2e.filter((name) => name.includes('_'))],
+      ['phases', "the `phase('...')` lines (scripts/e2e.mjs)", exists.checks.e2e.filter((name) => !name.includes('_'))],
+      ['unit test files', 'tests/*.test.ts', exists.checks.unit],
+      ['feature files', '.agents/skills/verify-court-feel/features/*.md', exists.checks.skill],
+    ];
+    for (const [what, from, names] of read) expect(names.length, empty(what, from)).toBeGreaterThan(0);
+    // a name the scripts' own naming could not make is a reading that has gone wrong, not a run
+    for (const name of [...exists.checks.trace, ...exists.checks.e2e])
+      expect(
+        name,
+        `The test read a check named "${name}" from the scripts: their way of naming a run has changed. Say in ${reading} how a run is named now.`,
+      ).not.toMatch(/undefined|^$|\[object/);
+    // every drill as every position, and nothing a table of values is not
+    expect(exists.things.drillAs).toHaveLength(exists.things.drill.length * POSITIONS.length);
+    for (const lesson of exists.things.lesson)
+      expect(
+        isLesson(lesson),
+        `The test read "${lesson}" off the type Lesson, and the game does not take it for a lesson (isLesson). Say in ${reading} how the type is read now.`,
+      ).toBe(true);
+    for (const section of exists.things.config) expect(Array.isArray((config as Record<string, unknown>)[section]), section).toBe(false);
   });
 });
 
