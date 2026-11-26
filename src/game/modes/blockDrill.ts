@@ -3,7 +3,7 @@ import { solveApex } from '../../physics/solve';
 import { HitterBrain } from '../../ai/hitter';
 import type { AiHost } from '../brains';
 import { SetterBrain } from '../../ai/setter';
-import type { PositionId } from '../../config';
+import { BLOCK_DRILL, COACH_TOSS, type PositionId } from '../../config';
 import { Athlete } from '../athlete';
 import type { ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
@@ -18,7 +18,7 @@ type Phase = 'intro' | 'feed' | 'live' | 'result';
  * Base block position: every rep starts at the net in front of their middle
  * (where their quick is hit, in front of their setter), reading the set from there.
  */
-const BASE = { x: quickSpot(-SETTER_TARGET.x, -1).x, z: 0.5 };
+const BASE = { x: quickSpot(-SETTER_TARGET.x, -1).x, z: BLOCK_DRILL.cast.baseZ };
 /** the hitter each position is responsible for at the net (gets the extra sets) */
 const MY_HITTER: Record<PositionId, 'OH' | 'MB' | 'OPP'> = { OH: 'OPP', OPP: 'OH', MB: 'MB', S: 'OH', L: 'MB' };
 
@@ -40,13 +40,14 @@ export class BlockDrill extends Mode {
 
   setup(): void {
     const g = this.g;
+    const cast = BLOCK_DRILL.cast;
     g.placeUser(BASE.x, BASE.z, 0);
     // opponent setter (far side, faces +x = their left)
     const sx = -SETTER_SPOT.x;
     const sz = -SETTER_SPOT.z;
     this.setter = new Athlete('S', -1);
     this.setter.place(sx, sz, -Math.PI / 2);
-    g.addAthlete(this.setter, 21);
+    g.addAthlete(this.setter, cast.seed.setter);
     this.spawned.push(this.setter);
     const sb = new SetterBrain(this.setter, { x: sx, z: sz }, -Math.PI / 2);
     sb.shouldPlay = () => this.g.ball.lastTouch?.kind === 'feed';
@@ -60,7 +61,7 @@ export class BlockDrill extends Mode {
     };
     g.setBrain(this.setter, sb);
     // three hitters
-    let seed = 22;
+    let seed: number = cast.seed.hitters;
     for (const pos of ['OH', 'MB', 'OPP'] as const) {
       const a = new Athlete(pos, -1);
       const lane = laneFor(pos, -1);
@@ -77,8 +78,8 @@ export class BlockDrill extends Mode {
     }
     // coach on their back court
     this.coach = new Athlete('OPP', -1);
-    this.coach.place(-3.4, -6.6, Math.PI);
-    g.addAthlete(this.coach, 4, 'coach');
+    this.coach.place(cast.coach.x, cast.coach.z, Math.PI);
+    g.addAthlete(this.coach, cast.seed.coach, 'coach');
     this.spawned.push(this.coach);
     this.coach.airIntent = 'neutral';
     g.hud.setTitle('Block Drill');
@@ -87,16 +88,16 @@ export class BlockDrill extends Mode {
       this.position === 'MB'
         ? 'Their middle hits quicks: if they jump with the setter, jump with them · otherwise read the set'
         : 'Read the set · shuffle A/D · hold RMB for hands · Space to jump',
-      3.6,
+      BLOCK_DRILL.say.intro,
       true,
     );
     this.toPhase('intro');
   }
 
   private pickHitter() {
-    // 45%: the hitter your position would block in a match, otherwise any of the three
+    // `feed.mine` of the sets: the hitter your position would block in a match, otherwise any of the three
     const mine = this.hitters.find((h) => h.pos === MY_HITTER[this.position]) ?? this.hitters[0];
-    if (this.g.rng.next() < 0.45) return mine;
+    if (this.g.rng.next() < BLOCK_DRILL.feed.mine) return mine;
     return this.hitters[Math.floor(this.g.rng.next() * this.hitters.length)];
   }
 
@@ -117,26 +118,33 @@ export class BlockDrill extends Mode {
   step(dt: number): void {
     const g = this.g;
     this.t += dt;
+    const T = BLOCK_DRILL.timing;
     this.coach.cmd.faceYaw = yawFromDir(-SETTER_TARGET.x - this.coach.pos.x, -SETTER_TARGET.z - this.coach.pos.z);
     switch (this.phase) {
       case 'intro':
-        if (this.t > 1.2) this.toPhase('feed');
+        if (this.t > T.intro) this.toPhase('feed');
         break;
       case 'feed':
         if (g.userReturning) {
           this.t = 0;
           break;
         }
-        if (!this.tossed && this.t > 0.3) {
+        if (!this.tossed && this.t > T.toss) {
           this.coach.startAction('toss', g.simTime);
           this.tossed = true;
         }
-        if (this.tossed && this.t > 0.57) {
+        if (this.tossed && this.t > T.release) {
           this.coach.endAction();
-          const from = { x: this.coach.pos.x + 0.1, y: 1.35, z: this.coach.pos.z + 0.3 };
+          const from = { x: this.coach.pos.x + COACH_TOSS.hand.x, y: COACH_TOSS.hand.y, z: this.coach.pos.z + COACH_TOSS.hand.z };
           const v = { x: 0, y: 0, z: 0 };
-          solveApex(from, { x: -SETTER_TARGET.x, y: 2.1, z: -SETTER_TARGET.z }, SETTER_TARGET.height + 0.4, { x: 0, y: 0, z: 0 }, v);
-          g.ball.launch(from, v, { x: 3, y: 0, z: 0 }, 0, g.simTime);
+          solveApex(
+            from,
+            { x: -SETTER_TARGET.x, y: COACH_TOSS.targetY, z: -SETTER_TARGET.z },
+            SETTER_TARGET.height + COACH_TOSS.apexAbove,
+            { x: 0, y: 0, z: 0 },
+            v,
+          );
+          g.ball.launch(from, v, { x: COACH_TOSS.spin, y: 0, z: 0 }, 0, g.simTime);
           g.ball.lastTouch = { athlete: this.coach, kind: 'feed', t: g.simTime, side: -1 };
           this.block = null;
           this.attacked = false;
@@ -144,10 +152,10 @@ export class BlockDrill extends Mode {
         }
         break;
       case 'live':
-        if (g.ball.state.rest || this.t > 8) this.finish(null);
+        if (g.ball.state.rest || this.t > T.liveMax) this.finish(null);
         break;
       case 'result':
-        if (this.t > 2.0) this.nextRep();
+        if (this.t > T.result) this.nextRep();
         break;
     }
   }
@@ -178,25 +186,27 @@ export class BlockDrill extends Mode {
     this.toPhase('result');
     this.reps++;
     const b = this.block;
+    const P = BLOCK_DRILL.points;
+    const C = BLOCK_DRILL.crowd;
     let pts = 0;
     let label: string;
     let good = false;
     const lastByMe = g.ball.lastTouch?.athlete === g.me;
     if (b && o && o.kind === 'in' && o.side === -1) {
-      pts = b.grade === 'Perfect' ? 150 : 100;
+      pts = b.grade === 'Perfect' ? P.stuff : P.block;
       label = b.grade === 'Perfect' ? 'STUFF BLOCK!' : 'BLOCK POINT';
       good = true;
-      g.crowd(b.grade === 'Perfect' ? 1.2 : 0.8);
+      g.crowd(b.grade === 'Perfect' ? C.stuff : C.block);
     } else if (b && (!o || o.kind === 'in')) {
-      pts = 60;
+      pts = P.soft;
       label = 'SOFT BLOCK · TOUCH';
       good = true;
-      g.crowd(0.3);
+      g.crowd(C.soft);
     } else if (b && lastByMe) {
-      pts = 20;
+      pts = P.tooled;
       label = 'TOOLED';
     } else if (!b && o && o.kind !== 'in') {
-      pts = 10;
+      pts = P.hitterError;
       label = 'HITTER ERROR';
     } else if (!b && o && o.kind === 'in' && o.side === 1) {
       label = 'KILLED';
@@ -222,7 +232,7 @@ export class BlockDrill extends Mode {
     this.target = null;
     const me = g.me;
     // always back to the same base spot so every read starts from the same place
-    if (Math.hypot(me.pos.x - BASE.x, me.pos.z - BASE.z) > 0.15 || me.state !== 'ground') g.returnUser(BASE.x, BASE.z, 0);
+    if (Math.hypot(me.pos.x - BASE.x, me.pos.z - BASE.z) > BLOCK_DRILL.slack || me.state !== 'ground') g.returnUser(BASE.x, BASE.z, 0);
     this.toPhase('feed');
   }
 
