@@ -61,7 +61,7 @@ Why the checks are arranged as they are, and where a new rule should live, is in
 
 ## Git
 
-- Branch from `main`. One change per pull request. Fill in `.github/pull_request_template.md`.
+- Branch from `main`. A pull request is one task, a unit of work, of a sensible size: there is no fixed limit. Each commit is one concern, so it reads step by step. Fill in `.github/pull_request_template.md`.
 - Name the branch `<type>/<short-description>`, in lowercase with hyphens: `feat/setter-calls-the-pass`, `fix/crash-screen-input`. If your tool will only push to a branch it named itself (`claude/…`, `cursor/…`), keep that name.
 - Commit and pull request titles are Conventional Commits, `type(area): what the player notices`, in plain words (CI fails a pull request whose title starts with none of the types below): `feat(rally): the setter calls the pass (HIGH! when out of system)`. For `feat`, `fix` and `perf` the description says what the player notices. For the other types it says what changes for the next contributor. Leave the area out when a change has no single one.
   - `feat`: something new the player can do, see, hear or feel.
