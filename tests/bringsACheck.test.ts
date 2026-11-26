@@ -7,7 +7,7 @@
 // every failure says what to do next.
 import { describe, expect, it } from 'vitest';
 import template from '../.github/pull_request_template.md?raw';
-import { changedSections, decide, tierOf } from '../scripts/brings-a-check.rule.mjs';
+import { CONFIG_SHOWN, SECTIONED, changedSections, decide, tierOf } from '../scripts/brings-a-check.rule.mjs';
 
 /** a description with both sections filled in, and whatever is put under "What no check holds" */
 const described = (unchecked = 'Nothing: the test above holds it.') =>
@@ -76,21 +76,31 @@ describe('the tiers: which files are the play, and which are what is shown and h
     expect(tierOf('src/app/bot.ts')).toBe(null);
   });
 
-  it('a section of config is the play, unless it is listed as shown and heard', () => {
-    for (const section of ['COURT', 'BALL', 'TIMING', 'CONTACT', 'ASSIST', 'AI', 'TOUCH', 'SERVE_DRILL'])
-      expect(tierOf(`src/config.ts#${section}`), section).toBe('play');
-    for (const section of ['CAMERA', 'ARENA', 'VENUES', 'CHARACTER', 'FX', 'AUDIO', 'QUALITY', 'DEFAULT_SETTINGS'])
-      expect(tierOf(`src/config.ts#${section}`), section).toBe('shown');
+  it('a file of config is the play, unless it is listed as shown and heard', () => {
+    // the court, the ball, the input, the body, the skills, the brains and the drills
+    for (const file of ['court', 'ball', 'input', 'body', 'skills', 'ai', 'drills'])
+      expect(tierOf(`src/config/${file}.ts`), file).toBe('play');
+    // the display's two files and the app's
+    for (const file of ['display', 'venues', 'app']) expect(tierOf(`src/config/${file}.ts`), file).toBe('shown');
   });
 
-  it('a section or a file nobody has listed yet is the play: a new one cannot slip past by being new', () => {
-    expect(tierOf('src/config.ts#BLOCK_DRILL')).toBe('play');
-    expect(tierOf('src/config/ai.ts')).toBe('play');
+  it('every file config has today is in one of the two tiers, and the ones listed as shown and heard exist', () => {
+    const files = Object.keys(import.meta.glob('../src/config/*.ts')).map((path) => path.replace('../', ''));
+    expect(files.length).toBeGreaterThan(1);
+    for (const file of files) expect(tierOf(file), file).not.toBe(null);
+    for (const file of CONFIG_SHOWN) expect(files, `${file} is listed as shown and heard`).toContain(file);
+  });
+
+  it('a file nobody has listed yet is the play: a new one cannot slip past by being new', () => {
+    expect(tierOf('src/config/levels.ts')).toBe('play');
+    // the index says which files config is made of, the play's among them
+    expect(tierOf('src/config/index.ts')).toBe('play');
+    expect(tierOf('src/config/skills/block.ts')).toBe('play');
     expect(tierOf('src/replays/store.ts')).toBe('play');
   });
 });
 
-describe('the sections of a file that is judged by section (config, the trace)', () => {
+describe('the sections of a file that is judged by section (the trace tool)', () => {
   const before = [
     '// the head of the file',
     '',
@@ -123,6 +133,10 @@ describe('the sections of a file that is judged by section (config, the trace)',
 
   it('the same text has no changed section', () => {
     expect(changedSections(before, before)).toEqual([]);
+  });
+
+  it('config is judged by file: only the trace tool is read section by section', () => {
+    expect(SECTIONED).toEqual(['scripts/trace.mjs']);
   });
 });
 
@@ -255,9 +269,14 @@ describe('a feat or a fix that touches the play brings a check that is red on th
     expect(feat([PLAY, TEST], { removed: [TEST], redOnBase: [TEST] }).failures).toHaveLength(1);
   });
 
-  it('a tuned number in a gameplay section of config is a change to the play', () => {
-    expect(feat(['src/config.ts#TIMING']).tier).toBe('play');
-    expect(feat(['src/config.ts#TIMING']).failures).toHaveLength(1);
+  it('a tuned number in a gameplay file of config is a change to the play', () => {
+    expect(feat(['src/config/skills.ts']).tier).toBe('play');
+    expect(feat(['src/config/skills.ts']).failures).toHaveLength(1);
+  });
+
+  it('a change to the play and to the look in config is held to the play', () => {
+    expect(feat(['src/config/display.ts', 'src/config/ai.ts', 'tests/menu.test.ts'], { redOnBase: [] }).tier).toBe('play');
+    expect(feat(['src/config/display.ts', 'src/config/ai.ts', 'tests/menu.test.ts'], { redOnBase: [] }).failures).toHaveLength(1);
   });
 
   it('a change that touches both tiers is held to the play: a test that passes on the base is not enough', () => {
@@ -297,8 +316,9 @@ describe('a feat or a fix that touches only what is shown and heard brings a che
     expect(feat([SHOWN, 'tests/menu.test.ts'], { removed: ['tests/menu.test.ts'] }).failures).toHaveLength(1);
   });
 
-  it('a look or sound section of config is what is shown and heard', () => {
-    expect(feat(['src/config.ts#AUDIO']).tier).toBe('shown');
+  it('a look or sound file of config is what is shown and heard', () => {
+    expect(feat(['src/config/display.ts']).tier).toBe('shown');
+    expect(feat(['src/config/venues.ts', 'src/config/app.ts']).tier).toBe('shown');
   });
 });
 
