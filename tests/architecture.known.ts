@@ -23,9 +23,7 @@ export const KNOWN_SCENE: readonly string[] = [];
 /** tests that fake the game with a cast (to `Game`, or to the `AiHost` the brains see), because a real one cannot be built without a browser */
 export const KNOWN_FAKE_GAME: readonly string[] = [
   'tests/greenBite.test.ts',
-  'tests/greenSet.test.ts',
   'tests/jumpSet.test.ts',
-  'tests/middleBlock.test.ts',
   'tests/serveRun.ts',
   'tests/teamDefence.test.ts',
 ];
@@ -35,9 +33,7 @@ export const KNOWN_HAND_MADE: readonly string[] = [
   'tests/defenceForms.test.ts',
   'tests/gameplay.test.ts',
   'tests/greenBite.test.ts',
-  'tests/greenSet.test.ts',
   'tests/jumpSet.test.ts',
-  'tests/middleBlock.test.ts',
   'tests/playerServe.test.ts',
   'tests/reception.test.ts',
   'tests/serveRun.ts',

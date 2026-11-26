@@ -1,17 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { AI, CONTACT, COURT, SIM } from '../src/config';
+import { AI, CONTACT, COURT, SET_LEVELS } from '../src/config';
 import { Athlete } from '../src/game/athlete';
-import type { Touch } from '../src/game/ballEntity';
-import type { Game } from '../src/app/game';
+import type { SetResult } from '../src/game/contact';
 import { laneFor, LANES, SETTER_TARGET } from '../src/game/plays';
 import { BlockerBrain } from '../src/ai/blocker';
 import { HitterBrain } from '../src/ai/hitter';
 import { openShot, type BlockHands, type Digger } from '../src/ai/openShot';
 import { makeBall, R, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
-import { solveApex, solveSpeedToFloor } from '../src/physics/solve';
+import { solveSpeedToFloor } from '../src/physics/solve';
+import { scene } from './scene';
 
-const DT = 1 / SIM.hz;
 const env: BallEnv = { netTop: COURT.netHeightMen };
 const SPEED = CONTACT.spikePerfect;
 const SPIN = CONTACT.spikeSpinPerfect;
@@ -103,67 +101,41 @@ describe('a green set is a point: the open spot', () => {
   });
 });
 
-/** a stand-in Game for one brain: the ball (state + prediction), the clock, the rng, the user's last set */
-function stage(lastTouch: Touch, green: boolean) {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let predicted = -1;
-  const ball = {
-    state,
-    active: true,
-    lastTouch: lastTouch as Touch | null,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    ensurePrediction(e: BallEnv, t: number) {
-      if (predicted !== version) {
-        predictor.compute(state, e, t);
-        predicted = version;
-      }
-      return predictor;
-    },
-    touch(from: V3, v: V3) {
-      Object.assign(state.p, from);
-      Object.assign(state.v, v);
-      state.rest = false;
-      version++;
-    },
+/** your set as the contact system leaves it after a clean touch, for the hitter and their block to read: green, or only good */
+function yourSet(athlete: Athlete, t: number, green: boolean): SetResult {
+  const L = SET_LEVELS.easy;
+  return {
+    athlete,
+    t,
+    grade: green ? 'Perfect' : 'Good',
+    green,
+    quality: green ? 1 : 0.7,
+    err: green ? 0 : L.green[0] * 1.5,
+    window: L.green[0],
+    good: L.green[0] * L.goodMul,
+    pips: { feet: true, centre: true, catch: true },
+    held: false,
   };
-  const g = {
-    simTime: 0,
-    env,
-    ball,
-    rng: { next: () => 0, gauss: () => 0 },
-    contact: { lastSetResult: { athlete: lastTouch.athlete, t: lastTouch.t, green }, tryBlock: () => false },
-  };
-  return { g, ball };
 }
 
 describe('a green set is a point: their middle guesses wrong', () => {
   /** our setter sets the outside a high ball; their middle reads it. Where is the middle when our hitter meets it? */
   function middleOnPinSet(green: boolean): number {
-    const setter = new Athlete('S', 1);
-    const { g, ball } = stage({ athlete: setter, kind: 'set', t: 0, side: 1 }, green);
-    const from = { x: SETTER_TARGET.x, y: 2.5, z: SETTER_TARGET.z };
-    const out = { x: 0, y: 0, z: 0 };
-    const lane = laneFor('OH', 1);
-    solveApex(from, { x: lane.x, y: 3.2, z: lane.z }, 3.2 + lane.apexAbove, { x: 0, y: 0, z: 0 }, out);
-    ball.touch(from, out);
-    const mb = new Athlete('MB', -1);
-    mb.place(0, -0.5, Math.PI);
+    // fixed dice: their middle reads the set with no error and always goes with a pin set, so where it ends up is your green set alone
+    const s = scene({ dice: { roll: 0 } });
+    const { sim } = s;
+    const setter = s.athlete('S', 1, { x: SETTER_TARGET.x, z: SETTER_TARGET.z }, { user: true });
+    const mb = s.athlete('MB', -1, { x: 0, z: -0.5 });
     const brain = new BlockerBrain(mb, 0, 3.4, true);
     brain.skill = 1;
-    for (let i = 0; i < SIM.hz * 1.6; i++) {
-      g.simTime += DT;
-      stepBall(ball.state, DT, env);
-      brain.step(DT, g as unknown as Game);
-      mb.step(DT, g.simTime);
-      if (ball.state.v.y < 0 && ball.state.p.y < 3.2) break;
-    }
+    sim.setBrain(mb, brain);
+    const lane = laneFor('OH', 1);
+    s.send(
+      { from: { x: SETTER_TARGET.x, y: 2.5, z: SETTER_TARGET.z }, to: { x: lane.x, y: 3.2, z: lane.z }, apex: 3.2 + lane.apexAbove },
+      { athlete: setter, kind: 'set', side: 1 },
+    );
+    sim.contact.lastSetResult = yourSet(setter, sim.simTime, green);
+    s.run(1.6, () => sim.ball.vel.y < 0 && sim.ball.pos.y < 3.2);
     return mb.pos.x;
   }
 
@@ -179,27 +151,25 @@ describe('a green set is a point: their middle guesses wrong', () => {
 describe('transition: the middle backs off the net before the quick', () => {
   /** our middle, at the net from a block, as a dig goes up to our setter who touches it in `left` s */
   function transition(left: number) {
-    const mb = new Athlete('MB', 1);
-    mb.place(0.2, 0.6, 0);
+    const s = scene();
+    const { sim } = s;
+    const mb = s.athlete('MB', 1, { x: 0.2, z: 0.6 });
     const brain = new HitterBrain(mb, laneFor('MB', 1));
-    const digger = new Athlete('L', 1);
-    const g = {
-      simTime: 0,
-      env,
-      ball: { active: true, lastTouch: { athlete: digger, kind: 'dig', t: 0, side: 1 } as Touch },
-      rng: { next: () => 0.5, gauss: () => 0 },
-      contact: { beginWindup() {} },
-    };
+    sim.setBrain(mb, brain);
+    const digger = s.athlete('L', 1, { x: -2, z: 6.5 });
+    // the dig, on its way up to our setter's spot: there in `left` s
+    s.send(
+      { from: { x: -2, y: 0.6, z: 6.5 }, to: { x: SETTER_TARGET.x, y: 2.5, z: SETTER_TARGET.z }, time: left },
+      { athlete: digger, kind: 'dig', side: 1 },
+    );
     brain.passToSetter = () => ({ t: left, x: SETTER_TARGET.x });
     let zAtRun = -1;
     let leftFloor = -1;
-    for (let i = 0; i < SIM.hz * (left + 0.6); i++) {
-      g.simTime += DT;
-      brain.step(DT, g as unknown as Game);
-      mb.step(DT, g.simTime);
+    s.run(left + 0.6, () => {
       if (zAtRun < 0 && brain.phase === 'approach') zAtRun = mb.pos.z;
-      if (leftFloor < 0 && mb.state === 'air') leftFloor = g.simTime;
-    }
+      if (leftFloor < 0 && mb.state === 'air') leftFloor = sim.simTime;
+      return false;
+    });
     return { zAtRun, leftFloor };
   }
 
