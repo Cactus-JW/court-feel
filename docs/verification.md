@@ -230,8 +230,8 @@ Ask these in order and stop at the first yes.
 
 - **The feel.** No check can say whether a spike feels right. A change that
   touches the game is its developer's to play on the preview, suggested and not
-  enforced, and an agent says what to try there. The play-test that gates is
-  before a release: `main` is not production.
+  enforced, and an agent that hands one over ends its message with what to play
+  there. The play-test that gates is before a release: `main` is not production.
 - **Decisions**, and **changes to the checks**.
 
 ## The checks cannot be loosened by the change they judge

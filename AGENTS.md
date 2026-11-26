@@ -73,7 +73,7 @@ Why the checks are arranged as they are, and where a new rule should live, is in
   - `chore`: tooling, dependencies, agent files and other housework.
 - Update a branch by rebasing it on `origin/main` and pushing with `--force-with-lease`. If the rebase or the force-push is not possible, merge `main` in and say so in the pull request.
 - A pull request is merged once CI is green and it has been reviewed. GitHub then deletes its branch: start the next change on a new branch from `main`.
-- **Remind the person to play it.** `main` is not production, so no play-test gates a merge: the one that gates is before a release. A change that does not touch the game needs none. One that does is its developer's to play on the Vercel preview, suggested and not enforced. As the agent, tell the person to play it and which parts need particular attention: which drill, position, camera or device, and what to look, listen or feel for. Those are the lines of the pull request's "What no check holds" section.
+- **Remind the person to play it.** `main` is not production, so the play-test that gates is before a release, not before a merge. On the Vercel preview it is suggested, not enforced, and the developer's to do. When you hand the person a change that touches the game (anything the browser runs, in a `perf` or a `refactor` too), end your message with what to play on the preview (which drill, position, camera or device) and what to look, listen or feel for, and put the same lines under "What no check holds". A change to docs, CI, tooling or tests needs none.
 
 ## Releasing
 
