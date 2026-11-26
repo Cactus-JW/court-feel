@@ -19,7 +19,7 @@ This directory is the maintained source for verifying the user-facing behaviour 
 - In `--until` expressions `g` is the running game and `window.__verify.events` is the recorded list that `court events` prints.
 - Prefer the handles in the recipes (ARIA roles and names, the row, chip and card selectors) over coordinates.
 - The start screen keeps the sections that are not showing in the page, and a sheet keeps the screen under it. Use the recipes' selectors as written: where one starts with `.view.on`, `.sheet` or `.pause`, a shorter one matches a hidden copy too.
-- Numbers in the expected results (points, km/h, target zone) are what a `--fresh --manual` run gives at the time of writing. A change to tuning in `src/config.ts` can move them. The shape of the result is the contract, not the number.
+- Numbers in the expected results (points, km/h, target zone) are what a `--fresh --manual` run gives at the time of writing. A change to tuning in `src/config/` can move them. The shape of the result is the contract, not the number.
 
 ## Proof and skip reporting
 

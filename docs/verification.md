@@ -68,8 +68,10 @@ Ask these in order and stop at the first yes.
   importing `Game`, on a simulation file that touches the DOM or builds scene
   objects, on a clock or dice in the simulation (`Math.random`, `Date.now`,
   `performance.now`), on a test that fakes the game with a cast, on a test that
-  writes a stand-in for the game by hand (below), and on a new folder with no
-  layer.
+  writes a stand-in for the game by hand (below), on a new folder with no
+  layer, and on a `src/config.ts` put back beside `src/config/`: the type
+  checker and the build would read the file for every import of `config`, and
+  the folder would be dead code.
 - **A test of the play is built on a real simulation** (`tests/scene.ts`). The
   scene builder puts athletes, seats, teams and a ball in a real `Simulation`
   and steps it in the game's own order, the invariants checked at every step.
@@ -96,7 +98,7 @@ Ask these in order and stop at the first yes.
   numbers each file in physics, the simulation, the brains and the drills holds
   of its own is written down, file by file, in
   `tests/architecture.numbers.json` and only goes down. A new one fails until
-  it has a name in `src/config.ts`. It does not move the ones already there:
+  it has a name in `src/config/`. It does not move the ones already there:
   that is the work the count is the measure of.
 - **Unit tests that state a real-court fact**, in the test's name.
 - **CI on every pull request.**
@@ -275,7 +277,7 @@ starts with `feat` or `fix`:
   it is held" and "What no check holds", each with more in it than the
   template's comment.
 - **It touches the play** (physics, the simulation, the brains, the drills, the
-  input door, the gameplay sections of config). Then one of the tests it adds or
+  input door, the gameplay files of config). Then one of the tests it adds or
   changes fails on the code of the branch it goes into, or it changes the
   trace's runs, or a line `Unchecked: <reason>` stands under "What no check
   holds". `scripts/red-on-base.mjs` is what tries the tests: this checkout, with
@@ -284,12 +286,12 @@ starts with `feat` or `fix`:
   the run is stopped after two minutes and the file is named, because a fix for
   a loop that never ends comes with the test that states it.
 - **It touches only what is shown and heard** (the HUD, the menus, effects,
-  sound, the camera, the world, the look and sound sections of config). Then a
+  sound, the camera, the world, the look and sound files of config). Then a
   test, the end-to-end run, a `verify-court-feel` feature file or a trace run
   changed with it, or the same line stands.
 
 Which path is in which tier is one table (`TIERS` in
-`scripts/brings-a-check.rule.mjs`), and a part of config or a folder of `src/`
+`scripts/brings-a-check.rule.mjs`), and a file of config or a folder of `src/`
 that nobody has listed is the play. The decision is a pure function of the
 title, the changed paths, the tests that are red on the base and the
 description, and `tests/bringsACheck.test.ts` holds it case by case. Like the
