@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { DEFAULT_SETTINGS, type PositionId, type ServeKind, type Settings } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import type { ContactEvent } from '../src/game/contact';
-import { takeKey } from '../src/game/intent';
+import { copyIntent, takeKey, type Intent } from '../src/game/intent';
 import { NO_MARKERS } from '../src/game/modes/markers';
 import type { DrillHost, DrillHud, ModeId } from '../src/game/modes/mode';
 import { createMode } from '../src/game/modes/registry';
@@ -51,7 +51,9 @@ const NO_LESSON: DrillHost['tutorial'] = {
  * cut down to what the play needs. The player has the settings a new player has (`settings`: the
  * assists are on), and their hands do nothing: the seat plays the intent it holds every frame, which
  * is nothing held and a look that stays where the drill last turned it. A test that wants hands
- * changes what the seat holds (`seat.intent`).
+ * gives them to `frame`, or changes what the seat holds (`seat.intent`). Either way a press is made
+ * once: after a frame the seat holds on to the stick, the buttons still down and the look, not to
+ * the presses and releases.
  */
 export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
   const said: string[] = [];
@@ -144,11 +146,20 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     said,
     touches,
     outcomes,
-    /** play one frame: the seat plays the intent it holds (and walks its player back between reps), the simulation steps twice (120 Hz under 60 fps) and the drill's frame runs */
-    frame(): void {
-      seat.frame(1 / 60);
+    /**
+     * Play one frame as the game does: the seat plays the player's hands first (and walks them back
+     * between reps), then the simulation steps twice (120 Hz under 60 fps) and the drill's frame
+     * runs. `hands`: this frame's intent (the game keeps a copy). With none the seat plays what it
+     * holds.
+     */
+    frame(hands?: Intent): void {
+      if (hands) seat.hear(1 / 60, copyIntent(hands));
+      else seat.frame(1 / 60);
       for (let i = 0; i < 2; i++) sim.step(1 / 120);
       mode.frame(1 / 60);
+      // a button goes down once and comes up once (a command key nobody took waits, as it does in `Input`)
+      seat.intent.pressed.length = 0;
+      seat.intent.released.length = 0;
     },
   };
 }
