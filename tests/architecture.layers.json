@@ -12,6 +12,7 @@
   },
   "folders": [
     ["src/config.ts", "config"],
+    ["src/config/", "config"],
     ["src/main.ts", "app"],
     ["src/app/", "app"],
     ["src/core/", "core"],

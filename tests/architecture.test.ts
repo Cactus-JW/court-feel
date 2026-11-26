@@ -81,9 +81,18 @@ describe('architecture: every import points down', () => {
     }
   });
 
-  it('config imports nothing', () => {
-    const { files, packages } = importsOf('src/config.ts');
-    expect([...files, ...packages]).toEqual([]);
+  it('config imports nothing but config', () => {
+    // config is the lowest layer, one file or a folder of them: a file of it may read another, and nothing else
+    const config = SRC.filter((f) => layerOf(f) === 'config');
+    expect(config, 'no file is in the config layer: name it in tests/architecture.layers.json').not.toEqual([]);
+    for (const file of config) {
+      const { files, packages } = importsOf(file);
+      expect(packages, `${file} imports a package`).toEqual([]);
+      expect(
+        files.filter((f) => layerOf(f) !== 'config'),
+        `${file} imports outside config`,
+      ).toEqual([]);
+    }
   });
 
   it('no two files import each other in a circle, however long the way round', () => {
