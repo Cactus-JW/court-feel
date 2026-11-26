@@ -11,17 +11,22 @@
 #           the same play, drawn and shown the same, and so do the runs played with a person's
 #           keys (the rules an autopilot never reaches). Every drill gives the same play again
 #           from its logged hands alone. Then one frozen frame is painted eight times and has to
-#           be one picture (scripts/trace.mjs, `npm run trace`).
-# Make check and e2e required checks on main (Settings > Branches > branch protection rule).
-# trace runs on every pull request too, so it can be made one.
+#           be one picture (scripts/trace.mjs, `npm run trace`). On a pull request it then plays
+#           every drill here and on the commit the pull request goes into, and compares every
+#           frame (`npm run trace:compare`): only a feat or a fix may differ.
+# All three are required checks on main.
 #
 # On a pull request, check also runs the architecture rules as they are on the branch the pull
 # request goes into, and fails when the known lists grow (scripts/rules-from-base.mjs): a change
 # is judged by rules it did not write. .github/CODEOWNERS lists the files that judge every change.
 #
-# For a refactor (a pull request whose title starts with "refactor"), trace has two more steps:
-# the change has to play exactly like the commit it left main at (`npm run trace:compare`). The
-# title is the one the pull request had when the run started: after a change of title, push again.
+# Three rules read a pull request's title (docs/verification.md). It starts with a known type
+# (check: scripts/title-has-a-type.mjs). A feat or a fix brings the check that holds it (check:
+# scripts/brings-a-check.mjs). Every other type says of itself that nothing changes for the
+# player, and has to play exactly like the commit it goes into (trace:
+# scripts/same-play-as-base.mjs). The title and the description are read as they are when the
+# step runs, and an edit of either starts no run: after one, run the failed job again
+# (`gh run rerun <run id> --failed`). Each failure says so, with the run's id.
 name: CI
 
 on:
@@ -36,6 +41,15 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # The scripts that judge a pull request by its title, its description and what it changed. On a
+  # pull request each is taken from the commit it goes into, where that commit has it: a change is
+  # judged by rules it did not write. One that is new in a pull request judges that pull request.
+  JUDGES: >-
+    scripts/brings-a-check.mjs scripts/brings-a-check.rule.mjs scripts/red-on-base.mjs
+    scripts/pull-request.mjs scripts/pull-request.rule.mjs
+    scripts/title-has-a-type.mjs scripts/same-play-as-base.mjs
+
 jobs:
   check:
     # the name predates the lint and format steps; it is kept so an existing required-check rule keeps matching
@@ -44,7 +58,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      # the last step before the build reads the pull request's title and description as they are now
+      # the steps that judge by the title and the description read them as they are now
       pull-requests: read
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +87,20 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           ALLOW_KNOWN_GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'known-list-may-grow') && '1' || '0' }}
+      - name: The scripts that judge this pull request are the ones on the branch it goes into
+        # after the unit tests, which test the scripts as this pull request has them
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        run: |
+          for script in $JUDGES; do
+            if git cat-file -e "HEAD^1:$script" 2>/dev/null; then git checkout -q HEAD^1 -- "$script"; fi
+          done
+      - name: The title starts with its type
+        # feat, fix, perf, refactor, test, docs, ci or chore (AGENTS.md): the two steps that treat one kind of
+        # change differently from another read the kind off the title (scripts/title-has-a-type.mjs)
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        run: node scripts/title-has-a-type.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: A feat or a fix brings a check that is red on the base, or says why not
         # The description of a feat or a fix says how the change is held, and a change to the play comes with a
         # test that fails on the base branch's code (scripts/red-on-base.mjs), a trace run, or a line
@@ -80,12 +108,7 @@ jobs:
         # title is asked nothing. It runs when an earlier step failed too, so one run shows everything to fix,
         # and it reads the title and the description as they are now: after editing them, run the job again.
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-        run: |
-          # the gate that does the judging is the base branch's too, where it has one
-          if git cat-file -e HEAD^1:scripts/brings-a-check.mjs 2>/dev/null; then
-            git checkout -q HEAD^1 -- scripts/brings-a-check.mjs scripts/brings-a-check.rule.mjs scripts/red-on-base.mjs
-          fi
-          node scripts/brings-a-check.mjs HEAD^1
+        run: node scripts/brings-a-check.mjs HEAD^1
         env:
           GITHUB_TOKEN: ${{ github.token }}
       # typecheck already ran above; `npm run build` would repeat it
@@ -122,14 +145,18 @@ jobs:
   trace:
     name: Trace (the same play every run)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      # a refactor must change nothing for the player: it is also compared with main
-      REFACTOR: ${{ github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'refactor') }}
+    # twice the play (here, and here against the commit this goes into), and both again with the base
+    # branch's tool when a pull request changes the tool: four passes of about three and a half minutes
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # the comparison reads the pull request's title as it is now: only a feat or a fix may differ
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
-          # a refactor's comparison needs the commit this change left main at
+          # the pull request merged into its base (HEAD), the commit it goes into (HEAD^1), and what the
+          # comparison checks out beside this checkout
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -140,23 +167,33 @@ jobs:
         run: npx playwright install --with-deps --only-shell chromium
       - name: Play every drill twice, then each again from its logged hands
         run: npm run trace
-      - name: For a refactor, play every drill here and on main, and compare every frame
-        if: env.REFACTOR == 'true'
-        run: npm run trace:compare
-      - name: The same with the trace tool as it is on the branch this goes into
+      - name: Play every drill here and on the commit this goes into, and compare every frame
+        # `npm run trace:compare`, for every pull request. A feat or a fix may play differently: what is printed
+        # is its difference, and it does not fail. Every other type has to print `same play`
+        # (scripts/same-play-as-base.mjs, docs/verification.md). The title is read as it is now: after a
+        # change of title, run the job again.
+        if: github.event_name == 'pull_request'
+        run: |
+          # the script that does the judging is the base branch's too, where it has one
+          for script in $JUDGES; do
+            if git cat-file -e "HEAD^1:$script" 2>/dev/null; then git checkout -q HEAD^1 -- "$script"; fi
+          done
+          node scripts/same-play-as-base.mjs HEAD^1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: The same with the trace tool as it is on the commit this goes into
         # only when this pull request changes the tool: a change to the trace cannot be what makes it pass
         if: github.event_name == 'pull_request'
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
-          if git cat-file -e FETCH_HEAD:scripts/trace.mjs 2>/dev/null && ! git diff --quiet FETCH_HEAD -- scripts/trace.mjs; then
-            git show FETCH_HEAD:scripts/trace.mjs > scripts/trace.mjs
+          if git cat-file -e HEAD^1:scripts/trace.mjs 2>/dev/null && ! git diff --quiet HEAD^1 -- scripts/trace.mjs; then
+            git show HEAD^1:scripts/trace.mjs > scripts/trace.mjs
             npm run trace
-            if [ "$REFACTOR" = true ]; then npm run trace:compare; fi
+            node scripts/same-play-as-base.mjs HEAD^1
           else
-            echo "scripts/trace.mjs is the same as on $BASE_REF"
+            echo "scripts/trace.mjs is the same as on the commit this goes into"
           fi
         env:
-          BASE_REF: ${{ github.base_ref }}
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Upload the traces
         if: failure()
         uses: actions/upload-artifact@v4

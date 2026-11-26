@@ -8,72 +8,26 @@
 // The rule, its tiers of paths and every message are in that file. Exit code 1 when it fails.
 //
 // The title and the description come from, in this order: the two flags; in CI, the pull request
-// as it is now (so a description edited after the run started counts when the job is run again),
-// or as it was when the run started if GitHub cannot be reached; `gh pr view` for this branch.
+// as it is now, or as it was when the run started if GitHub cannot be reached; `gh pr view` for
+// this branch (scripts/pull-request.mjs).
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SECTIONED, asksRedOnBase, changedSections, changedTests, decide } from './brings-a-check.rule.mjs';
+import { flag, pullRequest } from './pull-request.mjs';
 import { baseOf, changedSince, redOnBase, reportOf } from './red-on-base.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const USAGE = 'usage: node scripts/brings-a-check.mjs <ref> [--title "<title>"] [--body-file <file>]   (for example origin/main)';
 
 const args = process.argv.slice(2);
-const flag = (name) => {
-  const at = args.indexOf(name);
-  return at < 0 ? undefined : args.splice(at, 2)[1];
-};
-const titleFlag = flag('--title');
-const bodyFile = flag('--body-file');
+const title = flag(args, '--title');
+const bodyFile = flag(args, '--body-file');
 const ref = args[0];
 if (!ref) {
   console.error(USAGE);
   process.exit(2);
-}
-
-/** the pull request's title and description */
-async function pullRequest() {
-  if (titleFlag !== undefined)
-    return { title: titleFlag, body: bodyFile ? fs.readFileSync(bodyFile, 'utf8') : '', from: 'the command line' };
-  const event = process.env.GITHUB_EVENT_PATH && JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')).pull_request;
-  if (event) {
-    try {
-      const response = await fetch(
-        `${process.env.GITHUB_API_URL ?? 'https://api.github.com'}/repos/${process.env.GITHUB_REPOSITORY}/pulls/${event.number}`,
-        {
-          headers: {
-            accept: 'application/vnd.github+json',
-            ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
-          },
-          signal: AbortSignal.timeout(20000),
-        },
-      );
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const now = await response.json();
-      return { title: now.title, body: now.body, from: `#${event.number} as it is now` };
-    } catch (error) {
-      return {
-        title: event.title,
-        body: event.body,
-        from: `#${event.number} as it was when this run started (GitHub did not answer: ${error.message})`,
-      };
-    }
-  }
-  try {
-    const mine = JSON.parse(
-      execFileSync('gh', ['pr', 'view', '--json', 'number,title,body'], {
-        cwd: root,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }),
-    );
-    return { title: mine.title, body: mine.body, from: `#${mine.number}, this branch's pull request` };
-  } catch {
-    console.error(`This branch has no pull request to read a title and a description from. Give them: ${USAGE}`);
-    process.exit(2);
-  }
 }
 
 /** a file as it is on a commit, or null when the commit does not have it */
@@ -90,7 +44,11 @@ function at(commit, file) {
   }
 }
 
-const pr = await pullRequest();
+const pr = await pullRequest({ title, bodyFile });
+if (!pr) {
+  console.error(`This branch has no pull request to read a title and a description from. Give them: ${USAGE}`);
+  process.exit(2);
+}
 const base = baseOf(ref);
 const changed = changedSince(base);
 

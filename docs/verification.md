@@ -110,11 +110,28 @@ Ask these in order and stop at the first yes.
   athlete's pose, the floor markers. The four lessons are taken the same way
   with scripted hands, down to what a lesson stores in the browser. The same
   start has to give the same play.
-- **The trace comparison** (`npm run trace:compare`), for a refactor: the same
-  job goes on to it when a pull request's title starts with `refactor`. It plays
-  every drill on the branch and on `main` and compares the two the same way.
-  Nothing is stored in the repo, so a feature that changes the play on purpose
-  has nothing to re-record.
+- **The trace comparison** (`npm run trace:compare`), on every pull request: the
+  same job goes on to play every drill on the branch and on the commit it goes
+  into, and compares the two the same way. Only a `feat` or a `fix` may differ:
+  what is printed is then its difference, to be read against what the pull
+  request says it changes. Every other type (`refactor`, `perf`, `test`, `docs`,
+  `ci`, `chore`) says of itself that nothing changes for the player, and fails
+  unless it prints `same play` (`scripts/same-play-as-base.mjs`). So a `docs`
+  change that moves a number is caught, and so is a dependency that plays
+  differently. Nothing is stored in the repo, so a feature that changes the play
+  on purpose has nothing to re-record. What it cannot tell: it only speaks for
+  what the runs play, the first run that differs is the only one it explains,
+  and a `feat` that changed more than it meant to passes with its difference
+  printed. A change to the autopilots plays differently in every run, so it is
+  a `feat` or a `fix` too.
+- **The title starts with its type** (`scripts/title-has-a-type.mjs`, in the
+  `check` job): one of the eight in `AGENTS.md`. The comparison above and the
+  gate below read the kind of change off the title, so a title with no type
+  fails, with the command that retitles it. An edit of a title starts no run:
+  the failure gives the command that runs the job again. What it cannot tell:
+  whether the type is the true one. A change to the play titled `chore` is
+  caught by the comparison where a run reaches it, and by nothing where none
+  does.
 - **The hands replay** (a pass of both). The game logs every frame's intent
   (`Game.handsLog`). Each drill is then played again from that
   log alone, with no autopilot and no key pressed, and has to give the same
@@ -310,7 +327,8 @@ What it cannot tell:
 - **Whether a trace run was added.** A run taken out of the list changes the
   list too.
 - **Anything about another title.** A change to the play that is called a
-  `chore`, or has no type at all, is asked nothing here.
+  `chore` is asked nothing here. The comparison with the base catches it where
+  a run of the trace reaches it, and a title with no type fails its own check.
 - **What a line is.** It goes by path, so a comment changed in a file of the
   play is a change to the play.
 
