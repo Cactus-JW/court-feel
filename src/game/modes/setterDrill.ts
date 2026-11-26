@@ -1,4 +1,4 @@
-import { AI, CONTACT, TIMING } from '../../config';
+import { AI, CONTACT, SETTER_DRILL, TIMING } from '../../config';
 import { yawFromDir } from '../../core/mathx';
 import { solveApex } from '../../physics/solve';
 import { HitterBrain } from '../../ai/hitter';
@@ -73,9 +73,11 @@ export class SetterDrill extends Mode {
 
   setup(): void {
     const g = this.g;
-    g.placeUser(SETTER_SPOT.x, SETTER_SPOT.z + 0.3, Math.PI / 2);
-    g.rig.pitch = 0.25;
-    let seed = 41;
+    const cast = SETTER_DRILL.cast;
+    const rings = SETTER_DRILL.rings;
+    g.placeUser(SETTER_SPOT.x, SETTER_SPOT.z + cast.behind, Math.PI / 2);
+    g.rig.pitch = cast.lookPitch;
+    let seed: number = cast.seed.hitters;
     for (const k of SETTER_KEYS) {
       const lane = callLane(this.calls, k, false);
       // the pipe is hit by a back-row outside
@@ -87,22 +89,22 @@ export class SetterDrill extends Mode {
       brain.isMySet = () => this.setFor === a && this.g.ball.lastTouch?.kind === 'set';
       brain.blockers = () => this.defence.frontRow();
       brain.defenders = () => [...this.defence.players.values()];
-      brain.skill = 0.82;
+      brain.skill = cast.hitterSkill;
       g.setBrain(a, brain);
       // a hitter whose call is a quick goes on the pass, timed to your touch
       this.hitters.set(k, { a, brain, read: (gm) => this.passToMe(gm, k) });
-      this.markers.set(k, g.markers.ring(CALL_COLOR[k], 1.0));
+      this.markers.set(k, g.markers.ring(CALL_COLOR[k], rings.hitter));
     }
     // a passer in the back court feeding the setter target
     this.passer = new Athlete('L', 1);
-    this.passer.place(-1.0, 6.8, 0);
-    g.addAthlete(this.passer, 6, 'coach');
+    this.passer.place(cast.passer.x, cast.passer.z, 0);
+    g.addAthlete(this.passer, cast.seed.passer, 'coach');
     this.spawned.push(this.passer);
     this.passer.airIntent = 'neutral';
     this.defence = new TeamAI(-1, g);
     // between points they stand in base defence
     this.defence.serving = true;
-    let dseed = 47;
+    let dseed: number = cast.seed.defence;
     for (const slot of ['OH1', 'MB', 'OPP', 'S', 'L', 'OH2'] as Slot[]) {
       const d = new Athlete(SLOT_ROLE[slot], -1);
       g.addAthlete(d, dseed++);
@@ -110,7 +112,7 @@ export class SetterDrill extends Mode {
       this.defence.add(slot, d, false);
     }
     this.defence.place('defense');
-    this.dumpMarker = g.markers.ring(CALL_COLOR.DUMP, 0.9);
+    this.dumpMarker = g.markers.ring(CALL_COLOR.DUMP, rings.dump);
     this.dumpMarker.visible = false;
     // off a bad pass a hitter can still be asked for their fast set, if they hear it in time
     this.calls.canAsk = (k) => canAskFast(g, g.me, this.calls, k);
@@ -118,7 +120,7 @@ export class SetterDrill extends Mode {
     this.calls.canHold = (k) => holdForHigh(this.hitters, k);
     g.hud.setTitle('Setter Drill');
     this.updateScore();
-    g.hud.message('RMB as the ball reaches your hands, release in the green · 1-4 pick a hitter', 3.2, true);
+    g.hud.message('RMB as the ball reaches your hands, release in the green · 1-4 pick a hitter', SETTER_DRILL.say.intro, true);
     this.toPhase('intro');
   }
 
@@ -200,18 +202,19 @@ export class SetterDrill extends Mode {
     // the floor rings (Settings: Hitter spots on the floor): each hitter's spot for their call; the one your set goes to lit
     const g = this.g;
     const lit = this.setTo();
+    const rings = SETTER_DRILL.rings;
     for (const [k, m] of this.markers) {
       m.visible = g.settings.hitterSpots;
       const spot = callSpot(this.calls, k, this.outOfSystem);
-      m.place(spot.x, spot.z + 0.15);
-      m.fade(k === lit ? 0.95 : 0.25, dt);
+      m.place(spot.x, spot.z + rings.back);
+      m.fade(k === lit ? rings.lit : rings.dim, dt);
     }
     // the dump's spot on their floor
     const D = CONTACT.dump;
     const spot = this.calls.dumpDeep ? D.deep : D.short;
     this.dumpMarker.visible = this.calls.frontRow;
     this.dumpMarker.place(spot.x, spot.z);
-    this.dumpMarker.fade(lit === 'DUMP' ? 0.95 : 0.25, dt);
+    this.dumpMarker.fade(lit === 'DUMP' ? rings.lit : rings.dim, dt);
     g.hud.setCallSheet(callSheet(this.calls, stripKeys(this.calls), lit, this.off()));
   }
 
@@ -223,7 +226,7 @@ export class SetterDrill extends Mode {
     this.g.hud.setTitle(c.frontRow ? 'Setter Drill · front row' : 'Setter Drill');
     this.g.hud.message(
       c.frontRow ? 'Front row · the opposite hits the D · 5 is your dump' : 'Back row · three hitters at the net · no dump',
-      2.2,
+      SETTER_DRILL.say.row,
     );
   }
 
@@ -231,7 +234,7 @@ export class SetterDrill extends Mode {
     const g = this.g;
     this.t += dt;
     this.calls.readKeys(this.keys);
-    if (this.calls.takeLate()) g.hud.message('Too late to change it · they are committed', 1.2);
+    if (this.calls.takeLate()) g.hud.message('Too late to change it · they are committed', SETTER_DRILL.say.late);
     if (g.keyPressed('KeyG') && !this.calls.locked) this.toggleRow();
     // before the pass the hitters walk to the start of their call's run
     if (!this.calls.locked) applyCalls(this.hitters, this.calls, false);
@@ -254,12 +257,17 @@ export class SetterDrill extends Mode {
         if (this.tossed && this.t > D.feed) {
           this.passer.endAction();
           // passes vary: sometimes tight, sometimes off the net
-          const off = this.reps % 4 === 3 ? 1.6 : 0.6;
-          const tgt = { x: SETTER_TARGET.x + g.rng.gauss() * off * 0.6, y: 2.35, z: SETTER_TARGET.z + Math.abs(g.rng.gauss()) * off };
-          const from = { x: this.passer.pos.x, y: 0.85, z: this.passer.pos.z - 0.4 };
+          const F = SETTER_DRILL.feed;
+          const off = this.reps % F.wideEvery === F.wideEvery - 1 ? F.wide : F.tight;
+          const tgt = {
+            x: SETTER_TARGET.x + g.rng.gauss() * off * F.alongNet,
+            y: F.toY,
+            z: SETTER_TARGET.z + Math.abs(g.rng.gauss()) * off,
+          };
+          const from = { x: this.passer.pos.x, y: F.fromY, z: this.passer.pos.z - F.fromAhead };
           const v = { x: 0, y: 0, z: 0 };
-          solveApex(from, tgt, 4.2 + g.rng.next() * 0.6, { x: 0, y: 0, z: 0 }, v);
-          g.ball.launch(from, v, { x: 2, y: 0, z: 0 }, 0, g.simTime);
+          solveApex(from, tgt, F.apex + g.rng.next() * F.apexRange, { x: 0, y: 0, z: 0 }, v);
+          g.ball.launch(from, v, { x: F.spin, y: 0, z: 0 }, 0, g.simTime);
           g.ball.lastTouch = { athlete: this.passer, kind: 'pass', t: g.simTime, side: 1 };
           g.ballLive = true;
           // a pass you never touch is over when it lands, not when it stops rolling
@@ -270,7 +278,7 @@ export class SetterDrill extends Mode {
           this.attacked = false;
           // the pass is played: the tempos lock and the fast calls start running
           this.outOfSystem = startCallRuns(g, g.me, this.hitters, this.calls);
-          if (this.outOfSystem) g.hud.message('Off the net · HIGH · a hitter’s key again asks for their fast set', 2);
+          if (this.outOfSystem) g.hud.message('Off the net · HIGH · a hitter’s key again asks for their fast set', SETTER_DRILL.say.offNet);
           this.toPhase('live');
         }
         break;
@@ -330,17 +338,18 @@ export class SetterDrill extends Mode {
     let pts = 0;
     let label = this.lifted ? 'LIFT' : 'NO SET';
     let good = false;
+    const P = SETTER_DRILL.points;
     if (this.set) {
-      pts += this.set.grade === 'Perfect' ? 100 : this.set.grade === 'Good' ? 60 : 25;
+      pts += this.set.grade === 'Perfect' ? P.perfect : this.set.grade === 'Good' ? P.good : P.other;
       if (o && this.attacked) {
         const r = outcomeLabel(o, 1);
         if (o.kind === 'in' && o.side === -1) {
-          pts += 50;
+          pts += P.kill;
           // off your green set your hitter bounced it: say so
           const shot = [...this.hitters.values()].find((h) => h.a === this.setFor)?.brain.lastShot;
           label = shot === 'bounce' ? 'BOUNCE' : 'KILL';
           good = this.set.grade === 'Perfect' || this.set.grade === 'Good';
-          g.crowd(0.7);
+          g.crowd(SETTER_DRILL.crowd.kill);
         } else label = r === 'DOWN' ? 'BLOCKED' : r;
       } else label = dug ? 'DUG' : 'SET';
     }
@@ -364,8 +373,9 @@ export class SetterDrill extends Mode {
     }
     this.defence.place('defense');
     const me = g.me;
-    if (Math.hypot(me.pos.x - SETTER_SPOT.x, me.pos.z - SETTER_SPOT.z - 0.3) > 1.0 || me.state !== 'ground')
-      g.returnUser(SETTER_SPOT.x, SETTER_SPOT.z + 0.3, Math.PI / 2);
+    const behind = SETTER_DRILL.cast.behind;
+    if (Math.hypot(me.pos.x - SETTER_SPOT.x, me.pos.z - SETTER_SPOT.z - behind) > SETTER_DRILL.slack || me.state !== 'ground')
+      g.returnUser(SETTER_SPOT.x, SETTER_SPOT.z + behind, Math.PI / 2);
     this.toPhase('feed');
   }
 

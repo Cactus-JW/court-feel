@@ -1035,6 +1035,58 @@ export const FREE_PLAY = {
   say: { intro: 3.5 },
 } as const;
 
+/**
+ * The Setter drill (src/game/modes/setterDrill.ts): a passer in the back court passes to you, you
+ * set one of your four hitters and they finish against their six. Its pace is `TIMING.setterDrill`
+ * (it had a name before the drills had sections). The rest was tuned by play and first seen in the
+ * drill's first commit (9dee160, 2026-11-02), apart from the ones said otherwise.
+ * - `cast`: you start `behind` m behind the setter's spot (`SETTER_SPOT`) with the camera pitched
+ *   `lookPitch` rad. Your hitters' kit seeds count up from `seed.hitters` and their six from
+ *   `seed.defence` (449976b, 2026-11-14); the passer, at `passer`, has `seed.passer`. `hitterSkill`
+ *   is your hitters' skill, in place of `AI.hitterSkill`: the nearer 1, the smaller the error in
+ *   the timing of their swing.
+ * - `rings`: the size of the ring on the floor at each hitter's spot (`hitter`) and of the one
+ *   where your dump lands (`dump`, 449976b). A hitter's ring is drawn `back` m further from the net
+ *   than their spot (050f289, 2026-11-07). The ring your set goes to is lit to `lit` (0..1), the
+ *   others to `dim`.
+ * - `feed`: every `wideEvery`th pass is off the net: its target is spread by `wide` m, the others
+ *   by `tight` m. That spread is a gaussian away from the net, and `alongNet` of it along the net.
+ *   The pass leaves the passer's arms `fromY` m up and `fromAhead` m in front of their feet, comes
+ *   down to `toY` m at the setter's target (`SETTER_TARGET`) and tops out between `apex` and
+ *   `apex` + `apexRange` m, with `spin` rad/s on it.
+ * - `points`: for your set, by its grade (`perfect`, `good`, `other`), and `kill` more when your
+ *   hitter puts it down.
+ * - `crowd.kill`: your hitter's kill.
+ * - `say`: the opening line, the line when you change row (449976b), the line when a call comes
+ *   too late (449976b) and the line for a pass off the net (449976b).
+ */
+export const SETTER_DRILL = {
+  cast: {
+    behind: 0.3,
+    lookPitch: 0.25,
+    seed: { hitters: 41, passer: 6, defence: 47 },
+    passer: { x: -1, z: 6.8 },
+    hitterSkill: 0.82,
+  },
+  rings: { hitter: 1, dump: 0.9, back: 0.15, lit: 0.95, dim: 0.25 },
+  feed: {
+    wideEvery: 4,
+    wide: 1.6,
+    tight: 0.6,
+    alongNet: 0.6,
+    fromY: 0.85,
+    fromAhead: 0.4,
+    toY: 2.35,
+    apex: 4.2,
+    apexRange: 0.6,
+    spin: 2,
+  },
+  points: { perfect: 100, good: 60, other: 25, kill: 50 },
+  crowd: { kill: 0.7 },
+  say: { intro: 3.2, row: 2.2, late: 1.2, offNet: 2 },
+  slack: 1,
+} as const;
+
 export const ASSIST = {
   /** 0..1 default aim assist strength */
   aim: 0.55,
