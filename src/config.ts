@@ -926,13 +926,15 @@ export const SERVE_DRILL = {
  * - `feed`: the ball the drill sends.
  * - `timing` (s): how long each part of a rep lasts.
  * - `points`: what a rep scores.
- * - `crowd`: how much each result lifts the crowd (`DrillHost.crowd`: 1 is a full cheer).
+ * - `crowd`: how much each result lifts the crowd (the amount handed to `DrillHost.crowd`).
  * - `say` (s): how long each of the drill's lines stays on the HUD.
  * - `slack` (m): how far off the start spot the player may end a rep before they are walked back.
  *
  * Where no reason is written for a number, none was recorded when it went in: it was tuned by
  * play, and the comment names the commit it was first seen in (`git log -S`).
- *
+ */
+
+/**
  * The coach's toss to the setter starts a rep in the Spike drill, and in the Block and Receive
  * drills on the far side (mirrored there). The ball leaves `hand.x` m to the side of the coach's
  * feet and `hand.z` m nearer the net, `hand.y` m up. It is solved to come down through `targetY` m
@@ -966,7 +968,7 @@ export const RUN_UP_GO = { fade: 2.5 } as const;
  *   `seed.hitters`, and their coach, at `coach` in their back court, has `seed.coach`.
  * - `feed.mine`: the share of sets that go to the hitter your position blocks in a match. The
  *   rest go to any of the three.
- * - `timing`: the first toss comes `intro` s after the drill starts. In each rep the coach's arm
+ * - `timing`: the first rep starts `intro` s after the drill does. In each rep the coach's arm
  *   starts `toss` s in and the ball leaves the hand at `release`. A rep nobody ended is over
  *   `liveMax` s after the toss, and the result stays up `result` s.
  * - `points`: `stuff` for a Perfect block that lands on their floor and `block` for any other that
@@ -1166,8 +1168,8 @@ export const RECEIVE_DRILL = {
  *   `speedOver`, `kill` when it lands in their court and `onTarget` more inside the zone. A ball
  *   tooled off their block scores the grade plus `tooled` (ce94650).
  * - `crowd`: for a kill off a Perfect contact, any other good kill, and everything else.
- * - `say`: the opening line, the line when you change the block (ce94650) and when you call a set
- *   (729d7bb).
+ * - `say`: the opening line (729d7bb), the line when you change the block (ce94650) and when you
+ *   call a set (729d7bb).
  * - `slack` (142263c, 2026-11-02, and the same from 729d7bb when you call another set).
  * Two numbers stay in the drill: the 3 block levels B cycles through and the conversion from m/s
  * to km/h.
