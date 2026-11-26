@@ -1,4 +1,10 @@
 // The five venues: looks and sound, except for the open sky (docs/adr/0009). Owner: the display.
+//
+// What each section controls:
+//
+// `VENUES`: The five venues: floor colours and how much the floor mirrors, the sky, the lights,
+// haze, grade, the athletes' rim light, the crowd's light and sound, the boards, and whether the
+// sky is open (`openSky`: no ceiling)
 
 import { ARENA } from './display';
 

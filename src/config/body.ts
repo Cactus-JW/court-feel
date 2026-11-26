@@ -1,4 +1,18 @@
 // An athlete's body: the positions, the custom body, how it moves, jumps, dives and turns. Owner: the simulation.
+//
+// What each section controls:
+//
+// `POSITIONS`: Per-position height, jump, speeds, power, ball control
+//
+// `BODY`: Slider ranges for the custom height, vert and spike power (Athlete)
+//
+// `PLAYER`: Acceleration/deceleration, plant carry, jump weighting (approach vs load), apex hang,
+// the set jump (`setJump`: how high the hop is, when the body goes up for it), landing recovery, a
+// dive and how long getting up from it takes (`diveTime`, `diveGetUp`, or a long slide to a stop
+// and the get-up), air turning, where team-mates at the net meet shoulder to shoulder (`shoulder`),
+// the dive (`diveSpeed`, `diveDecel`, `diveArm`, `diveDown`, `diveTime`), the walk back between
+// reps (`walkBack`: how long the jog may take before the player is put on the spot, how near counts
+// as back, when the game lets go of a player who walks themselves)
 
 export type PositionId = 'OH' | 'OPP' | 'MB' | 'S' | 'L';
 

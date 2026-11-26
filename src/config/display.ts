@@ -1,4 +1,29 @@
 // What the player sees and hears: the camera, the ball, the hall, the athletes, the effects, the sound. Owner: the display.
+//
+// What each section controls:
+//
+// `CAMERA`: FOV, approach FOV boost, sensitivity, TP distance/height/framing, shake
+//
+// `BALL_LOOK`: How deep the ball's seams look and how much it glows by itself
+//
+// `ARENA`: The hall: floor mirror (size, strength, blur), the stands (`bowl`: tiers, rows, seats,
+// how brightly the crowd is lit), how the net mesh goes in with a ball that is in it and settles
+// after, how the net's top shakes when the ball hits it (`netTop`) and how finely the antennae are
+// drawn as the physics bends them (`antenna`), lights, the final grade
+//
+// `CHARACTER`: How athletes are drawn: rim and side fill light, the arm swing of a jump
+// (`jumpSwing`), how early hands go to where the ball will be (`meet`), the passing stance and what
+// the platform does after the touch (`pass`), hand shapes (`hand`: how the fingers curl and spread
+// loose, flat, on the ball and closed), where a palm meets the ball, how far arms, head, knees and
+// toes keep from the net (`netClear`), idle breathing, and what keeps an AI player's body from
+// being rigid (`loose`: the ready stance and bounce with a ball in play, the lean into a push-off
+// or a stop, the chest coming round after the hips)
+//
+// `FX`: The play wheel (`playWheel`); The set's catch ring, bar (and its pips, and its place in
+// first person), floor spot, first-person dial (`setRadar`) and guide (the hitter marker and the
+// set's arc, `setGuide`), the ring round a float where it breaks (`floatBreak`), the outline of the
+// block's shadow (`blockShadow`), hit-stop lengths (and the extra at full power), FOV punch and
+// camera kick, ball squash, shake amounts, spark count, crack life, replay timing, bloom
 
 export const CAMERA = {
   fov: 72,

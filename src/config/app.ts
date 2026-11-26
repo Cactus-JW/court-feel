@@ -1,4 +1,12 @@
 // The graphics levels and their governor, and the player's stored settings. Owner: the app.
+//
+// What each section controls:
+//
+// `QUALITY`: The graphics levels (`levels`: pixel ratio, MSAA (on at every level, for the court
+// lines), shadow map, floor mirror) and Auto's quality governor: where it starts and how far it
+// climbs, the most pixels any level draws, how slow a machine has to be, and for how long, before
+// the picture gets cheaper, how long it must run fast before it gets richer (in a calm moment
+// only), and how it finds a frame rate a cheaper picture cannot raise
 
 import { ASSIST, type SetLevel } from './skills';
 import type { BodyOverride, Hand, PositionId } from './body';

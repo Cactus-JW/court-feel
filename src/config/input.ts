@@ -1,4 +1,9 @@
 // The touch controls as the input layer reads them. Owner: core.
+//
+// What each section controls:
+//
+// `TOUCH`: Touch controls: stick radius and dead zone, run threshold (with hysteresis), aim scale
+// and button dead zone, air-is-HIT, roll-to-HIT, block-jumps
 
 /** touch controls (phones / tablets): a joystick for the feet, the right half of the screen for the aim, hold buttons for the body */
 export const TOUCH = {
