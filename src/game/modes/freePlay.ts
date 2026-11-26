@@ -1,4 +1,4 @@
-import { CONTACT } from '../../config';
+import { CONTACT, FREE_PLAY } from '../../config';
 import { solveApex, solveSpeedToFloor } from '../../physics/solve';
 import type { ContactEvent } from '../contact';
 import type { Outcome } from '../judge';
@@ -26,7 +26,7 @@ export class FreePlay extends Mode {
   readonly id = 'free' as const;
   private feed: Feed = 'set';
   private auto = true;
-  private wait = 1.5;
+  private wait: number = FREE_PLAY.timing.first;
   private machine!: MachineMark;
   /** where the machine stands */
   private machineAt = { x: 0, z: 0 };
@@ -41,30 +41,31 @@ export class FreePlay extends Mode {
     this.placeMachine();
     g.hud.setTitle('Free Play');
     this.updateScore();
-    g.hud.message('1-4 choose the feed · F feed now · T auto-feed · Q serve yourself', 3.5, true);
+    g.hud.message('1-4 choose the feed · F feed now · T auto-feed · Q serve yourself', FREE_PLAY.say.intro, true);
   }
 
   private placeMachine(): void {
     const at = this.machineAt;
+    const M = FREE_PLAY.machine;
     switch (this.feed) {
       case 'set':
         at.x = SETTER_SPOT.x;
-        at.z = SETTER_SPOT.z + 0.2;
+        at.z = SETTER_SPOT.z + M.set.behind;
         break;
       case 'free':
-        at.x = 0;
-        at.z = -6.5;
+        at.x = M.free.x;
+        at.z = M.free.z;
         break;
       case 'serve':
-        at.x = 1.5;
-        at.z = -10.2;
+        at.x = M.serve.x;
+        at.z = M.serve.z;
         break;
       case 'attack':
-        at.x = -0.5;
-        at.z = -2.2;
+        at.x = M.attack.x;
+        at.z = M.attack.z;
         break;
     }
-    this.machine.place(at.x, at.z, this.feed === 'attack' ? 1.6 : 1);
+    this.machine.place(at.x, at.z, this.feed === 'attack' ? M.tall : 1);
   }
 
   private updateScore(): void {
@@ -86,7 +87,7 @@ export class FreePlay extends Mode {
         this.feed = FEEDS[i];
         this.placeMachine();
         this.updateScore();
-        this.wait = 0.8;
+        this.wait = FREE_PLAY.timing.picked;
         this.requested = !this.auto;
       }
     }
@@ -99,7 +100,7 @@ export class FreePlay extends Mode {
 
   restartRep(): void {
     this.g.ball.hide();
-    this.wait = 0.4;
+    this.wait = FREE_PLAY.timing.restart;
   }
 
   step(dt: number): void {
@@ -107,7 +108,9 @@ export class FreePlay extends Mode {
     const b = g.ball;
     const idle = !b.active || b.state.rest;
     // the lamp shows when the machine is about to fire
-    this.machine.lamp(idle && this.wait < 0.6 ? 2.5 : 0.3, idle && this.wait < 0.6 ? 2.2 : 1.6, 0.4);
+    const L = FREE_PLAY.machine.lamp;
+    const lamp = idle && this.wait < L.before ? L.soon : L.idle;
+    this.machine.lamp(lamp[0], lamp[1], lamp[2]);
     if (!idle) return;
     const act = g.me.action?.kind;
     if (act === 'toss' || (act === 'windup' && g.contact.serving === g.me)) return; // the user is serving
@@ -115,7 +118,7 @@ export class FreePlay extends Mode {
     if ((this.auto && this.wait <= 0) || this.requested) {
       this.fire();
       this.requested = false;
-      this.wait = 2.2;
+      this.wait = FREE_PLAY.timing.between;
     }
   }
 
@@ -123,7 +126,12 @@ export class FreePlay extends Mode {
     const g = this.g;
     const me = g.me;
     const m = this.machineAt;
-    const from = { x: m.x, y: this.feed === 'attack' ? 2.85 : 1.2, z: m.z - (this.feed === 'set' ? 0 : -0.3) };
+    const F = FREE_PLAY.feed;
+    const from: { x: number; y: number; z: number } = {
+      x: m.x,
+      y: this.feed === 'attack' ? F.attack.fromY : F.free.fromY,
+      z: m.z - (this.feed === 'set' ? 0 : -FREE_PLAY.machine.mouth),
+    };
     const v = { x: 0, y: 0, z: 0 };
     let w = { x: 0, y: 0, z: 0 };
     let knuckle = 0;
@@ -131,36 +139,48 @@ export class FreePlay extends Mode {
       case 'set': {
         const lane = laneFor(this.position, 1);
         const y = attackHeight(me);
-        from.y = 2.3;
+        from.y = F.set.fromY;
         solveApex(from, { x: lane.x, y, z: lane.z }, y + lane.apexAbove, w, v);
         break;
       }
       case 'free': {
-        const tgt = { x: me.pos.x + g.rng.gauss() * 1.2, y: 1.0, z: me.pos.z + g.rng.gauss() * 1.0 };
-        solveApex(from, tgt, 5.5 + g.rng.next(), w, v);
+        const tgt = { x: me.pos.x + g.rng.gauss() * F.free.spreadX, y: F.free.toY, z: me.pos.z + g.rng.gauss() * F.free.spreadZ };
+        solveApex(from, tgt, F.free.apex + g.rng.next(), w, v);
         break;
       }
       case 'serve': {
         const land = { x: 0, y: 0, z: 0 };
-        const tx = me.pos.x + g.rng.gauss() * 1.0;
-        const tz = me.pos.z + g.rng.gauss() * 1.0;
-        from.y = 2.9;
-        solveSpeedToFloor(from, tx, tz, 16 + g.rng.next() * 2, 0, v, w, land, -0.4, 0.6);
+        const tx = me.pos.x + g.rng.gauss() * F.serve.spreadX;
+        const tz = me.pos.z + g.rng.gauss() * F.serve.spreadZ;
+        from.y = F.serve.fromY;
+        solveSpeedToFloor(
+          from,
+          tx,
+          tz,
+          F.serve.speed + g.rng.next() * F.serve.speedRange,
+          0,
+          v,
+          w,
+          land,
+          F.serve.angleMin,
+          F.serve.angleMax,
+        );
         w = { x: 0, y: 0, z: 0 };
         knuckle = CONTACT.floatClean[2];
         break;
       }
       case 'attack': {
         const land = { x: 0, y: 0, z: 0 };
-        const tx = me.pos.x + g.rng.gauss() * 0.9;
-        const tz = me.pos.z + g.rng.gauss() * 0.8;
-        solveSpeedToFloor(from, tx, tz, 19 + g.rng.next() * 5, 45, v, w, land);
+        const tx = me.pos.x + g.rng.gauss() * F.attack.spreadX;
+        const tz = me.pos.z + g.rng.gauss() * F.attack.spreadZ;
+        solveSpeedToFloor(from, tx, tz, F.attack.speed + g.rng.next() * F.attack.speedRange, F.attack.spin, v, w, land);
         break;
       }
     }
     // aim the barrel
     const yaw = Math.atan2(-v.x, -v.z);
     this.machine.aim(Math.atan2(v.y, Math.hypot(v.x, v.z)), yaw);
+    // (the 1000 spreads the dice into a seed for the ball's float: not a number to tune)
     g.ball.launch(from, v, w, knuckle, g.simTime, g.rng.next() * 1000);
     g.ball.lastTouch = { athlete: null, kind: this.feed === 'set' ? 'set' : 'feed', t: g.simTime, side: this.feed === 'set' ? 1 : -1 };
     // a machine ball is always a new ball: nothing the last one did (N on a ball out wide) carries over
@@ -172,7 +192,8 @@ export class FreePlay extends Mode {
   onContact(ev: ContactEvent): void {
     if (ev.athlete !== this.g.me) return;
     this.lastWasMachine = false;
-    const pts = ev.grade === 'Perfect' ? 30 : ev.grade === 'Good' ? 15 : ev.grade === 'Miss' ? 0 : 5;
+    const P = FREE_PLAY.points;
+    const pts = ev.grade === 'Perfect' ? P.perfect : ev.grade === 'Good' ? P.good : ev.grade === 'Miss' ? 0 : P.other;
     this.score += pts;
     this.bumpStreak(ev.grade === 'Perfect' || ev.grade === 'Good');
     this.updateScore();
@@ -182,8 +203,8 @@ export class FreePlay extends Mode {
     const lt = this.g.ball.lastTouch;
     if (lt?.athlete === this.g.me && o.kind === 'in' && o.side === -1) {
       this.g.hud.showBanner('IN!', 'good');
-      this.g.crowd(0.4);
+      this.g.crowd(FREE_PLAY.crowd.in);
     } else if (lt?.athlete === this.g.me && o.kind !== 'in') this.g.hud.showBanner('OUT', 'bad');
-    this.wait = Math.min(this.wait, 1.8);
+    this.wait = Math.min(this.wait, FREE_PLAY.timing.afterOutcome);
   }
 }

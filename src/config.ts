@@ -991,6 +991,50 @@ export const BLOCK_DRILL = {
   slack: 0.15,
 } as const;
 
+/**
+ * Free Play (src/game/modes/freePlay.ts): a ball machine sends the feed you chose (keys 1-4: a
+ * set to you, a free ball, a float serve, a hard attack) and everything else is up to you. Its
+ * numbers were tuned by play and first seen in the drill's first commit (9dee160, 2026-11-02).
+ * - `machine`: where it stands for each feed: `set.behind` m behind the setter's spot
+ *   (`SETTER_SPOT`) for a set, and a spot in their court for the others. For the attack it is drawn
+ *   `tall` times its size. Every ball but a set leaves `mouth` m in front of it, toward the net.
+ *   Its lamp is `lamp.soon` (red, green, blue; over 1 glows) from `lamp.before` s before a ball
+ *   comes, and `lamp.idle` otherwise.
+ * - `feed`: each ball leaves `fromY` m up. A free ball, a serve and an attack are aimed at you, off
+ *   by a gaussian `spreadX` and `spreadZ` m. The free ball comes down to `toY` m and tops out
+ *   between `apex` and `apex` + 1 m. The serve is a float at `speed` to `speed` + `speedRange` m/s,
+ *   leaving between `angleMin` and `angleMax` rad of elevation. The attack is hit at `speed` to
+ *   `speed` + `speedRange` m/s with `spin` rad/s of topspin.
+ * - `timing`, with auto-feed on: the first ball comes `first` s after the drill starts, `picked` s
+ *   after you pick a feed and `restart` s after N. The next comes `between` s after the last, and
+ *   no later than `afterOutcome` s after the last one is down.
+ * - `points`: for each of your touches, by its grade (a Miss scores nothing).
+ * - `crowd.in`: your ball lands in their court.
+ * - `say.intro`: the opening line.
+ * One number stays in the drill: the 1000 that spreads the dice into a seed for the ball's float.
+ */
+export const FREE_PLAY = {
+  machine: {
+    set: { behind: 0.2 },
+    free: { x: 0, z: -6.5 },
+    serve: { x: 1.5, z: -10.2 },
+    attack: { x: -0.5, z: -2.2 },
+    tall: 1.6,
+    mouth: 0.3,
+    lamp: { soon: [2.5, 2.2, 0.4], idle: [0.3, 1.6, 0.4], before: 0.6 },
+  },
+  feed: {
+    set: { fromY: 2.3 },
+    free: { fromY: 1.2, spreadX: 1.2, spreadZ: 1, toY: 1, apex: 5.5 },
+    serve: { fromY: 2.9, spreadX: 1, spreadZ: 1, speed: 16, speedRange: 2, angleMin: -0.4, angleMax: 0.6 },
+    attack: { fromY: 2.85, spreadX: 0.9, spreadZ: 0.8, speed: 19, speedRange: 5, spin: 45 },
+  },
+  timing: { first: 1.5, picked: 0.8, restart: 0.4, between: 2.2, afterOutcome: 1.8 },
+  points: { perfect: 30, good: 15, other: 5 },
+  crowd: { in: 0.4 },
+  say: { intro: 3.5 },
+} as const;
+
 export const ASSIST = {
   /** 0..1 default aim assist strength */
   aim: 0.55,
