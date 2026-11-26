@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { yawFromDir } from '../../core/mathx';
-import { FX, type PositionId } from '../../config';
+import { COACH_TOSS, FX, RECEIVE_DRILL, type PositionId } from '../../config';
 import { solveApex } from '../../physics/solve';
 import { HitterBrain } from '../../ai/hitter';
 import { ServerBrain } from '../../ai/server';
@@ -14,28 +14,24 @@ import type { HaloMark } from './markers';
 import { Mode, type DrillHost } from './mode';
 
 /** where the user receives from, by position */
-const RECEIVE_SPOT: Record<PositionId, { x: number; z: number }> = {
-  OH: { x: -2.4, z: 6.4 },
-  L: { x: 0, z: 6.6 },
-  OPP: { x: 2.4, z: 6.4 },
-  MB: { x: -0.8, z: 5.6 },
-  S: { x: 1.6, z: 6.2 },
-};
+const RECEIVE_SPOT: Record<PositionId, { x: number; z: number }> = RECEIVE_DRILL.cast.spot;
 
 type Phase = 'intro' | 'feed' | 'live' | 'result';
 
 /** 0-3 pass rating from where the ball will come down near the setter */
 export function ratePass(g: Pick<DrillHost, 'ball' | 'env' | 'simTime'>, side: 1 | -1): { rating: number; dist: number; over: boolean } {
+  const R = RECEIVE_DRILL.rate;
   const pred = g.ball.ensurePrediction(g.env, g.simTime);
-  const t = pred.descendThrough(2.35, g.simTime);
+  const t = pred.descendThrough(RECEIVE_DRILL.target.y, g.simTime);
   const target = { x: SETTER_TARGET.x * side, z: SETTER_TARGET.z * side };
+  // (99: no distance to give, the pass never comes down on this side)
   if (pred.netCrossT > 0 && (t < 0 || pred.netCrossT < t)) return { rating: 0, dist: 99, over: true };
   if (t < 0) return { rating: 0, dist: 99, over: false };
   const p = { x: 0, y: 0, z: 0 };
   pred.posAt(t, p);
   const dist = Math.hypot(p.x - target.x, p.z - target.z);
-  const playable = Math.abs(p.x) < 5.5 && p.z * side > -0.2 && p.z * side < 9.5;
-  const rating = dist <= 0.9 ? 3 : dist <= 1.9 ? 2 : playable ? 1 : 0;
+  const playable = Math.abs(p.x) < R.playable.side && p.z * side > -R.playable.past && p.z * side < R.playable.deep;
+  const rating = dist <= R.three ? 3 : dist <= R.two ? 2 : playable ? 1 : 0;
   return { rating, dist, over: false };
 }
 
@@ -64,13 +60,14 @@ export class ReceiveDrill extends Mode {
 
   setup(): void {
     const g = this.g;
+    const cast = RECEIVE_DRILL.cast;
     const spot = RECEIVE_SPOT[this.position];
     g.placeUser(spot.x, spot.z, 0);
     // far side: server, setter, hitter, coach
-    this.server = this.spawn('OPP', -1, 0, -10, 31);
+    this.server = this.spawn('OPP', -1, cast.server.x, cast.server.z, cast.seed.server);
     this.serverBrain = new ServerBrain(this.server);
     g.setBrain(this.server, this.serverBrain);
-    this.oppSetter = this.spawn('S', -1, -SETTER_SPOT.x, -SETTER_SPOT.z, 32);
+    this.oppSetter = this.spawn('S', -1, -SETTER_SPOT.x, -SETTER_SPOT.z, cast.seed.theirSetter);
     const osb = new SetterBrain(this.oppSetter, { x: -SETTER_SPOT.x, z: -SETTER_SPOT.z }, -Math.PI / 2);
     osb.shouldPlay = () => this.kind === 'attack' && this.g.ball.lastTouch?.kind === 'feed';
     osb.call = () => {
@@ -79,22 +76,23 @@ export class ReceiveDrill extends Mode {
       return { target: { x: lane.x, y, z: lane.z }, apex: y + lane.apexAbove, hitter: this.oppHitter };
     };
     g.setBrain(this.oppSetter, osb);
-    this.oppHitter = this.spawn('OH', -1, laneFor('OH', -1).sx, laneFor('OH', -1).sz, 33);
+    this.oppHitter = this.spawn('OH', -1, laneFor('OH', -1).sx, laneFor('OH', -1).sz, cast.seed.theirHitter);
     this.oppHitterBrain = new HitterBrain(this.oppHitter, laneFor('OH', -1));
     this.oppHitterBrain.isMySet = () => this.g.ball.lastTouch?.kind === 'set' && this.g.ball.lastTouch.side === -1;
-    this.oppHitterBrain.tipChance = 0.05;
+    this.oppHitterBrain.tipChance = RECEIVE_DRILL.attack.tipChance;
     this.oppHitterBrain.chooseAim = () => {
       // attack at you (dig drill): within ~1.5 m
       const me = this.g.me;
-      this.attackTarget.set(me.pos.x + this.g.rng.gauss() * 0.9, 0, me.pos.z + this.g.rng.gauss() * 0.8);
+      const A = RECEIVE_DRILL.attack;
+      this.attackTarget.set(me.pos.x + this.g.rng.gauss() * A.spreadX, 0, me.pos.z + this.g.rng.gauss() * A.spreadZ);
       return this.attackTarget.clone();
     };
-    this.oppHitterBrain.skill = 0.85;
+    this.oppHitterBrain.skill = RECEIVE_DRILL.attack.skill;
     g.setBrain(this.oppHitter, this.oppHitterBrain);
-    this.coach = this.spawn('MB', -1, -3.2, -6.8, 5, 'coach');
+    this.coach = this.spawn('MB', -1, cast.coach.x, cast.coach.z, cast.seed.coach, 'coach');
     this.coach.airIntent = 'neutral';
     // our side: setter + outside hitter to finish good passes
-    this.setter = this.spawn('S', 1, SETTER_SPOT.x, SETTER_SPOT.z, 34);
+    this.setter = this.spawn('S', 1, SETTER_SPOT.x, SETTER_SPOT.z, cast.seed.setter);
     this.setter.yaw = Math.PI / 2;
     const sb = new SetterBrain(this.setter, SETTER_SPOT, Math.PI / 2);
     sb.shouldPlay = () => {
@@ -108,9 +106,9 @@ export class ReceiveDrill extends Mode {
     };
     g.setBrain(this.setter, sb);
     if (this.position !== 'OH') {
-      this.hitter = this.spawn('OH', 1, laneFor('OH', 1).sx, laneFor('OH', 1).sz, 35);
+      this.hitter = this.spawn('OH', 1, laneFor('OH', 1).sx, laneFor('OH', 1).sz, cast.seed.hitter);
     } else {
-      this.hitter = this.spawn('OPP', 1, laneFor('OPP', 1).sx, laneFor('OPP', 1).sz, 35);
+      this.hitter = this.spawn('OPP', 1, laneFor('OPP', 1).sx, laneFor('OPP', 1).sz, cast.seed.hitter);
     }
     const hb = new HitterBrain(this.hitter, laneFor(this.hitter.role === 'OH' ? 'OH' : 'OPP', 1));
     hb.isMySet = () => this.g.ball.lastTouch?.kind === 'set' && this.g.ball.lastTouch.side === 1;
@@ -124,11 +122,12 @@ export class ReceiveDrill extends Mode {
     g.setBrain(this.hitter, hb);
 
     // setter target marker
-    g.markers.ring(0x7dff9b, 1.8).place(SETTER_TARGET.x, SETTER_TARGET.z);
-    this.targetHalo = g.markers.halo(SETTER_TARGET.x, 2.35, SETTER_TARGET.z);
+    const target = RECEIVE_DRILL.target;
+    g.markers.ring(target.ring, target.ringSize).place(SETTER_TARGET.x, SETTER_TARGET.z);
+    this.targetHalo = g.markers.halo(SETTER_TARGET.x, target.y, SETTER_TARGET.z);
     g.hud.setTitle('Serve Receive / Dig');
     this.updateScore();
-    g.hud.message('Get behind the ball · press E early to form the platform', 3, true);
+    g.hud.message('Get behind the ball · press E early to form the platform', RECEIVE_DRILL.say.intro, true);
     this.toPhase('intro');
   }
 
@@ -142,7 +141,7 @@ export class ReceiveDrill extends Mode {
 
   passTarget(a: Athlete) {
     const s = a.side;
-    return { x: SETTER_TARGET.x * s, y: 2.35, z: SETTER_TARGET.z * s, apex: 4.0 };
+    return { x: SETTER_TARGET.x * s, y: RECEIVE_DRILL.target.y, z: SETTER_TARGET.z * s, apex: RECEIVE_DRILL.target.apex };
   }
 
   canServe(a: Athlete): boolean {
@@ -170,38 +169,46 @@ export class ReceiveDrill extends Mode {
   step(dt: number): void {
     const g = this.g;
     this.t += dt;
-    this.targetHalo.turn(dt * 1.2);
+    const T = RECEIVE_DRILL.timing;
+    const F = RECEIVE_DRILL.feed;
+    this.targetHalo.turn(dt * RECEIVE_DRILL.target.haloTurn);
     switch (this.phase) {
       case 'intro':
-        if (this.t > 1.2) this.toPhase('feed');
+        if (this.t > T.intro) this.toPhase('feed');
         break;
       case 'feed':
         if (g.userReturning) break;
-        this.kind = this.reps % 3 === 2 ? 'attack' : 'serve';
+        this.kind = this.reps % F.attackEvery === F.attackEvery - 1 ? 'attack' : 'serve';
         this.passed = null;
         this.toPhase('live');
         if (this.kind === 'serve') {
           const me = g.me;
-          const tgt = new THREE.Vector3(me.pos.x + g.rng.gauss() * 1.0, 0, me.pos.z + g.rng.gauss() * 0.9);
-          this.serverBrain.serve(tgt, g.rng.range(-3, 3));
-          g.hud.message('Serve!', 1);
-        } else g.hud.message('Attack: dig it!', 1);
+          const tgt = new THREE.Vector3(me.pos.x + g.rng.gauss() * F.spreadX, 0, me.pos.z + g.rng.gauss() * F.spreadZ);
+          this.serverBrain.serve(tgt, g.rng.range(-F.serveFrom, F.serveFrom));
+          g.hud.message('Serve!', RECEIVE_DRILL.say.feed);
+        } else g.hud.message('Attack: dig it!', RECEIVE_DRILL.say.feed);
         break;
       case 'live':
-        if (this.kind === 'attack' && !this.tossed && this.t > 0.6) {
+        if (this.kind === 'attack' && !this.tossed && this.t > T.toss) {
           this.tossed = true;
           this.coach.startAction('toss', g.simTime);
-          const from = { x: this.coach.pos.x + 0.1, y: 1.35, z: this.coach.pos.z + 0.3 };
+          const from = { x: this.coach.pos.x + COACH_TOSS.hand.x, y: COACH_TOSS.hand.y, z: this.coach.pos.z + COACH_TOSS.hand.z };
           const v = { x: 0, y: 0, z: 0 };
-          solveApex(from, { x: -SETTER_TARGET.x, y: 2.1, z: -SETTER_TARGET.z }, SETTER_TARGET.height + 0.4, { x: 0, y: 0, z: 0 }, v);
-          g.ball.launch(from, v, { x: 3, y: 0, z: 0 }, 0, g.simTime);
+          solveApex(
+            from,
+            { x: -SETTER_TARGET.x, y: COACH_TOSS.targetY, z: -SETTER_TARGET.z },
+            SETTER_TARGET.height + COACH_TOSS.apexAbove,
+            { x: 0, y: 0, z: 0 },
+            v,
+          );
+          g.ball.launch(from, v, { x: COACH_TOSS.spin, y: 0, z: 0 }, 0, g.simTime);
           g.ball.lastTouch = { athlete: this.coach, kind: 'feed', t: g.simTime, side: -1 };
         }
-        if (this.coach.action?.kind === 'toss' && g.simTime - this.coach.action.t0 > 0.4) this.coach.endAction();
-        if (this.t > 11 || (g.ball.state.rest && this.t > 2)) this.finish(null);
+        if (this.coach.action?.kind === 'toss' && g.simTime - this.coach.action.t0 > T.arm) this.coach.endAction();
+        if (this.t > T.liveMax || (g.ball.state.rest && this.t > T.rest)) this.finish(null);
         break;
       case 'result':
-        if (this.t > 2.4) this.nextRep();
+        if (this.t > T.result) this.nextRep();
         break;
     }
     this.coach.cmd.faceYaw = yawFromDir(-SETTER_TARGET.x - this.coach.pos.x, -SETTER_TARGET.z - this.coach.pos.z);
@@ -224,7 +231,7 @@ export class ReceiveDrill extends Mode {
         r.rating >= 2 ? 'good' : r.rating === 1 ? 'neutral' : 'bad',
         FX.grade.pass,
       );
-      g.crowd(r.rating >= 2 ? 0.35 : 0.05);
+      g.crowd(r.rating >= 2 ? RECEIVE_DRILL.crowd.good : RECEIVE_DRILL.crowd.other);
     }
   }
 
@@ -243,11 +250,11 @@ export class ReceiveDrill extends Mode {
     const p = this.passed;
     const rating = p ? p.rating : 0;
     this.ratingSum += rating;
-    const pts = [0, 20, 60, 100][rating];
+    const pts = RECEIVE_DRILL.points[rating];
     this.score += pts;
     this.bumpStreak(rating >= 2);
     if (!p) g.hud.showBanner(this.kind === 'serve' ? 'ACE' : 'NO DIG', 'bad');
-    else g.hud.message(`+${pts}`, 1.2);
+    else g.hud.message(`+${pts}`, RECEIVE_DRILL.say.points);
     this.updateScore();
   }
 
@@ -258,7 +265,7 @@ export class ReceiveDrill extends Mode {
     this.tossed = false;
     this.serverBrain.phase = 'idle';
     this.server.endAction();
-    this.server.place(0, -10, Math.PI);
+    this.server.place(RECEIVE_DRILL.cast.server.x, RECEIVE_DRILL.cast.server.z, Math.PI);
     this.oppHitterBrain.reset();
     this.oppHitter.place(laneFor('OH', -1).sx, laneFor('OH', -1).sz, Math.PI);
     this.oppSetter.place(-SETTER_SPOT.x, -SETTER_SPOT.z, -Math.PI / 2);
@@ -269,7 +276,7 @@ export class ReceiveDrill extends Mode {
     this.hitter.place(lane.sx, lane.sz, 0);
     const spot = RECEIVE_SPOT[this.position];
     const me = g.me;
-    if (Math.hypot(me.pos.x - spot.x, me.pos.z - spot.z) > 1.2) g.returnUser(spot.x, spot.z, 0);
+    if (Math.hypot(me.pos.x - spot.x, me.pos.z - spot.z) > RECEIVE_DRILL.slack) g.returnUser(spot.x, spot.z, 0);
     this.toPhase('feed');
   }
 

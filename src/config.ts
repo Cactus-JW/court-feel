@@ -1087,6 +1087,58 @@ export const SETTER_DRILL = {
   slack: 1,
 } as const;
 
+/**
+ * The Serve Receive drill (src/game/modes/receiveDrill.ts): float serves, and every
+ * `feed.attackEvery`th ball an attack off their coach's toss (`COACH_TOSS`). You pass to the
+ * setter's target, and your setter and a hitter finish a good pass. Tuned by play and first seen
+ * in the drill's first commit (9dee160, 2026-11-02), apart from `slack`.
+ * - `cast`: where you receive from, by position (`spot`), where their server and their coach
+ *   stand, and the kit seeds.
+ * - `target`: a pass is aimed, and read, where it comes down through `y` m over the setter's
+ *   target (`SETTER_TARGET`), and it tops out at `apex` m. The ring on the floor there has
+ *   colour `ring` and size `ringSize`, and the halo at `y` turns at `haloTurn` rad/s.
+ * - `rate`: how a pass is rated 0 to 3, here and in the Serve drill (which rates a serve by the
+ *   pass it forces). Within `three` m of the target is a 3 and within `two` m a 2. Further off it
+ *   is a 1 while a team-mate could still play it: no more than `playable.side` m from the middle
+ *   of the court (the sideline is at 4.5), `playable.past` m past the net and `playable.deep` m
+ *   from it (the end line is at 9). Anything else, and a pass that goes over the net, is a 0. The
+ *   scale itself (the 3 of a perfect pass) stays in the drill.
+ * - `attack`: their hitter in the dig rep. They aim at you, off by a gaussian `spreadX` and
+ *   `spreadZ` m, tip `tipChance` of the time and swing with `skill` (`HitterBrain`).
+ * - `feed`: a serve is aimed at you, off by a gaussian `spreadX` and `spreadZ` m, from up to
+ *   `serveFrom` m either side of the middle of their end line.
+ * - `timing`: the first rep starts after `intro` s. In a dig rep the coach tosses `toss` s in and
+ *   their arm comes down `arm` s later. A rep is over after `liveMax` s, or once the ball has come
+ *   to rest and `rest` s have passed, and the result stays up `result` s.
+ * - `points`: by the pass's rating, 0 to 3.
+ * - `crowd`: `good` for a pass rated 2 or 3, `other` for any other pass.
+ * - `say`: the opening line, the line that names the feed and the points.
+ * - `slack` (142263c, 2026-11-02).
+ */
+export const RECEIVE_DRILL = {
+  cast: {
+    spot: {
+      OH: { x: -2.4, z: 6.4 },
+      L: { x: 0, z: 6.6 },
+      OPP: { x: 2.4, z: 6.4 },
+      MB: { x: -0.8, z: 5.6 },
+      S: { x: 1.6, z: 6.2 },
+    },
+    server: { x: 0, z: -10 },
+    coach: { x: -3.2, z: -6.8 },
+    seed: { server: 31, theirSetter: 32, theirHitter: 33, coach: 5, setter: 34, hitter: 35 },
+  },
+  target: { y: 2.35, apex: 4, ring: 0x7dff9b, ringSize: 1.8, haloTurn: 1.2 },
+  rate: { three: 0.9, two: 1.9, playable: { side: 5.5, past: 0.2, deep: 9.5 } },
+  attack: { spreadX: 0.9, spreadZ: 0.8, tipChance: 0.05, skill: 0.85 },
+  feed: { attackEvery: 3, spreadX: 1, spreadZ: 0.9, serveFrom: 3 },
+  timing: { intro: 1.2, toss: 0.6, arm: 0.4, liveMax: 11, rest: 2, result: 2.4 },
+  points: [0, 20, 60, 100],
+  crowd: { good: 0.35, other: 0.05 },
+  say: { intro: 3, feed: 1, points: 1.2 },
+  slack: 1.2,
+} as const;
+
 export const ASSIST = {
   /** 0..1 default aim assist strength */
   aim: 0.55,
