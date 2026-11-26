@@ -1,4 +1,4 @@
-import { AI, CONTACT, SETTER_DRILL, TIMING } from '../../config';
+import { AI, CONTACT, SET_PICK, SETTER_DRILL, TIMING } from '../../config';
 import { yawFromDir } from '../../core/mathx';
 import { solveApex } from '../../physics/solve';
 import { HitterBrain } from '../../ai/hitter';
@@ -206,15 +206,15 @@ export class SetterDrill extends Mode {
     for (const [k, m] of this.markers) {
       m.visible = g.settings.hitterSpots;
       const spot = callSpot(this.calls, k, this.outOfSystem);
-      m.place(spot.x, spot.z + rings.back);
-      m.fade(k === lit ? rings.lit : rings.dim, dt);
+      m.place(spot.x, spot.z + SET_PICK.ring.back);
+      m.fade(k === lit ? SET_PICK.ring.lit : rings.dim, dt);
     }
     // the dump's spot on their floor
     const D = CONTACT.dump;
     const spot = this.calls.dumpDeep ? D.deep : D.short;
     this.dumpMarker.visible = this.calls.frontRow;
     this.dumpMarker.place(spot.x, spot.z);
-    this.dumpMarker.fade(lit === 'DUMP' ? rings.lit : rings.dim, dt);
+    this.dumpMarker.fade(lit === 'DUMP' ? SET_PICK.ring.lit : rings.dim, dt);
     g.hud.setCallSheet(callSheet(this.calls, stripKeys(this.calls), lit, this.off()));
   }
 
@@ -234,7 +234,7 @@ export class SetterDrill extends Mode {
     const g = this.g;
     this.t += dt;
     this.calls.readKeys(this.keys);
-    if (this.calls.takeLate()) g.hud.message('Too late to change it · they are committed', SETTER_DRILL.say.late);
+    if (this.calls.takeLate()) g.hud.message('Too late to change it · they are committed', SET_PICK.late);
     if (g.keyPressed('KeyG') && !this.calls.locked) this.toggleRow();
     // before the pass the hitters walk to the start of their call's run
     if (!this.calls.locked) applyCalls(this.hitters, this.calls, false);

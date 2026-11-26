@@ -960,6 +960,17 @@ export const COACH_TOSS = {
 export const RUN_UP_GO = { fade: 2.5 } as const;
 
 /**
+ * Your pick as the setter, in the Setter drill and in the Mini Rally (as its setter, or as the
+ * libero backing up). A hitter's ring on the floor is drawn `ring.back` m further from the net
+ * than their spot, and the ring your set goes to is lit to `ring.lit` (0..1). When you ask a
+ * hitter for their fast set too late, the line that says they are committed stays up `late` s.
+ * Both drills held the same three numbers; they have one name so the setter sees one thing in
+ * both. Tuned by play: the ring was first seen in 050f289 (2026-11-07) and the line in 449976b
+ * (2026-11-14).
+ */
+export const SET_PICK = { ring: { back: 0.15, lit: 0.95 }, late: 1.2 } as const;
+
+/**
  * The Block drill (src/game/modes/blockDrill.ts): their coach tosses (`COACH_TOSS`), their setter
  * sets one of three hitters, and you block. Its numbers were tuned by play and first seen in the
  * drill's first commit (0e1afe2, 2026-11-02), apart from the two said otherwise.
@@ -1051,9 +1062,8 @@ export const FREE_PLAY = {
  *   is your hitters' skill, in place of `AI.hitterSkill`: the nearer 1, the smaller the error in
  *   the timing of their swing.
  * - `rings`: the size of the ring on the floor at each hitter's spot (`hitter`) and of the one
- *   where your dump lands (`dump`, 449976b). A hitter's ring is drawn `back` m further from the net
- *   than their spot (050f289, 2026-11-07). The ring your set goes to is lit to `lit` (0..1), the
- *   others to `dim`.
+ *   where your dump lands (`dump`, 449976b). The ring your set goes to is lit (`SET_PICK.ring`),
+ *   the others to `dim` (0..1).
  * - `feed`: every `wideEvery`th pass is off the net: its target is spread by `wide` m, the others
  *   by `tight` m. That spread is a gaussian away from the net, and `alongNet` of it along the net.
  *   The pass leaves the passer's arms `fromY` m up and `fromAhead` m in front of their feet, comes
@@ -1062,8 +1072,8 @@ export const FREE_PLAY = {
  * - `points`: for your set, by its grade (`perfect`, `good`, `other`), and `kill` more when your
  *   hitter puts it down.
  * - `crowd.kill`: your hitter's kill.
- * - `say`: the opening line, the line when you change row (449976b), the line when a call comes
- *   too late (449976b) and the line for a pass off the net (449976b).
+ * - `say`: the opening line, the line when you change row (449976b) and the line for a pass off
+ *   the net (449976b). The line for a call that comes too late is `SET_PICK.late`.
  * - `slack` (142263c, 2026-11-02: it was 2.2 m in the first commit).
  */
 export const SETTER_DRILL = {
@@ -1074,7 +1084,7 @@ export const SETTER_DRILL = {
     passer: { x: -1, z: 6.8 },
     hitterSkill: 0.82,
   },
-  rings: { hitter: 1, dump: 0.9, back: 0.15, lit: 0.95, dim: 0.25 },
+  rings: { hitter: 1, dump: 0.9, dim: 0.25 },
   feed: {
     wideEvery: 4,
     wide: 1.6,
@@ -1089,7 +1099,7 @@ export const SETTER_DRILL = {
   },
   points: { perfect: 100, good: 60, other: 25, kill: 50 },
   crowd: { kill: 0.7 },
-  say: { intro: 3.2, row: 2.2, late: 1.2, offNet: 2 },
+  say: { intro: 3.2, row: 2.2, offNet: 2 },
   slack: 1,
 } as const;
 
@@ -1225,9 +1235,9 @@ export const SPIKE_DRILL = {
  * - `freeOver`: a third ball sent over without an attack, by you or by an AI player who is diving
  *   or on the run (one standing aims it: `AI.freeOver`), is aimed `depth` m into their court,
  *   anywhere across `width` m of it, to come down to `y` m after topping out at `apex` m.
- * - `ring`: the ring at the spot you are setting to, as in the Setter drill: its first colour
- *   (the hitter's colour replaces it) and size, `back` m further from the net than the spot
- *   (050f289, 2026-11-07), lit to `lit`.
+ * - `ring`: the ring at the spot you are setting to: its first colour (the hitter's colour
+ *   replaces it) and its size. Where it lies and how it is lit is `SET_PICK.ring`, as in the Setter
+ *   drill.
  * - `marker`: the colour of the ball's landing marker (red, green, blue): green when the ball is
  *   yours, and the marker's own cyan otherwise (the cyan: 0ef3e42, 2026-11-03).
  * - `netHint`: within this distance (m) of the net the hint line is the blocker's.
@@ -1235,9 +1245,9 @@ export const SPIKE_DRILL = {
  *   later is taken again. A ball lying on the floor ends the point once the rally is `rest` s old,
  *   and the next point is set up `dead` s after one ends.
  * - `crowd`: for your own kill, any other point of yours, and a point of theirs.
- * - `say`: the opening line, the line when you call a set (f234f1e, 2026-11-03), when a call
- *   comes too late (449976b, 2026-11-14), "Your ball!" and the libero's MINE! (6ff2d88,
- *   2026-11-14).
+ * - `say`: the opening line, the line when you call a set (f234f1e, 2026-11-03), "Your ball!" and
+ *   the libero's MINE! (6ff2d88, 2026-11-14). The line for a call that comes too late is
+ *   `SET_PICK.late`.
  * - `slack`, and `walkBackMax`: the walk back to your spot is given this long (s), in place of
  *   `PLAYER.walkBack.maxT` (142263c, 2026-11-02).
  * One number stays in the drill, written three times: the 0.42 m a call's bubble sits over the
@@ -1250,12 +1260,12 @@ export const MINI_RALLY = {
   cast: { seed: 50 },
   maxTouches: 3,
   freeOver: { width: 5, depth: 6.5, y: 0.5, apex: 5.2 },
-  ring: { colour: 0xffffff, size: 1, back: 0.15, lit: 0.95 },
+  ring: { colour: 0xffffff, size: 1 },
   marker: { yours: [0.35, 1, 0.45], other: [0.3, 0.85, 1] },
   netHint: 1.4,
   timing: { prepare: 1.6, serveMax: 6, rest: 1, dead: 2.6 },
   crowd: { yourKill: 1.2, yours: 0.7, theirs: 0.25 },
-  say: { intro: 2.5, call: 1.6, late: 1.2, yours: 0.9, mine: 1 },
+  say: { intro: 2.5, call: 1.6, yours: 0.9, mine: 1 },
   slack: 0.6,
   walkBackMax: 1.5,
 } as const;

@@ -1,4 +1,4 @@
-import { AI, MINI_RALLY } from '../../config';
+import { AI, MINI_RALLY, SET_PICK } from '../../config';
 import { netYaw } from '../../ai/brain';
 import { serveAim } from '../../ai/server';
 import { PASSERS, SLOT_ROLE, SLOTS, TeamAI, USER_SLOT, type SetterRead } from '../../ai/team';
@@ -284,7 +284,7 @@ export class MiniRally extends Mode {
         g.hud.call('YOU', 'HELP!', "can't get there", 'out', (out) => out.set(g.me.rpos.x, g.me.rpos.y + g.me.height + 0.42, g.me.rpos.z));
         g.events.emit('setterCall', { athlete: g.me, call: 'help' });
       }
-      if (c.takeLate()) g.hud.message('Too late to change it · they are committed', MINI_RALLY.say.late);
+      if (c.takeLate()) g.hud.message('Too late to change it · they are committed', SET_PICK.late);
       const yours = this.userSetsNext();
       const oos = this.outOfSystem || !this.userSetter;
       const keys = this.userSetter ? SETTER_KEYS : PIN_PICKS;
@@ -300,9 +300,9 @@ export class MiniRally extends Mode {
       this.pickRing.visible = show;
       if (show) {
         const spot = callSpot(c, lit, oos);
-        this.pickRing.place(spot.x, spot.z + MINI_RALLY.ring.back);
+        this.pickRing.place(spot.x, spot.z + SET_PICK.ring.back);
         this.pickRing.colour(CALL_COLOR[lit]);
-        this.pickRing.fade(MINI_RALLY.ring.lit, dt);
+        this.pickRing.fade(SET_PICK.ring.lit, dt);
       }
     }
     if (!this.plays) return;
