@@ -886,6 +886,13 @@ export const SERVE = {
  * ball is 15 m away and a few pixels wide, and the grade text sat exactly on its path. (Tried
  * and taken out for now: narrowing the third-person view to half its field of view while the serve
  * is in the air, so a float's break could be seen from the end line.)
+ * The three receivers' kit seeds count up from `cast.seed`. The crowd lifts by `crowd.ace` for an
+ * ace (a serve rated 4) and `crowd.rated3` for a serve rated 3 (an overpass, or a pass out of
+ * system), and not at all below that. `say` (s) is how long the opening line and the line naming
+ * the serve you picked stay up. These five were tuned by play and first seen in the drill's first
+ * commit (40cb538, 2026-11-14).
+ * The serve's rating itself (0 to 4, the scale coaches chart serves on) is not a number to tune and
+ * stays in the drill, as does the conversion from m/s to km/h.
  */
 export const SERVE_DRILL = {
   x: 2,
@@ -893,6 +900,9 @@ export const SERVE_DRILL = {
   startSlack: 0.5,
   flightMax: 6,
   result: 1.5,
+  cast: { seed: 70 },
+  crowd: { ace: 0.8, rated3: 0.4 },
+  say: { intro: 3.5, pick: 1.6 },
 } as const;
 
 /**
@@ -926,6 +936,14 @@ export const COACH_TOSS = {
   apexAbove: 0.4,
   spin: 3,
 } as const;
+
+/**
+ * The GO of the run-up guide, in the Spike drill and under the toss of the Serve drill's two jump
+ * serves: at the moment a full run-up would start, the guide at your plant spot pulses, and the
+ * pulse dies away at `fade` a second (it is gone in 0.4 s). Tuned by play: first seen in the Spike
+ * drill (659dff6, 2026-11-02) and written again for the Serve drill (40cb538, 2026-11-14).
+ */
+export const RUN_UP_GO = { fade: 2.5 } as const;
 
 /**
  * The Block drill (src/game/modes/blockDrill.ts): their coach tosses (`COACH_TOSS`), their setter

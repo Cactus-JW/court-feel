@@ -23,7 +23,7 @@
     "src/game/modes/freePlay.ts": 39,
     "src/game/modes/miniRally.ts": 28,
     "src/game/modes/receiveDrill.ts": 63,
-    "src/game/modes/serveDrill.ts": 17,
+    "src/game/modes/serveDrill.ts": 11,
     "src/game/modes/setterDrill.ts": 33,
     "src/game/modes/spikeDrill.ts": 74,
     "src/game/plays.ts": 102,
