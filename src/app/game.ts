@@ -249,7 +249,8 @@ export class Game implements AiHost {
       setAssist: (a) => (a.isUser ? this.settings.setAimAssist : ASSIST.ai),
       setByFeel: () => !this.settings.setRing,
       aimTargetFor: (a, out) => this.aimTargetFor(a, out),
-      contact: (ev) => this.onContact(ev),
+      touched: (ev) => this.showTouch(ev),
+      contact: (ev) => this.events.emit('contact', ev),
       aiContact: (athlete, kind, speed) => this.events.emit('aiContact', { athlete, kind, speed }),
       ballEvent: (e) => this.events.emit('ballEvent', e),
       floatBreak: (strength) => this.events.emit('floatBreak', { strength }),
@@ -710,7 +711,12 @@ export class Game implements AiHost {
     return out.copy(a.aiAim);
   }
 
-  private onContact(ev: ContactEvent): void {
+  /**
+   * The player's touch, in words: its grade and its speed. The simulation tells of a touch here
+   * first (`SimulationHooks.touched`), before it arms the judge and tells the drill, so the grade
+   * goes up ahead of anything the drill says about the same touch.
+   */
+  private showTouch(ev: ContactEvent): void {
     if (ev.athlete.isUser) {
       if (ev.grade) {
         const kmh = ev.speed * 3.6;
@@ -725,9 +731,6 @@ export class Game implements AiHost {
       }
       if (ev.speed > 0) this.hud.setSpeed(ev.speed * 3.6);
     }
-    if (ev.grade !== 'Miss' && ev.speed > 0) this.judge.arm(this.ball);
-    this.mode?.onContact(ev);
-    this.events.emit('contact', ev);
   }
 
   /** AI touches (sets, digs, blocks) for audio/FX */

@@ -25,7 +25,13 @@ export interface SimulationHooks {
   setByFeel?(): boolean;
   /** where this athlete is aiming on the floor */
   aimTargetFor(a: Athlete, out: THREE.Vector3): THREE.Vector3;
-  /** a touch was resolved */
+  /**
+   * A touch was resolved, and nothing has acted on it yet: the judge is not armed and the drill has
+   * not heard. What has to be shown before the drill's own words goes here (the grade, ahead of the
+   * drill's banner).
+   */
+  touched?(ev: ContactEvent): void;
+  /** a touch was resolved: a clean one has armed the judge, and the drill has heard of it */
   contact(ev: ContactEvent): void;
   /** a touch a brain made without the contact system (the AI setter's set) */
   aiContact(a: Athlete, kind: TouchKind, speed: number): void;
@@ -44,6 +50,8 @@ export interface SimulationHooks {
 /** the drill being played, as the simulation sees it */
 export interface SimDrill {
   step(dt: number): void;
+  /** a touch was resolved (a missed swing too). A clean one has armed the judge by now */
+  onContact?(ev: ContactEvent): void;
   onOutcome(o: Outcome): void;
   passTarget?(a: Athlete): { x: number; y: number; z: number; apex: number };
   setOptions?(a: Athlete): SetOption[];
@@ -85,7 +93,7 @@ export class Simulation implements AiHost {
       setAssist: (a) => (hooks.setAssist ?? hooks.aimAssist)(a),
       setByFeel: () => hooks.setByFeel?.() ?? false,
       aimTargetFor: (a, out) => hooks.aimTargetFor(a, out),
-      emitContact: (ev) => hooks.contact(ev),
+      emitContact: (ev) => this.touched(ev),
       rand: () => this.rng.next(),
       passTarget: (a) => this.drill?.passTarget?.(a) ?? defaultPassTarget(a),
       setOptions: (a) => this.drill?.setOptions?.(a) ?? defaultSetOptions(a),
@@ -124,6 +132,18 @@ export class Simulation implements AiHost {
 
   clearBrains(): void {
     this.brains.clear();
+  }
+
+  /**
+   * A touch was resolved. A clean one puts the rally in the judge's hands, then the drill hears of
+   * it, then whoever runs the game: nobody who builds a simulation has to remember to do either.
+   * A missed swing, or a touch the ball did not leave (a lift), arms nothing.
+   */
+  private touched(ev: ContactEvent): void {
+    this.hooks.touched?.(ev);
+    if (ev.grade !== 'Miss' && ev.speed > 0) this.judge.arm(this.ball);
+    this.drill?.onContact?.(ev);
+    this.hooks.contact(ev);
   }
 
   onAiContact(a: Athlete, kind: TouchKind, speed: number): void {

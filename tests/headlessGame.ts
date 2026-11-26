@@ -4,7 +4,7 @@ import { Athlete } from '../src/game/athlete';
 import type { ContactEvent } from '../src/game/contact';
 import { takeKey } from '../src/game/intent';
 import { NO_MARKERS } from '../src/game/modes/markers';
-import type { DrillHost, DrillHud, Mode, ModeId } from '../src/game/modes/mode';
+import type { DrillHost, DrillHud, ModeId } from '../src/game/modes/mode';
 import { createMode } from '../src/game/modes/registry';
 import { Simulation } from '../src/game/simulation';
 import { NO_HOOKS } from './simHooks';
@@ -54,19 +54,14 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
   const said: string[] = [];
   const touches: string[] = [];
   const outcomes: string[] = [];
-  let mode: Mode | null = null;
   let walkBack: { x: number; z: number; yaw: number } | null = null;
 
   const sim = new Simulation({
     ...NO_HOOKS,
     aimAssist: (a) => (a.isUser ? DEFAULT_SETTINGS.aimAssist : ASSIST.ai),
     aimTargetFor: (a, out) => (a.isUser ? out.set(a.pos.x, 0, -a.side * 6) : out.copy(a.aiAim)),
-    contact: (ev: ContactEvent) => {
-      // as the game does: a clean touch arms the judge, and the drill hears of every touch
-      if (ev.grade !== 'Miss' && ev.speed > 0) sim.judge.arm(sim.ball);
-      touches.push(`${sim.simTime.toFixed(4)} ${ev.athlete.role}${ev.athlete.side === 1 ? 'H' : 'A'} ${ev.kind} ${ev.grade}`);
-      mode?.onContact(ev);
-    },
+    contact: (ev: ContactEvent) =>
+      touches.push(`${sim.simTime.toFixed(4)} ${ev.athlete.role}${ev.athlete.side === 1 ? 'H' : 'A'} ${ev.kind} ${ev.grade}`),
     aiContact: (a, kind) => touches.push(`${sim.simTime.toFixed(4)} ${a.role}${a.side === 1 ? 'H' : 'A'} ${kind} ai`),
     outcome: (o) => outcomes.push(`${sim.simTime.toFixed(4)} ${o.kind} ${o.side}`),
   });
@@ -142,7 +137,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     fx: { replay: { contact: new THREE.Vector3() } },
   };
 
-  mode = createMode(id, host, pos);
+  const mode = createMode(id, host, pos);
   sim.drill = mode;
   mode.setup();
 
@@ -161,7 +156,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
         host.placeUser(to.x, to.z, to.yaw);
       }
       for (let i = 0; i < 2; i++) sim.step(1 / 120);
-      mode!.frame(1 / 60);
+      mode.frame(1 / 60);
     },
   };
 }
