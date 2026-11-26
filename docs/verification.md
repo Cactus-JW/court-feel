@@ -87,19 +87,29 @@ Ask these in order and stop at the first yes.
 
 ### 3. Verification
 
-- **The trace comparison** (`npm run trace:compare`), for a refactor. It plays
-  every drill on the branch and on `main` with a seeded autopilot and compares
-  the whole simulation after every frame, then what is drawn and shown: every
-  call the HUD gets, the camera, the ball, every athlete's pose, the floor
-  markers. The four lessons are taken the same way with scripted hands, down to
-  what a lesson stores in the browser. Nothing is stored in the repo, so a
-  feature that changes the play on purpose has nothing to re-record.
-- **The hands replay** (the last pass of the same run). The game logs every
-  frame's intent (`Game.handsLog`). Each drill is then played again from that
+- **The repeat check** (`npm run trace`), on every pull request: it is CI's
+  `trace` job. It plays every drill twice with a seeded autopilot and the two
+  runs have to be the same: the whole simulation after every frame, then what is
+  drawn and shown: every call the HUD gets, the camera, the ball, every
+  athlete's pose, the floor markers. The four lessons are taken the same way
+  with scripted hands, down to what a lesson stores in the browser. The same
+  start has to give the same play.
+- **The trace comparison** (`npm run trace:compare`), for a refactor: the same
+  job goes on to it when a pull request's title starts with `refactor`. It plays
+  every drill on the branch and on `main` and compares the two the same way.
+  Nothing is stored in the repo, so a feature that changes the play on purpose
+  has nothing to re-record.
+- **The hands replay** (a pass of both). The game logs every frame's intent
+  (`Game.handsLog`). Each drill is then played again from that
   log alone, with no autopilot and no key pressed, and has to give the same
   play. It fails when the simulation takes something from a player that is not
   in the intent: a key read on the side, a camera read for aim, an autopilot
   rolling the simulation's dice. A second player rests on this (docs/adr/0011).
+- **One painted frame** (the last pass of both). The Spike Drill with a double
+  block on is stopped three seconds in, and that one frame is painted eight
+  times in a page of its own. Nothing moves between the paints, so it has to be
+  one picture. More than one means the GPU decided something the game did not,
+  as it did with the outline of the block's shadow (#108).
 - **Every drill with nobody watching** (`tests/drills.test.ts`). A real simulation
   and a real drill in Node, with no renderer, no DOM, no HUD and no camera
   (`tests/headlessGame.ts`), invariants checked at every step. It fails the
@@ -154,10 +164,14 @@ A check is worth nothing if the change it judges can rewrite it.
 
 Say these out loud in a pull request when they apply.
 
-- **The trace comparison proves what the autopilots play.** A change they never
-  reach passes. It does not cover the menus, touch input, effects or sound, and
-  a lesson is covered as far as its scripted hands get: the spike and the float
-  lesson to the end, the two jump serves to their last rep.
+- **The trace proves what the autopilots play**, in the repeat check and in the
+  comparison. A change they never reach passes. It does not cover the menus,
+  touch input, effects or sound, and a lesson is covered as far as its scripted
+  hands get: the spike and the float lesson to the end, the two jump serves to
+  their last rep.
+- **The trace sees one painted frame**, of the Spike Drill with a block on, and
+  only that eight paints of it are one picture. It does not say the picture is
+  the right one, and no other drill or moment is painted.
 - **The end-to-end run checks that things work, not that they are unchanged.**
 - **A property test proves its property**, on the inputs it generates. A fact
   nobody stated is not tested.
