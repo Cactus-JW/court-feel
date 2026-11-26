@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import {
-  ASSIST,
   CAMERA,
   CHARACTER,
   COURT,
@@ -245,8 +244,8 @@ export class Game implements AiHost {
   ) {
     // first: the venue, the settings and the display below all read the simulation's ball and net
     this.sim = new Simulation({
-      aimAssist: (a) => (a.isUser ? this.settings.aimAssist : ASSIST.ai),
-      setAssist: (a) => (a.isUser ? this.settings.setAimAssist : ASSIST.ai),
+      aimAssist: () => this.settings.aimAssist,
+      setAssist: () => this.settings.setAimAssist,
       setByFeel: () => !this.settings.setRing,
       aimTargetFor: (a, out) => this.aimTargetFor(a, out),
       touched: (ev) => this.showTouch(ev),

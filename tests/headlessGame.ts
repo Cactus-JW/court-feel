@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ASSIST, DEFAULT_SETTINGS, type PositionId, type ServeKind, type Settings } from '../src/config';
+import { DEFAULT_SETTINGS, type PositionId, type ServeKind, type Settings } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import type { ContactEvent } from '../src/game/contact';
 import { takeKey } from '../src/game/intent';
@@ -58,7 +58,7 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
 
   const sim = new Simulation({
     ...NO_HOOKS,
-    aimAssist: (a) => (a.isUser ? DEFAULT_SETTINGS.aimAssist : ASSIST.ai),
+    aimAssist: () => DEFAULT_SETTINGS.aimAssist,
     aimTargetFor: (a, out) => (a.isUser ? out.set(a.pos.x, 0, -a.side * 6) : out.copy(a.aiAim)),
     contact: (ev: ContactEvent) =>
       touches.push(`${sim.simTime.toFixed(4)} ${ev.athlete.role}${ev.athlete.side === 1 ? 'H' : 'A'} ${ev.kind} ${ev.grade}`),

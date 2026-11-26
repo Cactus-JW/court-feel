@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COURT, type SetLevel } from '../config';
+import { ASSIST, COURT, type SetLevel } from '../config';
 import { Rng } from '../core/mathx';
 import type { BallEnv, CollisionEvent } from '../physics/ball';
 import type { Athlete } from './athlete';
@@ -17,9 +17,9 @@ import type { SetPick } from './setterCalls';
  * camera's, how much the aim is helped is a setting.
  */
 export interface SimulationHooks {
-  /** how much this athlete's aim is helped (0..1) */
+  /** how much this player's aim is helped (0..1). Asked only of an athlete a player plays: an AI player's is `ASSIST.ai` */
   aimAssist(a: Athlete): number;
-  /** how much this athlete's set is helped (0..1); their aim assist when not given */
+  /** how much this player's set is helped (0..1); their aim assist when not given */
   setAssist?(a: Athlete): number;
   /** the player sets by feel, with no timing cues (a setting): their set's windows are wider */
   setByFeel?(): boolean;
@@ -89,8 +89,10 @@ export class Simulation implements AiHost {
         return sim.simTime;
       },
       env: this.env,
-      aimAssist: (a) => hooks.aimAssist(a),
-      setAssist: (a) => (hooks.setAssist ?? hooks.aimAssist)(a),
+      // a player's is a setting. An athlete nobody plays has the play's own number: `isUser`, not a
+      // seat, since a drill can hand the player's athlete to a brain (the Mini Rally under `autoUser`)
+      aimAssist: (a) => (a.isUser ? hooks.aimAssist(a) : ASSIST.ai),
+      setAssist: (a) => (a.isUser ? (hooks.setAssist ?? hooks.aimAssist)(a) : ASSIST.ai),
       setByFeel: () => hooks.setByFeel?.() ?? false,
       aimTargetFor: (a, out) => hooks.aimTargetFor(a, out),
       emitContact: (ev) => this.touched(ev),

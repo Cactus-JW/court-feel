@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIM } from '../src/config';
+import { ASSIST, CONTACT, SIM } from '../src/config';
 import { Athlete } from '../src/game/athlete';
 import type { ContactEvent } from '../src/game/contact';
 import { idleIntent } from '../src/game/intent';
@@ -135,5 +135,37 @@ describe('a touch, in a simulation nobody is listening to', () => {
       'the drill hears of a pass: the judge is armed',
       'the runner, last',
     ]);
+  });
+});
+
+describe('an athlete nobody plays', () => {
+  // The help an AI player's aim gets is a number of the play (ASSIST.ai), not a setting: it is the
+  // same whoever runs the simulation. It used to be the game's to hand over, so a test's AI players
+  // reached 6.6 cm less far than the game's.
+  it('an AI player reaches as far in a test as in the game', () => {
+    const sim = new Simulation(NO_HOOKS);
+    const ai = new Athlete('OH', 1);
+    sim.athletes.push(ai);
+    expect(sim.contact.reach(ai)).toBeCloseTo(CONTACT.spikeReach + ASSIST.ai * ASSIST.reachBonus, 12);
+    expect(sim.contact.setAssist(ai)).toBe(ASSIST.ai);
+  });
+
+  it('a player is helped as much as whoever runs the game says, and only a player is asked about', () => {
+    const asked: Athlete[] = [];
+    const sim = new Simulation({
+      ...NO_HOOKS,
+      aimAssist: (a) => {
+        asked.push(a);
+        return 1;
+      },
+    });
+    const ai = new Athlete('OH', 1);
+    const player = new Athlete('OH', 1);
+    sim.athletes.push(ai, player);
+    sim.addSeat(player);
+    expect(sim.contact.reach(player)).toBeCloseTo(CONTACT.spikeReach + ASSIST.reachBonus, 12);
+    sim.contact.reach(ai);
+    sim.contact.setAssist(ai);
+    expect(asked.every((a) => a === player)).toBe(true);
   });
 });
