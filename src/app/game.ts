@@ -318,8 +318,13 @@ export class Game implements AiHost {
 
     this.seat = this.sim.addSeat(new Athlete('OH', 1, { body: settings.bodies.OH, hand: settings.hand }), {
       inputTime: () => this.inputTime(),
-      tutorial: { ownsButtons: () => this.tutorial.ownsButtons(), quiet: () => this.tutorial.quiet() },
+      tutorial: {
+        ownsButtons: () => this.tutorial.ownsButtons(),
+        quiet: () => this.tutorial.quiet(),
+        drive: (me) => this.tutorial.drive(me),
+      },
       notePress: (err, contactT) => this.notePress(err, contactT),
+      placed: (yaw, snapped) => this.userPlaced(yaw, snapped),
     });
     this.me.place(-3.2, 4.5, 0);
     this.addAthlete(this.me);
@@ -452,58 +457,28 @@ export class Game implements AiHost {
 
   /** set the user's body + camera facing (teleport) */
   placeUser(x: number, z: number, yaw: number): void {
-    this.ret = null;
-    this.me.place(x, z, yaw);
-    this.rig.yaw = yaw;
-    // a teleport turns the player's look with their body
-    this.user.intent.yaw = yaw;
-    this.rig.snap();
-    this.user.clear();
-    this.eyeInit = false;
+    this.seat.place(x, z, yaw);
   }
 
-  /** the user's athlete jogs back to a drill spot between reps (no teleport, no black cut) */
-  private ret: { x: number; z: number; yaw: number; t: number; maxT: number; userDriven: boolean } | null = null;
-
-  returnUser(x: number, z: number, yaw: number, maxT = PLAYER.walkBack.maxT): void {
-    this.ret = { x, z, yaw, t: 0, maxT, userDriven: false };
+  /** the user's athlete jogs back to a drill spot between reps (no teleport, no black cut): the seat walks them (`Seat.walkTo`) */
+  returnUser(x: number, z: number, yaw: number, maxT?: number): void {
+    this.seat.walkTo(x, z, yaw, maxT);
   }
 
   /** a drill should hold its next feed while this is true */
   get userReturning(): boolean {
-    return this.ret !== null;
+    return this.seat.walking;
   }
 
-  private stepReturn(dt: number): void {
-    const r = this.ret;
-    if (!r) return;
-    const me = this.me;
-    const W = PLAYER.walkBack;
-    r.t += dt;
-    const d = Math.hypot(me.pos.x - r.x, me.pos.z - r.z);
-    const keys = this.user.intent.steering;
-    if (keys) r.userDriven = true;
-    if (d < W.near || (r.userDriven && d < W.nearSteered)) {
-      this.ret = null;
-      return;
-    }
-    if (r.t > r.maxT) {
-      // still far (or the player wandered off): snap with a soft dip, not a black cut
-      if (!r.userDriven || r.t > r.maxT + W.giveUp) {
-        if (!r.userDriven) {
-          this.hud.dip();
-          this.placeUser(r.x, r.z, r.yaw);
-        }
-        this.ret = null;
-      }
-      return;
-    }
-    if (keys || me.state !== 'ground' || Math.hypot(me.cmd.moveX, me.cmd.moveZ) > W.idle) return;
-    // jog back (body keeps facing where the camera looks: a backpedal when looking at the net)
-    const m = Math.min(1, d / W.ease);
-    me.cmd.moveX = ((r.x - me.pos.x) / d) * m;
-    me.cmd.moveZ = ((r.z - me.pos.z) / d) * m;
-    me.cmd.sprint = d > W.sprintFrom;
+  /**
+   * The seat put the user's athlete on a spot: the camera turns with them and starts from there.
+   * A walk back that ran out of time (`snapped`) dips the screen softly, it does not cut to black.
+   */
+  private userPlaced(yaw: number, snapped: boolean): void {
+    if (snapped) this.hud.dip();
+    this.rig.yaw = yaw;
+    this.rig.snap();
+    this.eyeInit = false;
   }
 
   /** change the user's position stats (height, jump, etc; your custom body for that position from the settings) */
@@ -1003,8 +978,7 @@ export class Game implements AiHost {
       if (this.bot && this.mode) {
         this.bot.step(dt);
         this.user.intent = this.hands();
-        this.user.frame(dt);
-        this.stepReturn(dt);
+        this.seat.frame(dt);
       } else readKeys(this.input, this.user.intent);
       return;
     }
@@ -1027,11 +1001,8 @@ export class Game implements AiHost {
         if (!this.fx.startPointReplay()) this.fx.startReplay();
       }
     }
-    // the seat plays it: the controller, then the last steps onto a set (the set-step assist)
+    // the seat plays it: the controller, the last steps onto a set, the lesson's line, the walk back
     this.seat.frame(dt);
-    // the lesson's together rep: the coach holds your line (what you hold decides whether time runs)
-    this.tutorial.drive(this.me);
-    this.stepReturn(dt);
   }
 
   /**

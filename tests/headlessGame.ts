@@ -50,13 +50,13 @@ const NO_LESSON: DrillHost['tutorial'] = {
  * with no renderer, no DOM, no HUD and no camera. It is what `Game` is to a drill (`DrillHost`),
  * cut down to what the play needs. The player has the settings a new player has (`settings`: the
  * assists are on), and their hands do nothing: the seat plays the intent it holds every frame, which
- * is nothing held and a look that stays where the drill last turned it.
+ * is nothing held and a look that stays where the drill last turned it. A test that wants hands
+ * changes what the seat holds (`seat.intent`).
  */
 export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
   const said: string[] = [];
   const touches: string[] = [];
   const outcomes: string[] = [];
-  let walkBack: { x: number; z: number; yaw: number } | null = null;
 
   const settings: Settings = { ...DEFAULT_SETTINGS };
   const sim = new Simulation({
@@ -116,18 +116,10 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
       seat.serveKind = kind;
     },
     autoUser: false,
-    placeUser: (x, z, yaw) => {
-      walkBack = null;
-      seat.athlete.place(x, z, yaw);
-      seat.intent.yaw = yaw;
-      seat.controller.clear();
-    },
-    // nobody is steering: the walk back between reps is taken at once
-    returnUser: (x, z, yaw) => {
-      walkBack = { x, z, yaw };
-    },
+    placeUser: (x, z, yaw) => seat.place(x, z, yaw),
+    returnUser: (x, z, yaw, maxT) => seat.walkTo(x, z, yaw, maxT),
     get userReturning() {
-      return walkBack !== null;
+      return seat.walking;
     },
     wheelOpen: false,
     tutorial: NO_LESSON,
@@ -152,13 +144,9 @@ export function headlessGame(id: ModeId, pos: PositionId, seed = 2024) {
     said,
     touches,
     outcomes,
-    /** play one frame: the seat plays its intent, the walk back is taken, the simulation steps twice (120 Hz under 60 fps) and the drill's frame runs */
+    /** play one frame: the seat plays the intent it holds (and walks its player back between reps), the simulation steps twice (120 Hz under 60 fps) and the drill's frame runs */
     frame(): void {
       seat.frame(1 / 60);
-      if (walkBack) {
-        const to = walkBack;
-        host.placeUser(to.x, to.z, to.yaw);
-      }
       for (let i = 0; i < 2; i++) sim.step(1 / 120);
       mode.frame(1 / 60);
     },

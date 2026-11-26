@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PositionId } from '../src/config';
+import { PLAYER, type PositionId } from '../src/config';
 import type { ModeId } from '../src/game/modes/mode';
 import { headlessGame } from './headlessGame';
 import { brokenInvariants } from './invariants';
@@ -106,5 +106,46 @@ describe('Mini Rally: their jump serve', () => {
     expect(down).toBeLessThan(struck);
     // the call is never the drill's message line, which sits over the court
     expect(game.said.some((line) => line.startsWith('message Jump serve'))).toBe(false);
+  });
+});
+
+describe('Spike Drill: back to the start of the approach', () => {
+  // between reps a hitter walks back to where their approach starts, and the setter waits for
+  // them: nobody is picked up and put there, and no ball is set to an empty lane
+  it('a hitter who ended the rep off the lane is walked back, a frame at a time, and the next set waits for them', () => {
+    const game = headlessGame('spike', 'OH');
+    const me = game.seat.athlete;
+    const lane = { x: me.pos.x, z: me.pos.z };
+    const offLane = (): number => Math.hypot(me.pos.x - lane.x, me.pos.z - lane.z);
+    // the player runs at the net for a second, then lets go of the stick
+    const hands = game.seat.intent;
+    hands.moveZ = -1;
+    hands.steering = true;
+    for (let f = 0; f < 60; f++) game.frame();
+    hands.moveZ = 0;
+    hands.steering = false;
+    expect(offLane()).toBeGreaterThan(2);
+    // the rep plays out (the ball drops), and the drill sends them back
+    for (let f = 0; f < 20 * 60 && !game.host.userReturning; f++) game.frame();
+    expect(game.host.userReturning).toBe(true);
+    let longest = 0;
+    let frames = 0;
+    let setEarly = false;
+    while (game.host.userReturning && frames < 10 * 60) {
+      const before = offLane();
+      game.frame();
+      frames++;
+      longest = Math.max(longest, before - offLane());
+      setEarly ||= game.sim.ball.active;
+    }
+    // a jog, over many frames, and they are on the lane at the end of it
+    expect(frames).toBeGreaterThan(30);
+    expect(frames).toBeLessThan(PLAYER.walkBack.maxT * 60);
+    expect(longest).toBeLessThan(0.2);
+    expect(offLane()).toBeLessThan(PLAYER.walkBack.near);
+    // the next set waited for them, and then it came
+    expect(setEarly).toBe(false);
+    for (let f = 0; f < 5 * 60 && !game.sim.ball.active; f++) game.frame();
+    expect(game.sim.ball.active).toBe(true);
   });
 });

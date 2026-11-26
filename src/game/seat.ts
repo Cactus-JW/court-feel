@@ -1,4 +1,4 @@
-import type { ServeKind } from '../config';
+import { PLAYER, type ServeKind } from '../config';
 import type { Athlete } from './athlete';
 import type { ContactSystem } from './contact';
 import type { Intent } from './intent';
@@ -15,13 +15,18 @@ export interface SeatHost {
    * step the frame on screen has already run. Without one it is the simulation clock.
    */
   inputTime?(): number;
-  /** the lesson, when this seat is being taught: it holds the buttons for the player in a guided rep */
-  tutorial?: Pick<Tutorial, 'ownsButtons' | 'quiet'>;
+  /** the lesson, when this seat is being taught: it holds the buttons for the player in a guided rep, and holds their line */
+  tutorial?: Pick<Tutorial, 'ownsButtons' | 'quiet' | 'drive'>;
   /** a swing was released: how far from the ideal moment, and when it meets the ball (the debug overlay shows it) */
   notePress?(err: number, contactT: number): void;
+  /**
+   * The athlete was put on a spot, facing `yaw`: the camera turns with them. `snapped`: a walk back
+   * that ran out of time (the screen dips), not a drill placing its player.
+   */
+  placed?(yaw: number, snapped: boolean): void;
 }
 
-const NO_LESSON: Pick<Tutorial, 'ownsButtons' | 'quiet'> = { ownsButtons: () => false, quiet: () => false };
+const NO_LESSON: Pick<Tutorial, 'ownsButtons' | 'quiet' | 'drive'> = { ownsButtons: () => false, quiet: () => false, drive: () => {} };
 
 /** what a seat reads of the simulation it sits in */
 export interface SeatSim {
@@ -39,8 +44,9 @@ export interface SeatSim {
  * or a player on another machine (docs/adr/0011). Seat 0 is this machine's player.
  *
  * What the game does for a player is here too, written for this seat's athlete and this seat's
- * intent: the last steps onto a set (`frame`). The controller only turns an intent into
- * commands; these are the game acting for the player, so every seat has its own.
+ * intent: the last steps onto a set and the walk back between reps (`frame`). The controller only
+ * turns an intent into commands; these are the game acting for the player, so every seat has its
+ * own.
  */
 export class Seat {
   readonly controller = new UserController();
@@ -48,14 +54,18 @@ export class Seat {
   /** the serve this player has picked: their next toss is that serve's toss */
   serveKind: ServeKind = 'float';
   private body: Athlete;
+  private readonly lesson: Pick<Tutorial, 'ownsButtons' | 'quiet' | 'drive'>;
+  /** the walk back in hand: the spot, how long it has taken, and whether the player took the stick */
+  private walk: { x: number; z: number; yaw: number; t: number; maxT: number; steered: boolean } | null = null;
 
   constructor(
     readonly id: number,
     athlete: Athlete,
     private readonly sim: SeatSim,
-    host: SeatHost = {},
+    private readonly host: SeatHost = {},
   ) {
     this.body = athlete;
+    this.lesson = host.tutorial ?? NO_LESSON;
     athlete.isUser = true;
     this.controller.athlete = athlete;
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -70,7 +80,7 @@ export class Seat {
       },
       contact: sim.contact,
       user: this.controller,
-      tutorial: host.tutorial ?? NO_LESSON,
+      tutorial: this.lesson,
       get serveKind() {
         return seat.serveKind;
       },
@@ -101,12 +111,72 @@ export class Seat {
 
   /**
    * Play the intent held, once a frame: the controller turns it into what the athlete does, then
-   * the set-step assist takes the last steps onto a set. The order matters: the assist steers the
-   * move command the controller has just written.
+   * the set-step assist takes the last steps onto a set, the lesson holds its line in a guided rep,
+   * and the walk back jogs the athlete to their spot. The order matters: each steers the move
+   * command the ones before it have written, and the walk back gives way to all of them.
+   *
+   * The walk back runs here, on the frame, and not in the simulation's fixed step: its clock is
+   * the frame's (real seconds), so a lesson that holds the simulation still does not stall it, and
+   * a drill that reads `walking` every step sees the arrival on the frame it happens.
    */
   frame(dt: number): void {
     this.controller.frame(dt);
     this.assistSetStep();
+    // the lesson's together rep: the coach holds the player's line (what they hold decides whether time runs)
+    this.lesson.drive(this.body);
+    this.stepWalk(dt);
+  }
+
+  /** put the athlete on a spot, facing `yaw` (a teleport): their look turns with their body. Ends a walk back */
+  place(x: number, z: number, yaw: number): void {
+    this.put(x, z, yaw, false);
+  }
+
+  private put(x: number, z: number, yaw: number, snapped: boolean): void {
+    this.walk = null;
+    this.body.place(x, z, yaw);
+    this.intent.yaw = yaw;
+    this.controller.clear();
+    this.host.placed?.(yaw, snapped);
+  }
+
+  /** jog the athlete back to a spot between reps (no teleport, no cut): `PLAYER.walkBack` */
+  walkTo(x: number, z: number, yaw: number, maxT = PLAYER.walkBack.maxT): void {
+    this.walk = { x, z, yaw, t: 0, maxT, steered: false };
+  }
+
+  /** a drill holds its next feed while this is true */
+  get walking(): boolean {
+    return this.walk !== null;
+  }
+
+  private stepWalk(dt: number): void {
+    const r = this.walk;
+    if (!r) return;
+    const me = this.body;
+    const W = PLAYER.walkBack;
+    r.t += dt;
+    const d = Math.hypot(me.pos.x - r.x, me.pos.z - r.z);
+    const keys = this.intent.steering;
+    if (keys) r.steered = true;
+    if (d < W.near || (r.steered && d < W.nearSteered)) {
+      this.walk = null;
+      return;
+    }
+    if (r.t > r.maxT) {
+      // still far (or the player wandered off): put them there (the host dips the screen, it does not cut)
+      if (!r.steered || r.t > r.maxT + W.giveUp) {
+        if (!r.steered) this.put(r.x, r.z, r.yaw, true);
+        this.walk = null;
+      }
+      return;
+    }
+    if (keys || me.state !== 'ground' || Math.hypot(me.cmd.moveX, me.cmd.moveZ) > W.idle) return;
+    // jog back (body keeps facing where the camera looks: a backpedal when looking at the net)
+    const m = Math.min(1, d / W.ease);
+    me.cmd.moveX = ((r.x - me.pos.x) / d) * m;
+    me.cmd.moveZ = ((r.z - me.pos.z) / d) * m;
+    me.cmd.sprint = d > W.sprintFrom;
   }
 
   /**
