@@ -1,80 +1,30 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { AI, COURT, SIM, type PositionId } from '../src/config';
-import { Rng } from '../src/core/mathx';
+import { AI, CONTACT, COURT, type PositionId } from '../src/config';
 import { Athlete } from '../src/game/athlete';
-import type { Touch } from '../src/game/ballEntity';
-import type { AiHost } from '../src/game/brains';
 import { attackHeight, handSetAllowed, laneFor, LANES, needsGoodPass, SET_PLAYS, SETTER_SPOT, SETTER_TARGET } from '../src/game/plays';
-import { planApproach } from '../src/game/approach';
-import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
-import { solveApex } from '../src/physics/solve';
-import { SLOT_ROLE, SLOTS, TeamAI, USER_SLOT, type SetterRead } from '../src/ai/team';
-
-const DT = 1 / SIM.hz;
+import { HitterBrain } from '../src/ai/hitter';
+import { USER_SLOT, type SetterRead } from '../src/ai/team';
+import { scene } from './scene';
 
 /**
- * A Mini Rally home team with the user in `pos`, on a stand-in for the Game: the team
- * coordinator only needs the ball (state + prediction), the clock and the rng.
+ * A Mini Rally home team with the user in `pos`, in a real simulation: the six of them, the ball,
+ * the clock and the dice.
  */
 function homeTeam(pos: PositionId) {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let predicted = -1;
-  const env: BallEnv = { netTop: COURT.netHeightMen };
-  const ball = {
-    state,
-    active: true,
-    lastTouch: null as Touch | null,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    speed: () => Math.hypot(state.v.x, state.v.y, state.v.z),
-    ensurePrediction(e: BallEnv, t: number) {
-      if (predicted !== version) {
-        predictor.compute(state, e, t);
-        predicted = version;
-      }
-      return predictor;
-    },
-    touch(from: V3, v: V3) {
-      Object.assign(state.p, from);
-      Object.assign(state.v, v);
-      state.rest = false;
-      version++;
-    },
-  };
-  const g = {
-    simTime: 0,
-    env,
-    rng: new Rng(7),
-    ballLive: true,
-    ball,
-    setBrain() {},
-    contact: { lastSet: null },
-  };
-  const team = new TeamAI(1, g as unknown as AiHost);
-  const me = new Athlete(pos, 1);
-  me.isUser = true;
-  for (const slot of SLOTS) {
-    const mine = slot === USER_SLOT[pos];
-    team.add(slot, mine ? me : new Athlete(SLOT_ROLE[slot], 1), mine);
-  }
-  team.place('receive');
+  const s = scene({ seed: 7 });
+  const { sim } = s;
+  const ball = sim.ball;
+  const team = s.team(1, { user: USER_SLOT[pos], place: 'receive' });
+  const me = team.user!;
   const reads: { r: SetterRead; t: number }[] = [];
-  team.onRead = (r) => reads.push({ r: { ...r }, t: g.simTime });
+  team.onRead = (r) => reads.push({ r: { ...r }, t: sim.simTime });
   /** the libero passes from the back court to (x, z) at the setter's hands height */
   const pass = (x: number, z: number) => {
-    const libero = team.players.get('L')!;
-    const from = { x: 2.4, y: 0.85, z: 6.0 };
-    const out = { x: 0, y: 0, z: 0 };
-    solveApex(from, { x, y: 2.5, z }, 4.1, { x: 0, y: 0, z: 0 }, out);
-    ball.touch(from, out);
-    ball.lastTouch = { athlete: libero, kind: 'pass', t: g.simTime, side: 1 };
+    s.send(
+      { from: { x: 2.4, y: 0.85, z: 6.0 }, to: { x, y: 2.5, z }, apex: 4.1 },
+      { athlete: team.players.get('L')!, kind: 'pass', side: 1 },
+    );
   };
   /** our setter digs the first ball from his defence spot, aimed where a first ball by him goes */
   const setterDigs = () => {
@@ -82,24 +32,30 @@ function homeTeam(pos: PositionId) {
     const d = team.formSpot('defense', 'S');
     setter.place(d.x, d.z, 0);
     const T = team.firstBallTarget(setter);
-    const from = { x: d.x, y: 0.75, z: d.z };
-    const out = { x: 0, y: 0, z: 0 };
-    solveApex(from, T, T.apex, { x: 0, y: 0, z: 0 }, out);
-    ball.touch(from, out);
-    ball.lastTouch = { athlete: setter, kind: 'dig', t: g.simTime, side: 1 };
+    s.send({ from: { x: d.x, y: 0.75, z: d.z }, to: T, apex: T.apex }, { athlete: setter, kind: 'dig', side: 1 });
   };
-  /** run the team (and the ball) until the setter would touch it: the ball drops to their hands */
+  /**
+   * Play until the setter would touch it: the ball drops to their hands. A setter who has gone up
+   * for a pass in system has their hands up there with them and the ball is in them sooner
+   * (`SetterBrain` takes it `CONTACT.setRadius` from its hands point): the play stops on the step
+   * before they send it, so the first ball is still the ball's last touch and the call can be asked.
+   */
   const flight = () => {
+    const first = ball.lastTouch;
     const setter = team.players.get('S')!;
     const hands = setter.height + 0.17 + 0.45;
-    for (let i = 0; i < SIM.hz * 3; i++) {
-      g.simTime += DT;
-      stepBall(state, DT, env, []);
-      team.step();
-      if (state.v.y < 0 && state.p.y < hands) break;
-    }
+    const brain = team.brains.get(setter)?.setter;
+    const at = new THREE.Vector3();
+    const inHands = () => {
+      if (!brain) return false;
+      brain.handsPoint(at);
+      return Math.hypot(ball.pos.x - at.x, ball.pos.y - at.y, ball.pos.z - at.z) < CONTACT.setRadius;
+    };
+    s.run(3, () => ball.vel.y < 0 && (ball.pos.y < hands || inHands()));
+    // (nobody has played the second ball yet: what the tests ask next is asked of the first ball)
+    expect(ball.lastTouch).toBe(first);
   };
-  return { g, team, me, ball, reads, pass, setterDigs, flight };
+  return { s, sim, team, me, ball, reads, pass, setterDigs, flight };
 }
 
 describe("the setter's call on the pass (Mini Rally)", () => {
@@ -118,15 +74,11 @@ describe("the setter's call on the pass (Mini Rally)", () => {
   it('the middle runs a quick on every pass the setter calls in system, and on none they call high', () => {
     let both = 0;
     for (let off = 1.2; off < 2; off += 0.05) {
-      const { g, team, ball, pass } = homeTeam('OH');
+      const { s, sim, team, pass } = homeTeam('OH');
       pass(SETTER_SPOT.x, SETTER_SPOT.z + off);
-      let quick = false;
-      for (let i = 0; i < 40; i++) {
-        g.simTime += DT;
-        stepBall(ball.state, DT, g.env, []);
-        team.step();
-        if (i === 30) quick = team.passToSetter(g as unknown as AiHost) !== null;
-      }
+      s.step(31);
+      const quick = team.passToSetter(sim) !== null;
+      s.step(9);
       expect(quick, `a pass ${off.toFixed(2)} m off`).toBe(team.read?.call === 'in');
       if (quick) both++;
     }
@@ -151,7 +103,7 @@ describe("the setter's call on the pass (Mini Rally)", () => {
       [SETTER_TARGET.z, false],
       [SETTER_SPOT.z + 2.6, true],
     ] as const) {
-      const { g, team, me, pass, flight } = homeTeam('OH');
+      const { sim, team, me, pass, flight } = homeTeam('OH');
       team.userPlay = go;
       team.userSetBias = 1;
       pass(SETTER_TARGET.x, z);
@@ -160,7 +112,7 @@ describe("the setter's call on the pass (Mini Rally)", () => {
       // the setter is wherever: the call decides, not where they ended up standing
       const setter = team.players.get('S')!;
       setter.place(SETTER_SPOT.x, SETTER_SPOT.z, 0);
-      const set = team.callSet(g as unknown as AiHost, setter);
+      const set = team.callSet(sim, setter);
       expect(set.hitter).toBe(me);
       const above = set.apex - attackHeight(me);
       if (out) expect(above).toBeGreaterThanOrEqual(LANES.OH.apexAbove + 0.4 - 1e-6);
@@ -169,7 +121,7 @@ describe("the setter's call on the pass (Mini Rally)", () => {
   });
 
   it('the setter running down a bad pass does not change the call that was made', () => {
-    const { g, team, pass, flight } = homeTeam('OPP');
+    const { sim, team, pass, flight } = homeTeam('OPP');
     team.userPlay = SET_PLAYS.OPP!.find((p) => p.short === 'Fast')!;
     team.userSetBias = 1;
     pass(SETTER_SPOT.x - 1.2, SETTER_SPOT.z + 2.4);
@@ -178,7 +130,7 @@ describe("the setter's call on the pass (Mini Rally)", () => {
     // even taken right on the setter's spot, the set is the high one that was called
     const setter = team.players.get('S')!;
     setter.place(SETTER_SPOT.x, SETTER_SPOT.z, 0);
-    const set = team.callSet(g as unknown as AiHost, setter);
+    const set = team.callSet(sim, setter);
     expect(set.apex - attackHeight(team.user!)).toBeGreaterThan(LANES.OPP.apexAbove);
   });
 });
@@ -209,7 +161,7 @@ describe('when our setter plays the first ball (Mini Rally)', () => {
   });
 
   it('the second ball is out of system: the libero calls HIGH! and a called go goes up high', () => {
-    const { g, team, me, reads, setterDigs, flight } = homeTeam('OH');
+    const { sim, team, me, reads, setterDigs, flight } = homeTeam('OH');
     team.userPlay = SET_PLAYS.OH!.find((p) => p.short === 'Go')!;
     team.userSetBias = 1;
     setterDigs();
@@ -217,21 +169,21 @@ describe('when our setter plays the first ball (Mini Rally)', () => {
     expect(reads).toHaveLength(1);
     expect(reads[0].r.setter).toBe(team.players.get('L'));
     expect(reads[0].r.call).toBe('out');
-    const set = team.callSet(g as unknown as AiHost, team.players.get('L')!);
+    const set = team.callSet(sim, team.players.get('L')!);
     expect(set.hitter).toBe(me);
     expect((set as { time?: number }).time).toBeUndefined();
     expect(set.apex - attackHeight(me)).toBeGreaterThanOrEqual(LANES.OH.apexAbove + 0.4 - 1e-6);
   });
 
   it('the libero only sets high balls to the pins: no quick, no pipe', () => {
-    const { g, team, setterDigs, flight } = homeTeam('OH');
+    const { sim, team, setterDigs, flight } = homeTeam('OH');
     team.userSetBias = 0;
     setterDigs();
     flight();
     const libero = team.players.get('L')!;
     const pins = new Set([team.players.get('OH1'), team.players.get('OPP')]);
     for (let i = 0; i < 40; i++) {
-      const set = team.callSet(g as unknown as AiHost, libero);
+      const set = team.callSet(sim, libero);
       expect(pins.has(set.hitter!)).toBe(true);
       expect((set as { time?: number }).time).toBeUndefined();
     }
@@ -265,35 +217,49 @@ describe('when our setter plays the first ball (Mini Rally)', () => {
 });
 
 describe('the pipe (back-row attack, Mini Rally and the libero in the Spike Drill)', () => {
-  it('in system it is met a little over 2 m off the net, and the hitter leaves the floor behind the 3 m line, their feet clear of it', () => {
+  /**
+   * A hitter at the pipe's approach start in a real simulation, their own brain running them, and
+   * the setter's set from their spot, as `callSet` makes it in system: `nearer` m nearer the net
+   * than the pipe is meant to be and `higher` m higher. `backRow` false is a front-row hitter's
+   * run at the same ball. Played until they leave the floor: the approach they planned and where
+   * their feet left it.
+   */
+  const pipeRun = (o: { nearer?: number; higher?: number; backRow?: boolean } = {}) => {
+    const s = scene();
     const lane = laneFor('L', 1);
-    const hitter = new Athlete('OH', 1);
-    hitter.place(lane.sx, lane.sz, 0);
-    // the setter's set from their spot, as `callSet` makes it in system
+    let brain!: HitterBrain;
+    const hitter = s.athlete(
+      'OH',
+      1,
+      { x: lane.sx, z: lane.sz, yaw: 0 },
+      { brain: (a) => (brain = Object.assign(new HitterBrain(a, lane), { backRow: o.backRow ?? true, isMySet: () => true })) },
+    );
     const y = attackHeight(hitter);
-    const from = { x: SETTER_SPOT.x, y: 2.6, z: SETTER_SPOT.z };
-    const v = { x: 0, y: 0, z: 0 };
-    solveApex(from, { x: lane.x, y, z: lane.z }, y + lane.apexAbove, { x: 0, y: 0, z: 0 }, v);
-    const state = makeBall();
-    Object.assign(state.p, from);
-    Object.assign(state.v, v);
-    const env: BallEnv = { netTop: COURT.netHeightMen };
-    const pred = new BallPredictor(DT, SIM.predictHorizon);
-    pred.compute(state, env, 0);
-    // the AI hitter's approach, run on the athlete's own kinematics (as HitterBrain does)
-    const behind = COURT.attackLine + AI.backRow.clear;
-    const plan = planApproach(hitter, pred, 0, 0, 0, undefined, behind)!;
-    expect(plan).not.toBeNull();
+    s.send(
+      {
+        from: { x: SETTER_SPOT.x, y: 2.6, z: SETTER_SPOT.z },
+        to: { x: lane.x, y, z: lane.z - (o.nearer ?? 0) },
+        apex: y + lane.apexAbove + (o.higher ?? 0),
+      },
+      { athlete: null, kind: 'set', side: 1 },
+    );
     let takeoffZ = -1;
     hitter.onTakeoff = (a) => (takeoffZ = a.pos.z);
-    for (let t = 0; t < plan.tc;) {
-      const running = t >= plan.tStart && t < plan.tPress;
-      hitter.cmd = { moveX: running ? plan.dir.x : 0, moveZ: running ? plan.dir.z : 0, sprint: running, faceYaw: plan.runYaw };
-      if (t >= plan.tPress && hitter.state === 'ground') hitter.jumpPress();
-      if (t >= plan.tPress + plan.hold) hitter.jumpRelease();
-      t += DT;
-      hitter.step(DT, t);
-    }
+    let plan = brain.plan;
+    const left = s.run(4, () => {
+      plan ??= brain.plan;
+      return takeoffZ >= 0;
+    });
+    // (the hitter went up for it)
+    expect(left).toBe(true);
+    return { plan: plan!, takeoffZ };
+  };
+
+  it('in system it is met a little over 2 m off the net, and the hitter leaves the floor behind the 3 m line, their feet clear of it', () => {
+    // the AI hitter's approach, run by HitterBrain on the athlete's own kinematics
+    const behind = COURT.attackLine + AI.backRow.clear;
+    const { plan, takeoffZ } = pipeRun();
+    expect(plan).not.toBeNull();
     expect(plan.contact.z).toBeGreaterThan(2.0);
     expect(plan.contact.z).toBeLessThan(2.5);
     expect(plan.error).toBeLessThan(0.3);
@@ -301,45 +267,19 @@ describe('the pipe (back-row attack, Mini Rally and the libero in the Spike Dril
   });
 
   it('a pipe set too tight to the net is still jumped at from behind the 3 m line: the hitter reaches for it, the feet stay legal', () => {
-    const lane = laneFor('L', 1);
-    const hitter = new Athlete('OH', 1);
-    hitter.place(lane.sx, lane.sz, 0);
-    const y = attackHeight(hitter);
-    const from = { x: SETTER_SPOT.x, y: 2.6, z: SETTER_SPOT.z };
-    const v = { x: 0, y: 0, z: 0 };
     // (0.6 m nearer the net than the pipe is meant to be, and high: there is time to get anywhere)
-    solveApex(from, { x: lane.x, y, z: lane.z - 0.6 }, y + lane.apexAbove + 1.5, { x: 0, y: 0, z: 0 }, v);
-    const state = makeBall();
-    Object.assign(state.p, from);
-    Object.assign(state.v, v);
-    const pred = new BallPredictor(DT, SIM.predictHorizon);
-    pred.compute(state, { netTop: COURT.netHeightMen }, 0);
+    const tight = { nearer: 0.6, higher: 1.5 };
     const behind = COURT.attackLine + AI.backRow.clear;
-    const free = planApproach(hitter, pred, 0, 0, 0)!;
-    const legal = planApproach(hitter, pred, 0, 0, 0, undefined, behind)!;
-    const takeoff = (plan: typeof legal) => {
-      const a = new Athlete('OH', 1);
-      a.place(lane.sx, lane.sz, 0);
-      let z = -1;
-      a.onTakeoff = (q) => (z = q.pos.z);
-      for (let t = 0; t < plan.tc;) {
-        const running = t >= plan.tStart && t < plan.tPress;
-        a.cmd = { moveX: running ? plan.dir.x : 0, moveZ: running ? plan.dir.z : 0, sprint: running, faceYaw: plan.runYaw };
-        if (t >= plan.tPress && a.state === 'ground') a.jumpPress();
-        if (t >= plan.tPress + plan.hold) a.jumpRelease();
-        t += DT;
-        a.step(DT, t);
-      }
-      return z;
-    };
+    const free = pipeRun({ ...tight, backRow: false });
+    const legal = pipeRun(tight);
     // left to itself the run would take off with the feet on the line
-    expect(takeoff(free)).toBeLessThan(behind - 0.05);
-    expect(takeoff(legal)).toBeGreaterThanOrEqual(behind - 0.02);
+    expect(free.takeoffZ).toBeLessThan(behind - 0.05);
+    expect(legal.takeoffZ).toBeGreaterThanOrEqual(behind - 0.02);
   });
 
   it('the outside gets about half the sets, the opposite a quarter, the middle and the pipe the rest (elite men: zone 4 52%, zone 2 26%, zone 3 12%, back row 9%)', () => {
     const share = (inSystem: boolean) => {
-      const { g, team, pass, flight } = homeTeam('L');
+      const { sim, team, pass, flight } = homeTeam('L');
       team.userSetBias = 0;
       if (inSystem) pass(SETTER_TARGET.x, SETTER_TARGET.z);
       else pass(SETTER_SPOT.x + 0.4, SETTER_SPOT.z + 2.6);
@@ -347,7 +287,7 @@ describe('the pipe (back-row attack, Mini Rally and the libero in the Spike Dril
       const setter = team.players.get('S')!;
       const n: Record<string, number> = {};
       for (let i = 0; i < 2000; i++) {
-        const h = team.callSet(g as unknown as AiHost, setter).hitter!;
+        const h = team.callSet(sim, setter).hitter!;
         const slot = team.slotOf(h)!;
         n[slot] = (n[slot] ?? 0) + 1 / 2000;
       }
@@ -368,7 +308,7 @@ describe('the pipe (back-row attack, Mini Rally and the libero in the Spike Dril
   });
 
   it('out of system the back-row set stays behind the 3 m line', () => {
-    const { g, team, pass, flight } = homeTeam('L');
+    const { sim, team, pass, flight } = homeTeam('L');
     pass(SETTER_SPOT.x + 0.4, SETTER_SPOT.z + 2.6);
     flight();
     expect(team.read!.call).toBe('out');
@@ -376,7 +316,7 @@ describe('the pipe (back-row attack, Mini Rally and the libero in the Spike Dril
     const pipe = team.players.get('OH2')!;
     let seen = 0;
     for (let i = 0; i < 60; i++) {
-      const set = team.callSet(g as unknown as AiHost, setter);
+      const set = team.callSet(sim, setter);
       if (set.hitter !== pipe) continue;
       seen++;
       expect(set.target.z).toBeGreaterThan(COURT.attackLine + 0.5);

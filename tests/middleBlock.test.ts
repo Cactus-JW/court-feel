@@ -1,108 +1,88 @@
 import { describe, expect, it } from 'vitest';
-import { AI, CONTACT, COURT, PLAYER, SIM } from '../src/config';
+import { AI, CONTACT, PLAYER, SET_LEVELS } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
-import type { Touch } from '../src/game/ballEntity';
-import type { AiHost } from '../src/game/brains';
 import { attackHeight, laneFor, quickSpot, SETTER_SPOT, SETTER_TARGET } from '../src/game/plays';
-import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
-import { solveApex, solveFixedTime } from '../src/physics/solve';
 import { BallRead } from '../src/ai/read';
 import { MiddleBlocker, type Guess } from '../src/ai/middle';
 import { shoulderToShoulder } from '../src/ai/giveWay';
-import { blockHands } from '../src/game/contact';
+import { blockHands, type SetResult } from '../src/game/contact';
+import { DT, scene } from './scene';
 
-const DT = 1 / SIM.hz;
 /** the other team: we (the home side, +z) block their attack */
 const THEM = -1 as const;
-const NO_SPIN: V3 = { x: 0, y: 0, z: 0 };
 
 type Set = 'outside' | 'opposite' | 'quick';
 
+/** the player's jump set with the dump on, as the contact system leaves it for the block to read (a good set, not a green one) */
+function heldSet(athlete: Athlete, t: number): SetResult {
+  const L = SET_LEVELS.easy;
+  return {
+    athlete,
+    t,
+    grade: 'Good',
+    green: false,
+    quality: 0.7,
+    err: L.green[0] * 1.5,
+    window: L.green[0],
+    good: L.green[0] * L.goodMul,
+    pips: { feet: true, centre: true, catch: true },
+    held: true,
+  };
+}
+
 /**
- * Our middle against their pass and set, on a stand-in for the Game: the middle only needs the
- * ball (state and prediction), the clock, the rng and a block that never touches. Their middle is
- * scripted: it stands near the net, or plants and takes off with the setter's touch (a quick).
+ * Our middle against their pass and set, in a real simulation: the middle's brain, the ball, the
+ * clock and the dice are the game's. Their middle is scripted: it stands near the net, or plants
+ * and takes off with the setter's touch (a quick). Their passer and setter stand where the ball
+ * leaves them, and their pin hitters are not on the court: the set is sent, never hit.
  */
 function net(opts: { seed?: number; guess?: Guess | null; theirMiddleX?: number; quick?: boolean; wing?: boolean; held?: boolean } = {}) {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let predicted = -1;
-  const env: BallEnv = { netTop: COURT.netHeightMen };
-  const ball = {
-    state,
-    active: true,
-    lastTouch: null as Touch | null,
-    get pos() {
-      return state.p;
+  const s = scene({
+    seed: opts.seed ?? 1,
+    drill: {
+      // team-mates at the net meet shoulder to shoulder (as TeamAI does every step: there is no team on this court)
+      step: () => {
+        if (wing) shoulderToShoulder([me, wing]);
+      },
     },
-    get vel() {
-      return state.v;
-    },
-    speed: () => Math.hypot(state.v.x, state.v.y, state.v.z),
-    ensurePrediction(e: BallEnv, t: number) {
-      if (predicted !== version) {
-        predictor.compute(state, e, t);
-        predicted = version;
-      }
-      return predictor;
-    },
-    touch(from: V3, v: V3) {
-      Object.assign(state.p, from);
-      Object.assign(state.v, v);
-      state.rest = false;
-      version++;
-    },
-  };
-  const g = {
-    simTime: 0,
-    env,
-    rng: new Rng(opts.seed ?? 1),
-    ball,
-    contact: { tryBlock: () => false, lastSetResult: null as { athlete: Athlete; t: number; green: boolean; held: boolean } | null },
-  };
-  const game = g as unknown as AiHost;
+  });
+  const { sim } = s;
+  const ball = sim.ball;
 
-  const me = new Athlete('MB', 1);
-  me.place(0, 0.5, 0);
+  const me = s.athlete('MB', 1, { x: 0, z: 0.5 });
   const qx = quickSpot(SETTER_TARGET.x * THEM, THEM).x;
-  const them = new Athlete('MB', THEM);
-  them.place(opts.theirMiddleX ?? qx, -1.8, Math.PI);
+  const them = s.athlete('MB', THEM, { x: opts.theirMiddleX ?? qx, z: -1.8 });
   /** our pin blocker (opts.wing): stands at the net on the attack, shading the line, as the set goes up */
-  const wing = new Athlete('OPP', 1);
-  wing.place(3, 0.45, 0);
+  const wing = opts.wing ? s.athlete('OPP', 1, { x: 3, z: 0.45 }) : null;
   const mb = new MiddleBlocker(
     me,
     0,
     () => them,
-    () => (opts.wing ? [wing] : []),
+    () => (wing ? [wing] : []),
   );
   if (opts.guess) mb.pinnedGuess = opts.guess;
-  const passer = new Athlete('L', THEM);
-  const setter = new Athlete('S', THEM);
+  sim.setBrain(me, mb);
+  const passer = s.athlete('L', THEM, { x: -2.4, z: -6.0 });
+  // (opts.held) their setter is the player
+  const setter = s.athlete('S', THEM, { x: SETTER_SPOT.x * THEM, z: SETTER_SPOT.z * THEM }, { user: opts.held });
 
   /** our middle's take-offs, and the top of each jump */
   const jumps: { t: number; x: number; peakT: number }[] = [];
-  me.onTakeoff = (a) => jumps.push({ t: g.simTime, x: a.pos.x, peakT: -1 });
+  me.onTakeoff = (a) => jumps.push({ t: sim.simTime, x: a.pos.x, peakT: -1 });
   /** their middle's quick: plant before the setter's touch, take off with it */
   let quickAt = -1;
   let theirTakeoff = -1;
-  them.onTakeoff = () => (theirTakeoff = g.simTime);
+  them.onTakeoff = () => (theirTakeoff = sim.simTime);
 
+  /** one step of the play. Their middle's presses are made between steps, as a player's are: `t` is the time of the step they land in */
   const tick = () => {
-    g.simTime += DT;
-    stepBall(state, DT, env, []);
-    if (quickAt > 0 && theirTakeoff < 0 && them.state === 'ground' && g.simTime >= quickAt - PLAYER.loadMax + 0.02) them.jumpPress();
-    if (quickAt > 0 && them.state === 'load' && g.simTime >= quickAt) them.jumpRelease();
-    mb.step(DT, game);
-    me.step(DT, g.simTime);
-    them.step(DT, g.simTime);
-    // team-mates at the net meet shoulder to shoulder (as TeamAI does every tick)
-    if (opts.wing) shoulderToShoulder([me, wing]);
+    const t = sim.simTime + DT;
+    if (quickAt > 0 && theirTakeoff < 0 && them.state === 'ground' && t >= quickAt - PLAYER.loadMax + 0.02) them.jumpPress();
+    if (quickAt > 0 && them.state === 'load' && t >= quickAt) them.jumpRelease();
+    s.step();
     const j = jumps[jumps.length - 1];
-    if (j && j.peakT < 0 && me.state === 'air' && me.vel.y <= 0) j.peakT = g.simTime;
+    if (j && j.peakT < 0 && me.state === 'air' && me.vel.y <= 0) j.peakT = sim.simTime;
   };
 
   /** their first ball: from the back court to their setter (in system) or 2.6 m off the net (out) */
@@ -111,61 +91,57 @@ function net(opts: { seed?: number; guess?: Guess | null; theirMiddleX?: number;
     const to = inSystem
       ? { x: SETTER_TARGET.x * THEM, y: 2.5, z: SETTER_TARGET.z * THEM }
       : { x: (SETTER_SPOT.x + 0.4) * THEM, y: 2.5, z: (SETTER_SPOT.z + 2.6) * THEM };
-    const v = { x: 0, y: 0, z: 0 };
-    solveApex(from, to, 4.1, NO_SPIN, v);
-    ball.touch(from, v);
-    ball.lastTouch = { athlete: passer, kind: 'pass', t: g.simTime, side: THEM };
+    // their setter is under it
+    setter.place(to.x, to.z);
+    s.send({ from, to, apex: 4.1 }, { athlete: passer, kind: 'pass', side: THEM });
     const hands = setter.height + 0.17 + 0.45;
-    const tS = ball.ensurePrediction(env, g.simTime).descendThrough(hands, g.simTime);
+    const tS = ball.ensurePrediction(sim.env, sim.simTime).descendThrough(hands, sim.simTime);
     if (opts.quick) quickAt = tS;
     // to the setter's hands
-    while (!(state.v.y < 0 && state.p.y < hands)) tick();
+    while (!(ball.vel.y < 0 && ball.pos.y < hands)) tick();
   };
 
   /** their set, and when their hitter meets it */
   const set = (to: Set, outOfSystem = false) => {
-    const from = { x: state.p.x, y: state.p.y, z: state.p.z };
-    const v = { x: 0, y: 0, z: 0 };
+    const from = { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z };
+    const by = { athlete: setter, kind: 'set', side: THEM } as const;
     let tc: number;
     let attackX: number;
     if (to === 'quick') {
       // met at the top of their middle's jump, a moment after the set
       const flight = 0.3;
-      solveFixedTime(from, { x: them.pos.x, y: attackHeight(them), z: them.pos.z }, flight, NO_SPIN, v);
-      tc = g.simTime + flight;
+      s.send({ from, to: { x: them.pos.x, y: attackHeight(them), z: them.pos.z }, time: flight }, by);
+      tc = sim.simTime + flight;
       attackX = them.pos.x;
     } else {
       const lane = laneFor(to === 'outside' ? 'OH' : 'OPP', THEM);
-      const hitter = new Athlete(to === 'outside' ? 'OH' : 'OPP', THEM);
-      const y = attackHeight(hitter);
-      solveApex(from, { x: lane.x, y, z: lane.z }, y + lane.apexAbove + (outOfSystem ? AI.outOfSystemApex : 0), NO_SPIN, v);
-      ball.touch(from, v);
-      tc = ball.ensurePrediction(env, g.simTime).descendThrough(y, g.simTime);
+      // (the height their pin hitter would meet it at: that hitter is not on the court)
+      const y = attackHeight(new Athlete(to === 'outside' ? 'OH' : 'OPP', THEM));
+      s.send({ from, to: { x: lane.x, y, z: lane.z }, apex: y + lane.apexAbove + (outOfSystem ? AI.outOfSystemApex : 0) }, by);
+      tc = ball.ensurePrediction(sim.env, sim.simTime).descendThrough(y, sim.simTime);
       attackX = lane.x;
-      wing.place(lane.x + Math.sign(lane.x) * AI.defence.shade, 0.45, 0);
+      wing?.place(lane.x + Math.sign(lane.x) * AI.defence.shade, 0.45, 0);
     }
-    ball.touch(from, v);
-    ball.lastTouch = { athlete: setter, kind: 'set', t: g.simTime, side: THEM };
     // (opts.held) it was the user's jump set with the dump on
-    if (opts.held) g.contact.lastSetResult = { athlete: setter, t: g.simTime, green: false, held: true };
-    const tSet = g.simTime;
+    if (opts.held) sim.contact.lastSetResult = heldSet(setter, sim.simTime);
+    const tSet = sim.simTime;
     let movedT = NaN;
     // where the middle closes the block on a pin set: next to the pin blocker, hands to hands
     const closeX = attackX + Math.sign(attackX) * (AI.defence.shade - AI.middle.closeGap);
     let atContact = { x: 0, y: 0, air: false, reach: 0 };
     let closest = Infinity;
     let landedX = NaN;
-    while (g.simTime < tc + 0.6) {
+    while (sim.simTime < tc + 0.6) {
       tick();
-      if (Number.isNaN(movedT) && me.speed > 0.5) movedT = g.simTime;
-      if (g.simTime >= tc && g.simTime < tc + DT) atContact = { x: me.pos.x, y: me.pos.y, air: me.state === 'air', reach: me.reachX };
-      if (opts.wing && me.state === 'air') closest = Math.min(closest, Math.abs(me.pos.x - wing.pos.x));
+      if (Number.isNaN(movedT) && me.speed > 0.5) movedT = sim.simTime;
+      if (sim.simTime >= tc && sim.simTime < tc + DT) atContact = { x: me.pos.x, y: me.pos.y, air: me.state === 'air', reach: me.reachX };
+      if (wing && me.state === 'air') closest = Math.min(closest, Math.abs(me.pos.x - wing.pos.x));
       if (me.state === 'land' && Number.isNaN(landedX)) landedX = me.pos.x;
     }
     return { tSet, tc, attackX, closeX, atContact, closest, landedX, movedT };
   };
 
-  return { g, me, them, wing, mb, jumps, pass, set, tick, theirTakeoff: () => theirTakeoff };
+  return { s, me, them, wing, mb, jumps, pass, set, tick, theirTakeoff: () => theirTakeoff };
 }
 
 describe("a player's read of a touch", () => {
@@ -250,7 +226,7 @@ describe('the middle blocker (Mini Rally)', () => {
         expect(s.atContact.air, `${to} seed ${seed}`).toBe(true);
         // a blocker's hands stop a ball centre within handHalf of them: the two cover one wall, or
         // leave a slit a few centimetres wide (a ball centre has to thread it exactly)
-        expect(Math.abs(s.atContact.x - wing.pos.x), `${to} seed ${seed}`).toBeLessThanOrEqual(2 * AI.defence.handHalf + 0.05);
+        expect(Math.abs(s.atContact.x - wing!.pos.x), `${to} seed ${seed}`).toBeLessThanOrEqual(2 * AI.defence.handHalf + 0.05);
         expect(me.jumpH).toBeGreaterThan(0);
       }
     }
@@ -263,7 +239,7 @@ describe('the middle blocker (Mini Rally)', () => {
         const { wing, pass, set } = net({ seed, wing: true, guess: 'read' });
         pass(true);
         const s = set(to);
-        const seam = Math.abs(s.atContact.x - wing.pos.x) - 2 * AI.defence.handHalf;
+        const seam = Math.abs(s.atContact.x - wing!.pos.x) - 2 * AI.defence.handHalf;
         expect(seam, `${to} seed ${seed}`).toBeLessThan(0.1);
         if (seam <= 0) closed++;
       }
@@ -277,9 +253,9 @@ describe('the middle blocker (Mini Rally)', () => {
     pass(true);
     const s = set('opposite');
     expect(jumps).toHaveLength(1);
-    const takeoffGap = Math.abs(jumps[0].x - wing.pos.x);
+    const takeoffGap = Math.abs(jumps[0].x - wing!.pos.x);
     // it drifted towards the pin blocker in the air ...
-    expect(Math.abs(s.landedX - wing.pos.x)).toBeLessThan(takeoffGap - 0.1);
+    expect(Math.abs(s.landedX - wing!.pos.x)).toBeLessThan(takeoffGap - 0.1);
     // ... and never through them: it stops at the shoulder
     expect(s.closest).toBeGreaterThanOrEqual(PLAYER.shoulder - 1e-6);
     expect(me.jumpH).toBeGreaterThan(0);

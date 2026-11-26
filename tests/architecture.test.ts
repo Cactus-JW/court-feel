@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KNOWN_CLOCK, KNOWN_DOM, KNOWN_FAKE_GAME, KNOWN_IMPORTS, KNOWN_SCENE } from './architecture.known';
+import { KNOWN_CLOCK, KNOWN_DOM, KNOWN_FAKE_GAME, KNOWN_HAND_MADE, KNOWN_IMPORTS, KNOWN_SCENE } from './architecture.known';
 import {
   clocksAndDiceIn,
   DETERMINISTIC,
@@ -11,6 +11,7 @@ import {
   read,
   sceneClassesIn,
   SIMULATION,
+  standInsIn,
   touchesDom,
   type Layer,
 } from './architecture.scan';
@@ -21,6 +22,8 @@ import {
 // that has been fixed must leave the list.
 
 const SRC = filesUnder('src');
+/** the scene builder: the one test file that may hold the dice and the touch still */
+const SCENE = 'tests/scene.ts';
 const layered = SRC.map((file) => ({ file, layer: layerOf(file) }));
 const inSimulation = layered.filter((f) => f.layer && SIMULATION.includes(f.layer)).map((f) => f.file);
 
@@ -89,7 +92,7 @@ describe('architecture: every import points down', () => {
   });
 
   it('the known list is sorted and has no entry twice', () => {
-    for (const list of [KNOWN_IMPORTS, KNOWN_DOM, KNOWN_SCENE, KNOWN_FAKE_GAME, KNOWN_CLOCK]) {
+    for (const list of [KNOWN_IMPORTS, KNOWN_DOM, KNOWN_SCENE, KNOWN_FAKE_GAME, KNOWN_HAND_MADE, KNOWN_CLOCK]) {
       expect([...list]).toEqual([...new Set(list)].sort());
     }
   });
@@ -121,5 +124,54 @@ describe('architecture: tests build the real thing', () => {
     // a fake is a hand-made object cast to the game, or to the part of it the brains see
     const faking = filesUnder('tests').filter((f) => f !== 'tests/architecture.test.ts' && /as unknown as (Game|AiHost)\b/.test(read(f)));
     expect(drift(faking, KNOWN_FAKE_GAME, 'build what the code under test needs, not a cast')).toEqual([]);
+  });
+
+  it('no test hand-makes a ball or a contact host, apart from the ones already known', () => {
+    // A cast is one door. The others are a stand-in written out by hand: a ball of the test's own,
+    // a host or a contact system of its own, a stub written over the simulation's dice or its
+    // contact system. The test then steps a ball the game never steps, in an order the game never
+    // uses. tests/scene.ts builds the real thing, and is the one file that may hold the dice and
+    // the touch still (its two knobs). What the scan can and cannot see is said on `standInsIn`.
+    const making = filesUnder('tests').filter((f) => !f.startsWith('tests/architecture.') && standInsIn(read(f), f === SCENE).length > 0);
+    expect(drift(making, KNOWN_HAND_MADE, 'send a real ball in a real Simulation (tests/scene.ts)')).toEqual([]);
+  });
+
+  it('the scan sees each shape of a stand-in, and none in a test built on a scene', () => {
+    const BALL = 'a ball of its own';
+    const HOST = 'a host for the contact system';
+    const SYSTEM = 'a contact system of its own';
+    const STUB = 'a stub on the dice or the contact system';
+    const planted: [string, string[]][] = [
+      // the ball: a method, a property, a field
+      ['const ball = {\n  ensurePrediction(e: BallEnv, t: number) {\n    return predictor;\n  },\n};', [BALL]],
+      ['const ball = { state, ensurePrediction: () => null as any, hit() {} };', [BALL]],
+      ['class FakeBall {\n  ensurePrediction = (env: BallEnv, t: number) => this.predictor;\n}', [BALL]],
+      // the host, however it is typed, and the contact system built on it
+      ['const host = { ball, simTime: 0, rand: () => 0.5 } satisfies ContactHost;', [HOST]],
+      ['const cs = new ContactSystem({} as ContactHost);', [HOST, SYSTEM]],
+      ['const cs = new ContactSystem(host as unknown as ContactHost);', [HOST, SYSTEM]],
+      ['const host: ContactHost = { ball, simTime: 0 };', [HOST]],
+      ['const cs = new ContactSystem(host);', [SYSTEM]],
+      // a third knob: a stub written where only tests/scene.ts may write one
+      ['s.sim.rng.next = () => 0.5;', [STUB]],
+      ['sim.contact.tryPass = () => false;', [STUB]],
+      ['t.s.sim.contact.userAimYaw = () => 0;', [STUB]],
+      ['Object.assign(t.s.sim.contact, { ideal: () => null, beginWindup() {} });', [STUB]],
+    ];
+    for (const [text, shapes] of planted) expect(standInsIn(text), text).toEqual(shapes);
+    // what a test on a real scene writes
+    const real = [
+      'const pred = sim.ball.ensurePrediction(sim.env, sim.simTime);',
+      'const tc = s.sim.ball.ensurePrediction(env, t).descendThrough(3.25, t);',
+      's.sim.contact.lastSetResult = setResult(setter, sim.simTime, green);',
+      'contact.lastSet = { ...high, target, outOfSystem: true };',
+      'if (sim.contact.serving === a) return;',
+      'const roll = sim.rng.next();',
+      "const s = scene({ dice: { roll: 0.5 }, touches: 'none' });",
+    ];
+    for (const text of real) expect(standInsIn(text), text).toEqual([]);
+    // the knobs themselves are stubs, and are tests/scene.ts's alone
+    expect(standInsIn(read(SCENE))).toEqual([STUB]);
+    expect(standInsIn(read(SCENE), true)).toEqual([]);
   });
 });

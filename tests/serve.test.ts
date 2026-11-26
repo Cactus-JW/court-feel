@@ -1,89 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { AI, COURT, SIM } from '../src/config';
-import { Rng } from '../src/core/mathx';
-import { Athlete } from '../src/game/athlete';
-import type { Touch, TouchKind } from '../src/game/ballEntity';
-import type { AiHost } from '../src/game/brains';
-import { makeBall, stepBall, type BallEnv, type CollisionEvent, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
-import { SLOT_ROLE, SLOTS, TeamAI, type Slot } from '../src/ai/team';
+import { AI, COURT } from '../src/config';
+import type { Athlete } from '../src/game/athlete';
+import type { TouchKind } from '../src/game/ballEntity';
+import type { CollisionEvent } from '../src/physics/ball';
+import { SLOTS, type Slot } from '../src/ai/team';
+import { scene } from './scene';
 
-const DT = 1 / SIM.hz;
 // (the book spots: each player's own habit, a little off them every rally, is tested on its own)
 AI.sit.personal = 0;
 
-/**
- * An all-AI Mini Rally team on `side`, set up to serve, on a stand-in for the Game:
- * the team coordinator only needs the ball (state + prediction), the clock and the rng.
- */
+/** An all-AI Mini Rally team on `side`, set up to serve, in a real simulation: six brains, the ball, the clock and the dice. */
 function servingTeam(side: 1 | -1) {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let predicted = -1;
-  const env: BallEnv = { netTop: COURT.netHeightMen };
-  const ball = {
-    state,
-    active: true,
-    lastTouch: null as Touch | null,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    speed: () => Math.hypot(state.v.x, state.v.y, state.v.z),
-    ensurePrediction(e: BallEnv, t: number) {
-      if (predicted !== version) {
-        predictor.compute(state, e, t);
-        predicted = version;
-      }
-      return predictor;
-    },
-    touch(from: V3, v: V3) {
-      Object.assign(state.p, from);
-      Object.assign(state.v, v);
-      state.rest = false;
-      version++;
-    },
-  };
-  const g = {
-    simTime: 0,
-    env,
-    rng: new Rng(7),
-    ballLive: true,
-    ball,
-    setBrain() {},
-    contact: { lastSet: null },
-  };
-  const team = new TeamAI(side, g as unknown as AiHost);
-  for (const slot of SLOTS) team.add(slot, new Athlete(SLOT_ROLE[slot], side), false);
-  team.serving = true;
-  team.place('defense');
+  const s = scene({ seed: 7 });
+  const { sim } = s;
+  const ball = sim.ball;
+  const team = s.team(side, { serving: true });
   let reads = 0;
   team.onRead = () => reads++;
+  /** `athlete` has just played the ball (the ball flies on as it was) */
   const touch = (athlete: Athlete, kind: TouchKind) => {
-    ball.lastTouch = { athlete, kind, t: g.simTime, side: athlete.side };
+    ball.lastTouch = { athlete, kind, t: sim.simTime, side: athlete.side };
   };
   /** OH2 serves from behind our end line: deep into their court, or (`net`) low into the net */
   const serve = (net = false) => {
     const v = net ? { y: 1.5, z: 15 } : { y: 4.5, z: 17 };
-    ball.touch({ x: 1.5 * side, y: 2.9, z: side * (COURT.halfLength + 0.8) }, { x: -0.6 * side, y: v.y, z: -side * v.z });
-    touch(team.players.get('OH2')!, 'serve');
+    s.send(
+      { from: { x: 1.5 * side, y: 2.9, z: side * (COURT.halfLength + 0.8) }, v: { x: -0.6 * side, y: v.y, z: -side * v.z } },
+      { athlete: team.players.get('OH2')!, kind: 'serve', side },
+    );
   };
-  /** step the ball and the team for up to `seconds`, calling `each` after every step */
+  /** play for up to `seconds`, calling `each` after every step with what the ball hit in it */
   const run = (seconds: number, each: (ev: CollisionEvent[]) => boolean | void = () => {}) => {
-    const ev: CollisionEvent[] = [];
-    for (let i = 0; i < SIM.hz * seconds; i++) {
-      g.simTime += DT;
-      ev.length = 0;
-      stepBall(state, DT, env, ev);
-      team.step();
-      if (each(ev)) break;
-    }
+    s.run(seconds, () => !!each(ball.events));
   };
   const job = (slot: Slot) => team.brains.get(team.players.get(slot)!)!;
-  return { g, ball, team, touch, serve, run, job, reads: () => reads };
+  return { s, ball, team, touch, serve, run, job, reads: () => reads };
 }
 
 describe.each([1, -1] as const)('our own serve (side %i)', (side) => {
@@ -119,7 +70,7 @@ describe.each([1, -1] as const)('our own serve (side %i)', (side) => {
   });
 
   it('a serve into the net is left alone, and a touch on it by any of us is a service fault', () => {
-    const { ball, team, touch, serve, run, job } = servingTeam(side);
+    const { s, ball, team, touch, serve, run, job } = servingTeam(side);
     serve(true);
     let net = false;
     const jobs = new Set<string>();
@@ -135,18 +86,18 @@ describe.each([1, -1] as const)('our own serve (side %i)', (side) => {
     expect(team.serveFault).toBe(false);
     // the user (or anyone of ours) digs it up anyway
     touch(team.players.get('L')!, 'dig');
-    team.step();
+    s.step();
     expect(team.serveFault).toBe(true);
   });
 
   it('once the other side has played it, our touches are ordinary ones', () => {
-    const { team, touch, serve, run } = servingTeam(side);
+    const { s, team, touch, serve, run } = servingTeam(side);
     serve();
     run(0.6);
-    touch(new Athlete('L', -side as 1 | -1), 'pass');
-    team.step();
+    touch(s.athlete('L', -side as 1 | -1, { x: 0, z: -side * 6 }), 'pass');
+    s.step();
     touch(team.players.get('L')!, 'dig');
-    team.step();
+    s.step();
     expect(team.serveFault).toBe(false);
     expect(team.touches).toBe(1);
   });

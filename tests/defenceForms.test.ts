@@ -1,17 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import * as THREE from 'three';
-import { AI, BALL, CONTACT, COURT, PLAYER, SIM, TIMING } from '../src/config';
+import { AI, ASSIST, BALL, CONTACT, COURT, PLAYER, SIM, TIMING } from '../src/config';
+import { BlockerBrain } from '../src/ai/blocker';
 import { Athlete, type PassForm } from '../src/game/athlete';
-import { ContactSystem, type ContactEvent, type ContactHost } from '../src/game/contact';
+import type { Brain } from '../src/game/brains';
+import type { ContactEvent } from '../src/game/contact';
+import contactSource from '../src/game/contact.ts?raw';
 import { Rng, yawFromDir } from '../src/core/mathx';
 import { makeBall, stepBall, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
 import { solveFixedTime } from '../src/physics/solve';
+import { DT, scene } from './scene';
 
-const DT = 1 / SIM.hz;
 /** the defender's height (the platform and the forehead are where they are on this body) */
 const H = new Athlete('L', 1).height;
 const TARGET = { x: 1, y: 2.35, z: 0.9, apex: 4 };
+/**
+ * What a whole aim assist adds to the reach of a pass (m). In the source it is an inline number of
+ * `ContactSystem.tryPass` (`assist * 0.25`) with no name in config, so it is copied here, and the
+ * first dive test fails when the line it is copied from changes.
+ */
+const ASSIST_PASS_REACH = 0.25;
+/**
+ * How far from the middle of the arms a diving defender nobody plays still reaches the ball (m):
+ * the pass radius, what the aim assist the game gives an AI player adds (`ASSIST.ai`), and the one
+ * arm out of a dive.
+ */
+const DIVE_REACH = CONTACT.passRadius + ASSIST.ai * ASSIST_PASS_REACH + CONTACT.diveOut.reach;
 
 /**
  * A home defender standing at (0, 6) facing the net. A ball from `from` reaches `to` `T` s from now;
@@ -28,7 +41,10 @@ function play(opts: {
   offTheirBlock?: boolean;
   /** the block it came off handed it back softly (a recycled ball) */
   recycle?: boolean;
+  /** the test's own dice: a seeded stream that runs on through several plays */
   rand?: () => number;
+  /** the simulation's own dice, from this seed: the play is one of many, and what the dice do is part of the fact */
+  seed?: number;
   /** where the contact aims it (default: the setter's hands) */
   target?: { x: number; y: number; z: number; apex: number };
   /** the dive goes this way (default: at `to`), from a run at this speed along it */
@@ -37,75 +53,49 @@ function play(opts: {
   /** this is our third ball (the contact may only try to get it over) */
   third?: boolean;
 }) {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let pv = -1;
-  const ball = {
-    state,
-    active: true,
-    lastTouch: { athlete: null, kind: opts.offTheirBlock ? 'block' : 'spike', t: -1, side: -1, recycle: opts.recycle } as any,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    speed: () => Math.hypot(state.v.x, state.v.y, state.v.z),
-    ensurePrediction(env: { netTop: number }, t: number) {
-      if (pv !== version) {
-        predictor.compute(state, env, t);
-        pv = version;
+  const s = scene({
+    seed: opts.seed,
+    // fixed dice, unless the play has a seed: every roll comes up a half, so the pass is graded on the
+    // timing and the form alone, with the spread of the dice taken out. `rand` is a test's own seeded
+    // stream instead, one that runs on through several plays
+    dice: opts.seed === undefined ? { roll: opts.rand ?? 0.5 } : 'seeded',
+    drill: { passTarget: () => opts.target ?? TARGET },
+  });
+  const { sim } = s;
+  const state = sim.ball.state;
+  const a = s.athlete('L', 1, { x: 0, z: 6 });
+  s.send(
+    { from: opts.from, to: opts.to, time: opts.T },
+    opts.third
+      ? { athlete: s.athlete('OH', 1, { x: 3, z: 3 }), kind: 'set', side: 1 }
+      : { athlete: null, kind: opts.offTheirBlock ? 'block' : 'spike', side: -1, recycle: opts.recycle },
+  );
+  // the dive goes off from a run: the body is already moving that way when the ball is sent
+  const to = opts.diveAt ?? opts.to;
+  const dx = to.x - a.pos.x;
+  const dz = to.z - a.pos.z;
+  const d = Math.hypot(dx, dz);
+  if (opts.dive) a.vel.set((dx / d) * (opts.run ?? 0), 0, (dz / d) * (opts.run ?? 0));
+  // a step moves the clock first and the ball last: a brain sees the ball arrive at T + DT on the clock it reads
+  const press = sim.simTime + DT + opts.T - opts.lead;
+  let pressed = false;
+  // the defender's brain: it dives at once or puts the pass up on time, and plays the ball as every
+  // AI brain does (the contact system is asked each step, before the bodies and the ball move)
+  const defender: Brain = {
+    athlete: a,
+    step: (_dt, g) => {
+      if (!pressed && (opts.dive || g.simTime >= press - 1e-9)) {
+        pressed = true;
+        if (opts.dive) a.dive(yawFromDir(dx, dz));
+        const act = a.startAction('pass', g.simTime);
+        if (!opts.dive) act.form = opts.form ?? 'platform';
       }
-      return predictor;
-    },
-    hit(v: V3, w: V3) {
-      Object.assign(state.v, v);
-      Object.assign(state.w, w);
-      version++;
+      if (a.action?.kind === 'pass' && !a.action.resolved) g.contact.tryPass(a, a.action);
     },
   };
-  const events: ContactEvent[] = [];
-  const host = {
-    ball: ball as any,
-    simTime: 0,
-    env: { netTop: COURT.netHeightMen },
-    aimAssist: () => 0,
-    aimTargetFor: (_a: Athlete, out: THREE.Vector3) => out.set(1, 0.105, -6),
-    emitContact: (e: ContactEvent) => events.push(e),
-    rand: opts.rand ?? (() => 0.5),
-    passTarget: () => opts.target ?? TARGET,
-    setOptions: () => [],
-    canServe: () => true,
-  } satisfies ContactHost;
-  const cs = new ContactSystem(host);
-  const a = new Athlete('L', 1);
-  a.place(0, 6, 0);
-  if (opts.third) ball.lastTouch = { athlete: new Athlete('OH', 1), kind: 'set', t: -1, side: 1 };
-  solveFixedTime(opts.from, opts.to, opts.T, { x: 0, y: 0, z: 0 }, state.v);
-  Object.assign(state.p, opts.from);
-  version++;
-  if (opts.dive) {
-    const at = opts.diveAt ?? opts.to;
-    const dx = at.x - a.pos.x;
-    const dz = at.z - a.pos.z;
-    const d = Math.hypot(dx, dz);
-    a.vel.set((dx / d) * (opts.run ?? 0), 0, (dz / d) * (opts.run ?? 0));
-    a.dive(yawFromDir(dx, dz));
-    a.startAction('pass', 0);
-  }
-  let act = a.action;
-  for (let i = 0; i < SIM.hz * 2 && !events.length; i++) {
-    if (!act && host.simTime >= opts.T - opts.lead - 1e-9) {
-      act = a.startAction('pass', host.simTime);
-      act.form = opts.form ?? 'platform';
-    }
-    if (act) cs.tryPass(a, act);
-    host.simTime += DT;
-    a.step(DT, host.simTime);
-    stepBall(state, DT, host.env);
-  }
-  const e = events[0];
+  sim.setBrain(a, defender);
+  s.run(2, () => s.touches.length > 0);
+  const e = s.touches[0]?.ev;
   const v = { ...state.v };
   const at = { ...state.p };
   // where it goes from there: how high above the contact it peaks, and whether it clears the net
@@ -113,7 +103,7 @@ function play(opts: {
   let over = false;
   for (let i = 0; i < SIM.hz * 4 && e && !state.rest; i++) {
     const z0 = state.p.z;
-    stepBall(state, DT, host.env);
+    s.step();
     top = Math.max(top, state.p.y);
     if (z0 > 0 && state.p.z <= 0) {
       over = state.p.y > COURT.netHeightMen + BALL.radius && Math.abs(state.p.x) < COURT.halfWidth;
@@ -186,6 +176,13 @@ const spread = (xs: number[]) => Math.sqrt(mean(xs.map((x) => (x - mean(xs)) ** 
 const OVER = { x: 0, y: 0.5, z: -6.5, apex: 5.2 };
 
 describe('a dive (PLAYER.dive*, CONTACT.diveOut)', () => {
+  it('the reach these tests place the ball by is the reach the contact system gives a diving defender', () => {
+    // (`ASSIST_PASS_REACH` is a copy of an inline number: when it moves, or gets a name, read it from there)
+    expect(contactSource).toContain(
+      `CONTACT.passRadius) + assist * ${ASSIST_PASS_REACH} + hard * CONTACT.digLunge + (diving ? CONTACT.diveOut.reach : 0);`,
+    );
+  });
+
   it('slides along the floor: from a sprint about 3 m on the chest, and the diver is up only once the slide has stopped', () => {
     const slide = (run: number) => {
       const a = new Athlete('L', 1);
@@ -216,9 +213,8 @@ describe('a dive (PLAYER.dive*, CONTACT.diveOut)', () => {
     // a dive sideways (to our left, -x) at a roll shot coming down off the net
     const T = PLAYER.diveDown * 1.5;
     const hands = handsAt(T, -1, 0);
-    const r = CONTACT.passRadius + CONTACT.diveOut.reach;
+    const r = DIVE_REACH;
     const touch = (edge: number, seed: number) => {
-      const rng = new Rng(seed);
       const to = { x: hands.x, y: hands.y, z: hands.z + edge * r };
       return play({
         from: { x: to.x + 0.5, y: 2.6, z: to.z - 2.5 },
@@ -227,7 +223,7 @@ describe('a dive (PLAYER.dive*, CONTACT.diveOut)', () => {
         lead: 0,
         dive: true,
         diveAt: { x: -3, z: 6 },
-        rand: () => rng.next(),
+        seed,
       });
     };
     const mid = Array.from({ length: 30 }, (_, i) => touch(0, i + 1));
@@ -252,7 +248,7 @@ describe('a dive (PLAYER.dive*, CONTACT.diveOut)', () => {
   const diveAt = (edge: number, target?: { x: number; y: number; z: number; apex: number }) => {
     const T = PLAYER.diveDown * 1.5;
     const hands = handsAt(T, -1, 0);
-    const to = { x: hands.x, y: hands.y, z: hands.z + edge * (CONTACT.passRadius + CONTACT.diveOut.reach) };
+    const to = { x: hands.x, y: hands.y, z: hands.z + edge * DIVE_REACH };
     return play({ from: { x: to.x + 0.5, y: 2.6, z: to.z - 2.5 }, to, T, lead: 0, dive: true, diveAt: { x: -3, z: 6 }, target });
   };
 
@@ -357,62 +353,35 @@ describe('getting it over on three (CONTACT.passPower, CONTACT.overControl)', ()
  * -1) comes into the hands at `speed` m/s. Returns the block's contact and the ball's velocity off it.
  */
 function blockAt(speed: number, opts: { at?: number; off?: number; user?: boolean } = {}) {
-  const state = makeBall();
-  const hitter = new Athlete('OH', -1);
-  hitter.isUser = opts.user ?? false;
-  const ball = {
-    state,
-    active: true,
-    lastTouch: { athlete: hitter, kind: 'spike', t: 0, side: -1 } as any,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    speed: () => Math.hypot(state.v.x, state.v.y, state.v.z),
-    ensurePrediction: () => null as any,
-    hit(v: V3, w: V3) {
-      Object.assign(state.v, v);
-      Object.assign(state.w, w);
-    },
-  };
-  const events: ContactEvent[] = [];
-  const host = {
-    ball: ball as any,
-    simTime: 0,
-    env: { netTop: COURT.netHeightMen },
-    aimAssist: () => 0,
-    aimTargetFor: (_a: Athlete, out: THREE.Vector3) => out.set(0, 0, 0),
-    emitContact: (e: ContactEvent) => events.push(e),
-    rand: () => 0.5,
-    passTarget: () => TARGET,
-    setOptions: () => [],
-    canServe: () => true,
-  } satisfies ContactHost;
-  const cs = new ContactSystem(host);
-  const a = new Athlete('MB', 1);
-  a.place(opts.at ?? 0, 0.45, 0);
+  // fixed dice: the block is graded on its timing and on where the ball meets the hands alone, with
+  // the spread of the dice taken out
+  const s = scene({ dice: { roll: 0.5 } });
+  const { sim } = s;
+  // (their hitter stands by the net; your spike is your seat's athlete's)
+  const hitter = s.athlete('OH', -1, { x: opts.at ?? 0, z: -1 }, { user: opts.user });
+  const a = s.athlete('MB', 1, { x: opts.at ?? 0, z: 0.45 });
+  // the blocker's own brain, told only to block: it holds the hands to the ball (the contact system
+  // is asked each step, before the bodies and the ball move), and the jump is this test's
+  const hands = new BlockerBrain(a, a.pos.x);
+  hands.active = false;
+  sim.setBrain(a, hands);
   a.jumpPress();
   let act: ReturnType<Athlete['startAction']> | null = null;
   let fired = false;
-  for (let i = 0; i < SIM.hz * 2 && !events.length; i++) {
-    host.simTime += DT;
+  for (let i = 0; i < SIM.hz * 2 && !s.touches.length; i++) {
     if (a.state === 'load' && a.loadT >= PLAYER.loadMin) a.jumpRelease();
-    a.step(DT, host.simTime);
-    if (a.state === 'air' && !act) act = a.startAction('block', host.simTime);
+    s.step();
+    if (a.state === 'air' && !act) act = a.startAction('block', sim.simTime);
     // at the top of the jump their attack arrives, a little down, into the middle of the hands
     if (act && !fired && a.vel.y <= 0) {
       fired = true;
-      Object.assign(state.p, { x: a.pos.x + (opts.off ?? 0), y: a.pos.y + a.standReach - 0.15, z: -0.25 });
-      Object.assign(state.v, { x: 0, y: -0.15 * speed, z: speed });
-    }
-    if (fired) {
-      cs.tryBlock(a, act!);
-      stepBall(state, DT, host.env);
+      s.send(
+        { from: { x: a.pos.x + (opts.off ?? 0), y: a.pos.y + a.standReach - 0.15, z: -0.25 }, v: { x: 0, y: -0.15 * speed, z: speed } },
+        { athlete: hitter, kind: 'spike', side: -1 },
+      );
     }
   }
-  return { e: events[0], v: { ...state.v } };
+  return { e: s.touches[0]?.ev, v: { ...sim.ball.vel } };
 }
 
 describe('the ball off the block', () => {
@@ -505,7 +474,7 @@ describe('the ball off the block', () => {
   });
 
   it('a coverer has less of the ball the harder it comes, off a late platform, off its edge, on the move, reaching', () => {
-    const cs = new ContactSystem({} as ContactHost);
+    const cs = scene().sim.contact;
     const C = CONTACT.covered;
     const best = cs.coverControl(C.easy, 'Good', 0, 0, 'platform');
     expect(best).toBeCloseTo(C.best);

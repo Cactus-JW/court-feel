@@ -67,8 +67,24 @@ Ask these in order and stop at the first yes.
   other in a circle, on physics importing anything but `config`, on a brain
   importing `Game`, on a simulation file that touches the DOM or builds scene
   objects, on a clock or dice in the simulation (`Math.random`, `Date.now`,
-  `performance.now`), on a test that fakes the game, and on a new folder with no
+  `performance.now`), on a test that fakes the game with a cast, on a test that
+  writes a stand-in for the game by hand (below), and on a new folder with no
   layer.
+- **A test of the play is built on a real simulation** (`tests/scene.ts`). The
+  scene builder puts athletes, seats, teams and a ball in a real `Simulation`
+  and steps it in the game's own order, the invariants checked at every step.
+  The architecture test fails on four shapes of a stand-in, read from a test's
+  text: a ball of its own (anything that defines `ensurePrediction`), a host for
+  the contact system (any use of the `ContactHost` type), a contact system of
+  its own (`new ContactSystem`), and a stub written over the simulation's dice
+  or its contact system (an assignment to a member of `rng` or `contact`, apart
+  from the state the game leaves there). The last is `tests/scene.ts`'s alone:
+  its two knobs, fixed dice and "no touches", are the only things a test may
+  hold still, each use with a comment saying what it isolates. The scan reads
+  text, so it does not see a stub written through another name
+  (`const cs = sim.contact; cs.tryPass = ...`), a stub on a brain or a team, a
+  ball faked with no `ensurePrediction` at all, or a host faked through
+  `as any`. Those are for review, and the last for lint.
 - **The autopilots roll their own dice** (`tests/architecture.autopilot.test.ts`).
   An autopilot stands in for a player, and a player's hands are not part of the
   simulation: it fails when one reads the simulation's random stream.
@@ -302,6 +318,10 @@ What it cannot tell:
 
 A rule that lives in prose only is the one most likely to be broken. List it
 here with the layer it should move to, and move it up this page when it gets a
-check. The last one listed, that a changed mechanic comes with a test that
-states the real-court fact, is held by the gate above as far as a check can
-hold it.
+check. The last one that was listed alone, that a changed mechanic comes with a
+test that states the real-court fact, is held by the gate above as far as a
+check can hold it.
+
+| Rule | Where it should go |
+|---|---|
+| A test holds nothing of the game still but the scene builder's two knobs | The architecture test sees a stub on `rng` or `contact` by name. A stub through another name, or on a brain or a team, is seen by review only. `as any` in tests wants a lint rule |

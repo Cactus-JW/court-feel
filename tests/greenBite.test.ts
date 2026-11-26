@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { AI, BALL, CONTACT, COURT, SIM } from '../src/config';
+import { AI, BALL, CONTACT, COURT, SIM, TIMING } from '../src/config';
 import { bendFor, planToPoint, runDir, simulateApproach } from '../src/game/approach';
 import { decoyFor, greenFools, userGreen } from '../src/ai/greenBite';
 import { HitterBrain } from '../src/ai/hitter';
@@ -8,77 +8,72 @@ import { MiddleBlocker } from '../src/ai/middle';
 import { Athlete } from '../src/game/athlete';
 import type { Touch } from '../src/game/ballEntity';
 import { applyCalls, syncRuns, type CallHitters } from '../src/game/callRuns';
-import { blockHands, ContactSystem, type ContactHost, type SetResult } from '../src/game/contact';
-import type { Game } from '../src/app/game';
+import { blockHands, type SetResult } from '../src/game/contact';
 import { attackHeight, laneFor, LANES, QUICK, quickSpot, SETTER_PLAYS, SETTER_TARGET } from '../src/game/plays';
 import { SetterCalls } from '../src/game/setterCalls';
-import { makeBall, stepBall, type BallEnv, type V3 } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
-import { netClearance, solveApex, solveFixedTime, solveSpeedToFloor } from '../src/physics/solve';
+import { gradeRelease, setPips, setQuality, setTouch, setWindow } from '../src/game/setTiming';
+import type { BallEnv, V3 } from '../src/physics/ball';
+import { netClearance, solveSpeedToFloor } from '../src/physics/solve';
+import { DT, scene } from './scene';
 
-const DT = 1 / SIM.hz;
 const env: BallEnv = { netTop: COURT.netHeightMen };
 
-/** a stand-in Game: the ball, the clock, a flat rng, everyone on court, and the user's last set (to `setTo`, met at `target`) */
-function stage(set: Touch, green: boolean, athletes: Athlete[], setTo: Athlete | null, target: V3) {
-  const state = makeBall();
-  const predictor = new BallPredictor(DT, SIM.predictHorizon);
-  let version = 0;
-  let predicted = -1;
-  const ball = {
-    state,
-    active: true,
-    lastTouch: set as Touch | null,
-    get pos() {
-      return state.p;
-    },
-    get vel() {
-      return state.v;
-    },
-    ensurePrediction(e: BallEnv, t: number) {
-      if (predicted !== version) {
-        predictor.compute(state, e, t);
-        predicted = version;
-      }
-      return predictor;
-    },
-    touch(from: V3, v: V3) {
-      Object.assign(state.p, from);
-      Object.assign(state.v, v);
-      state.rest = false;
-      version++;
-    },
+/**
+ * The user's set as the contact system keeps it (`ContactSystem.lastSetResult`): a high ball in
+ * system off a clean touch, pushed by `athlete` at `t` on the top of the bar (green) or half way
+ * out to the edge of a good one
+ */
+function setResult(athlete: Athlete, t: number, green: boolean): SetResult {
+  const touch = setTouch(TIMING.setFeetReady, 0, 0, 1, { window: 1, fast: false, outOfSystem: false }, 'easy');
+  const win = setWindow(touch, 'easy');
+  const err = green ? 0 : (win.green + win.good) / 2;
+  const g = gradeRelease(err, win);
+  return {
+    athlete,
+    t,
+    grade: g.grade,
+    green: g.grade === 'Perfect',
+    quality: setQuality(g),
+    err,
+    window: win.green,
+    good: win.good,
+    pips: setPips(touch, true),
+    held: false,
   };
-  const g = {
-    ball,
-    env,
-    simTime: 0,
-    athletes,
-    rng: { next: () => 0.99, gauss: () => 0 },
-    contact: {
-      lastSetResult: { athlete: set.athlete, t: set.t, green },
-      lastSet: { hitter: setTo, target },
-      tryBlock: () => false,
-    },
-  };
-  return { g, ball };
+}
+
+/**
+ * A real simulation with everyone on court and the user's last set as the contact system keeps it:
+ * graded `green` or not, to `setTo`, met at `target`, peaking at `apex` (a quick's top is where it is met)
+ */
+function stage(set: Touch, green: boolean, athletes: Athlete[], setTo: Athlete | null, target: V3, apex = target.y) {
+  const s = scene({
+    // fixed dice: their middle reacts in its usual time and reads the set true, so where it goes and when is the set and the hitters alone
+    dice: { roll: 0.99 },
+    // nobody's hands meet the ball: the set flies on unhit, so the tests watch where their middle goes, not what its block does to the ball
+    touches: 'none',
+  });
+  s.sim.athletes.push(...athletes);
+  s.sim.contact.lastSetResult = setResult(set.athlete!, set.t, green);
+  s.sim.contact.lastSet = { target, apex, hitter: setTo, label: 'Set' };
+  return { s, g: s.sim, ball: s.sim.ball };
 }
 
 /** our setter's ball to `lane` (met at 3.2 m) is in the air (their middle at `theirX`) */
 function laneSet(green: boolean, others: Athlete[], lane: { x: number; z: number; apexAbove: number }, theirX = 0) {
+  const from = { x: SETTER_TARGET.x, y: 2.5, z: SETTER_TARGET.z };
   const setter = new Athlete('S', 1);
+  setter.place(from.x, from.z, 0);
   const hitter = new Athlete('OH', 1);
   hitter.place(lane.x, lane.z + 2.5, 0);
   const theirs = new Athlete('MB', -1);
   theirs.place(theirX, -0.5, Math.PI);
   const set: Touch = { athlete: setter, kind: 'set', t: 0, side: 1 };
   const target = { x: lane.x, y: 3.2, z: lane.z };
-  const { g, ball } = stage(set, green, [setter, hitter, theirs, ...others], hitter, target);
-  const from = { x: SETTER_TARGET.x, y: 2.5, z: SETTER_TARGET.z };
-  const out = { x: 0, y: 0, z: 0 };
-  solveApex(from, target, 3.2 + lane.apexAbove, { x: 0, y: 0, z: 0 }, out);
-  ball.touch(from, out);
-  return { g, ball, theirs, set, hitter };
+  const apex = 3.2 + lane.apexAbove;
+  const { s, g, ball } = stage(set, green, [setter, hitter, theirs, ...others], hitter, target, apex);
+  s.send({ from, to: target, apex }, set);
+  return { s, g, ball, theirs, set, hitter };
 }
 
 /** our setter's high ball to the outside is in the air (their middle at `theirX`) */
@@ -95,8 +90,9 @@ const QUICK_T = 0.3;
 
 /** our setter's quick, `inFront` m along the net in front of them (the 1; the push at 1.55), is in the air, our middle up for it (their middle at `theirX`) */
 function insideSet(green: boolean, inFront: number, theirX: number) {
-  const setter = new Athlete('S', 1);
   const from = { x: SETTER_TARGET.x, y: 2.45, z: SETTER_TARGET.z };
+  const setter = new Athlete('S', 1);
+  setter.place(from.x, from.z, 0);
   const spot = quickSpot(from.x, 1, inFront);
   const mb = new Athlete('MB', 1);
   mb.place(spot.x, spot.z + 0.3, 0);
@@ -105,11 +101,9 @@ function insideSet(green: boolean, inFront: number, theirX: number) {
   theirs.place(theirX, -0.5, Math.PI);
   const set: Touch = { athlete: setter, kind: 'set', t: 0, side: 1 };
   const target = { x: spot.x, y: 3.0, z: spot.z };
-  const { g, ball } = stage(set, green, [setter, mb, theirs], mb, target);
-  const out = { x: 0, y: 0, z: 0 };
-  solveFixedTime(from, target, QUICK_T, { x: 0, y: 0, z: 0 }, out);
-  ball.touch(from, out);
-  return { g, ball, theirs, set, mb, spot };
+  const { s, g, ball } = stage(set, green, [setter, mb, theirs], mb, target);
+  s.send({ from, to: target, time: QUICK_T }, set);
+  return { s, g, ball, theirs, set, mb, spot };
 }
 
 /** our middle up for the quick as the set leaves the hands */
@@ -123,18 +117,18 @@ function quickHitter(): Athlete {
 describe('your green set: their middle goes with a hitter you did not set', () => {
   it('a green set is the user setter’s last set, graded green', () => {
     const { g, set } = pinSet(true, []);
-    expect(userGreen(g as unknown as Game, set)).toBe(true);
-    expect(userGreen(pinSet(false, []).g as unknown as Game, set)).toBe(false);
+    expect(userGreen(g, set)).toBe(true);
+    expect(userGreen(pinSet(false, []).g, set)).toBe(false);
   });
   it('it bites on the hitter who is up (the quick), never on the one you set', () => {
     const quick = quickHitter();
     const { g, theirs, set, hitter } = pinSet(true, [quick]);
-    expect(decoyFor(g as unknown as Game, theirs, set)).toBe(quick);
+    expect(decoyFor(g, theirs, set)).toBe(quick);
     // the one you set up too, right in front of their middle (nearer than the quick): still the quick
     hitter.place(theirs.pos.x, 1.0, 0);
     hitter.jumpPress();
     expect(Math.abs(hitter.pos.x - theirs.pos.x)).toBeLessThan(Math.abs(quick.pos.x - theirs.pos.x));
-    expect(decoyFor(g as unknown as Game, theirs, set)).toBe(quick);
+    expect(decoyFor(g, theirs, set)).toBe(quick);
   });
   it('a hitter up for a quick comes before one still running in, even a nearer one', () => {
     const quick = quickHitter();
@@ -144,13 +138,13 @@ describe('your green set: their middle goes with a hitter you did not set', () =
     runner.place(0.4, 3.0, 0);
     runner.vel.set(0, 0, -4.5);
     const { g, theirs, set } = pinSet(true, [quick, runner]);
-    expect(decoyFor(g as unknown as Game, theirs, set)).toBe(quick);
+    expect(decoyFor(g, theirs, set)).toBe(quick);
   });
   it('with nobody else going there is nobody to bite on', () => {
     const waiting = new Athlete('OPP', 1);
     waiting.place(4.7, 3.4, 0);
     const { g, theirs, set } = pinSet(true, [waiting]);
-    expect(decoyFor(g as unknown as Game, theirs, set)).toBeNull();
+    expect(decoyFor(g, theirs, set)).toBeNull();
   });
 
   /**
@@ -158,13 +152,9 @@ describe('your green set: their middle goes with a hitter you did not set', () =
    * and where, how far it went either way, where it and its hands are when our hitter meets the
    * ball (the ball falling through 3.2 m, or `until` s), and where its hands are a moment later
    */
-  function watch(
-    s: { g: ReturnType<typeof stage>['g']; ball: ReturnType<typeof stage>['ball']; theirs: Athlete },
-    hitters: Athlete[],
-    until = 1.6,
-  ) {
-    const { g, ball, theirs } = s;
-    const brain = new MiddleBlocker(theirs, 0, () => hitters[0] ?? null);
+  function watch(on: ReturnType<typeof stage> & { theirs: Athlete }, hitters: Athlete[], until = 1.6) {
+    const { s, g, ball, theirs } = on;
+    g.setBrain(theirs, new MiddleBlocker(theirs, 0, () => hitters[0] ?? null));
     const x0 = theirs.pos.x;
     const jumps: { t: number; x: number }[] = [];
     let maxX = x0;
@@ -172,14 +162,8 @@ describe('your green set: their middle goes with a hitter you did not set', () =
     let was = 'ground';
     let hit: { x: number; hands: number; vx: number; vy: number; state: string; t: number } | null = null;
     for (let i = 0; i < SIM.hz * 2.2; i++) {
-      g.simTime += DT;
-      stepBall(ball.state, DT, env);
-      for (const h of hitters) {
-        if (h.state === 'load' && h.loadT > 0.2) h.jumpRelease();
-        h.step(DT, g.simTime);
-      }
-      brain.step(DT, g as unknown as Game);
-      theirs.step(DT, g.simTime);
+      for (const h of hitters) if (h.state === 'load' && h.loadT > 0.2) h.jumpRelease();
+      s.step();
       if (theirs.state === 'load' && was !== 'load') jumps.push({ t: g.simTime, x: theirs.pos.x });
       was = theirs.state;
       if (!hit) {
@@ -196,8 +180,9 @@ describe('your green set: their middle goes with a hitter you did not set', () =
           t: g.simTime,
         };
       }
-      // (and a moment after the hit: where its hands went)
-      if (hit && g.simTime >= hit.t + 0.25 - 1e-9) break;
+      // (and a moment after the hit: where its hands went. The set is sent between two steps, so
+      // their middle first sees it a step later and all it times off the ball runs that step behind)
+      if (hit && g.simTime >= hit.t + 0.25 + DT - 1e-9) break;
     }
     const h = hit!;
     return {
@@ -313,16 +298,17 @@ describe('your green set: their middle goes with a hitter you did not set', () =
 });
 
 describe('your green set: the hitter bounces it', () => {
-  const green = { green: true, grade: 'Perfect', quality: 1 } as unknown as SetResult;
+  const green = setResult(new Athlete('S', 1), 0, true);
   /** the outside, in the air at the pin, choosing a shot off your green set against `blockers` */
   function shot(blockers: Athlete[]) {
-    const oh = new Athlete('OH', 1);
-    oh.place(LANES.OH.x, LANES.OH.z + 0.2, 0);
+    // fixed dice: every roll in the middle and no spread, so the shot is the green set and the block in front of it, never the hitter's whim
+    const s = scene({ dice: { roll: 0.5 } });
+    const oh = s.athlete('OH', 1, { x: LANES.OH.x, z: LANES.OH.z + 0.2, yaw: 0 });
+    s.sim.athletes.push(...blockers);
     const brain = new HitterBrain(oh, laneFor('OH', 1));
     brain.blockers = () => blockers;
-    const g = { env, simTime: 0, rng: { next: () => 0.5, gauss: () => 0 } };
     const from = { x: LANES.OH.x, y: attackHeight(oh), z: LANES.OH.z };
-    const aim = brain.chooseAim(g as unknown as Game, from.x, from, 0, green);
+    const aim = brain.chooseAim(s.sim, from.x, from, 0, green);
     // fly it at full speed
     const out = { x: 0, y: 0, z: 0 };
     const w = { x: 0, y: 0, z: 0 };
@@ -380,14 +366,15 @@ describe('out of system: a high ball to a pin fools nobody', () => {
   it('their middle reads your green high ball to a pin off a pass out of system, and is fooled by the same set in system', () => {
     const { g, set } = pinSet(true, []);
     const lane = laneFor('OH', 1);
-    const contact = g.contact as { lastSet: object };
-    contact.lastSet = { hitter: null, target: { x: lane.x, y: 3.2, z: lane.z }, outOfSystem: true };
-    expect(greenFools(g as unknown as Game, set)).toBe(false);
-    contact.lastSet = { hitter: null, target: { x: lane.x, y: 3.2, z: lane.z } };
-    expect(greenFools(g as unknown as Game, set)).toBe(true);
+    const contact = g.contact;
+    const high = { hitter: null, apex: 3.2 + lane.apexAbove, label: 'High' };
+    contact.lastSet = { ...high, target: { x: lane.x, y: 3.2, z: lane.z }, outOfSystem: true };
+    expect(greenFools(g, set)).toBe(false);
+    contact.lastSet = { ...high, target: { x: lane.x, y: 3.2, z: lane.z } };
+    expect(greenFools(g, set)).toBe(true);
     // off the net to the pipe, in the middle of the court, it still has to guess
-    contact.lastSet = { hitter: null, target: { x: LANES.L.x, y: 3.2, z: LANES.L.z }, outOfSystem: true };
-    expect(greenFools(g as unknown as Game, set)).toBe(true);
+    contact.lastSet = { ...high, target: { x: LANES.L.x, y: 3.2, z: LANES.L.z }, outOfSystem: true };
+    expect(greenFools(g, set)).toBe(true);
   });
 
   /**
@@ -395,32 +382,24 @@ describe('out of system: a high ball to a pin fools nobody', () => {
    * going up), meets a hard spike in the middle of its hands
    */
   function block(green: boolean, late = false) {
-    const b = new Athlete('MB', -1);
-    b.place(0, -0.4, Math.PI);
+    // fixed dice: at their kindest to the block, so what comes off the hands is the block's timing and the set, not luck
+    const s = scene({ dice: { roll: 0 } });
+    const b = s.athlete('MB', -1, { x: 0, z: -0.4, yaw: Math.PI }, { brain: (a) => new MiddleBlocker(a, 0, () => null) });
+    const hitter = s.athlete('OH', 1, { x: 0, z: 1 });
+    // up, the hands going up with the jump (as its brain does it, off a full plant)
     b.jumpPress();
-    let t = 0;
-    const there = () => b.state === 'air' && (late ? b.pos.y > 0.05 : b.vel.y <= 0.4);
-    for (let i = 0; i < SIM.hz && !there(); i++) b.step(DT, (t += DT));
+    const act = b.startAction('block', s.sim.simTime);
+    b.airIntent = 'block';
+    s.run(1, () => b.state === 'air' && (late ? b.pos.y > 0.05 : b.vel.y <= 0.4));
     const hands = blockHands(b);
-    const state = makeBall();
-    Object.assign(state.p, { x: hands.x, y: hands.top - 0.12, z: -0.05 });
-    Object.assign(state.v, { x: 0, y: -5, z: -21 });
-    state.rest = false;
-    const ball = {
-      state,
-      active: true,
-      pos: state.p,
-      vel: state.v,
-      lastTouch: { athlete: new Athlete('OH', 1), kind: 'spike', t: 0, side: 1, green } as Touch,
-      hit(v: V3) {
-        Object.assign(state.v, v);
-      },
-    };
-    // (the dice at their kindest to the block)
-    const host = { ball, simTime: t, env, aimAssist: () => 0, rand: () => 0, emitContact: () => {} };
-    const act = { kind: 'block', t0: t - 1, note: '', contactPoint: new THREE.Vector3() };
-    const touched = new ContactSystem(host as unknown as ContactHost).tryBlock(b, act as never);
-    return { touched, note: act.note, vz: state.v.z };
+    s.send(
+      { from: { x: hands.x, y: hands.top - 0.12, z: -0.05 }, v: { x: 0, y: -5, z: -21 } },
+      { athlete: hitter, kind: 'spike', side: 1, green },
+    );
+    // its brain has its hands play the ball
+    s.step();
+    const touched = s.touches.some((c) => c.ev.athlete === b && c.ev.kind === 'block');
+    return { touched, note: act.note, vz: s.sim.ball.vel.z };
   }
   it('a block can touch an attack off your green set, not stuff it: it comes off the hands soft, into their court', () => {
     const usual = block(false);

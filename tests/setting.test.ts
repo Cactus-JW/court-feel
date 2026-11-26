@@ -3,18 +3,16 @@ import * as THREE from 'three';
 import { AI, ASSIST, BALL, CONTACT, COURT, SET_LEVEL_IDS, SET_LEVELS, SIM, TIMING, type SetLevel } from '../src/config';
 import { Rng } from '../src/core/mathx';
 import { Athlete } from '../src/game/athlete';
-import { ContactSystem, type ContactEvent, type ContactHost, type SetOption, type SetPreview } from '../src/game/contact';
+import type { ContactEvent, SetOption, SetPreview } from '../src/game/contact';
 import { D_PLAY, isQuick, needsGoodPass, SETTER_PLAYS, SETTER_SPOT } from '../src/game/plays';
 import { callSheet, dumpOption } from '../src/game/callRuns';
 import { COMBOS } from '../src/game/combos';
 import { clashes, SETTER_KEYS, SetterCalls, type SetPick, type SetterKey } from '../src/game/setterCalls';
 import { wheelSlice } from '../src/ui/playWheel';
 import { catchQuality, gradeRelease, setMiss, setShape, setTouch, setWindow, type SetShape } from '../src/game/setTiming';
-import { makeBall, stepBall, type BallState } from '../src/physics/ball';
-import { BallPredictor } from '../src/physics/predict';
 import { solveApex } from '../src/physics/solve';
+import { DT, scene } from './scene';
 
-const DT = 1 / SIM.hz;
 const ENV = { netTop: COURT.netHeightMen };
 
 /** a high ball from the setter's spot, standing, in system */
@@ -555,47 +553,17 @@ describe('the setter front row: the D and the dump', () => {
 });
 
 // ------------------------------------------------------------------ the set through the real contact system
-class FakeBall {
-  state: BallState = makeBall();
-  predictor = new BallPredictor(DT, SIM.predictHorizon);
-  version = 0;
-  private pv = -1;
-  lastTouch: unknown = null;
-  active = true;
-  get pos() {
-    return this.state.p;
-  }
-  get vel() {
-    return this.state.v;
-  }
-  speed() {
-    const v = this.state.v;
-    return Math.hypot(v.x, v.y, v.z);
-  }
-  ensurePrediction(env: { netTop: number }, t: number) {
-    if (this.pv !== this.version) {
-      this.predictor.compute(this.state, env, t);
-      this.pv = this.version;
-    }
-    return this.predictor;
-  }
-  hit(v: { x: number; y: number; z: number }, w: { x: number; y: number; z: number }) {
-    Object.assign(this.state.v, v);
-    Object.assign(this.state.w, w);
-    this.version++;
-  }
-}
-
 const OH_TARGET = { x: -4.05, y: 3.25, z: 0.9 };
 const OPP_TARGET = { x: 4.0, y: 3.34, z: 0.9 };
 
 /**
- * A pass dropping onto a home setter at their spot (the ball reaches the hands at T). RMB is
- * pressed at T + each of `presses` (default: at T, a clean catch); the release is `releaseAt` s
- * from the top of the bar (null: never), or `tapAt` s from T (a release before the catch).
- * `key` picks the hitter, `lookAt` is where the camera looks; `runFor` keeps the setter
- * shuffling until that long before T. Returns the set, where it came down at the hitter's
- * contact height, the press's action, and what the bar showed 0.2 s before the ball arrived (`pre`).
+ * A pass dropping onto a home setter at their spot, in a real simulation: the setter is the player
+ * (they have a seat) and the ball reaches the hands at T. RMB is pressed at T + each of `presses`
+ * (default: at T, a clean catch); the release is `releaseAt` s from the top of the bar (null:
+ * never), or `tapAt` s from T (a release before the catch). `key` picks the hitter, `lookAt` is
+ * where the camera looks; `runFor` keeps the setter shuffling until that long before T. Returns the
+ * set, where it came down at the hitter's contact height, the press's action, and what the bar
+ * showed 0.2 s before the ball arrived (`pre`).
  */
 function setRep(o: {
   presses?: number[];
@@ -613,54 +581,41 @@ function setRep(o: {
   /** the set ring and bar are off: you set by feel */
   byFeel?: boolean;
 }) {
-  const ball = new FakeBall();
-  ball.lastTouch = { kind: 'pass', side: 1 };
-  const events: ContactEvent[] = [];
-  const rng = new Rng(o.seed ?? 3);
   const options: SetOption[] = [
     { target: OH_TARGET, apex: OH_TARGET.y + 1.65, hitter: null, label: 'OH High', key: 'OH', window: o.window },
     { target: OPP_TARGET, apex: OPP_TARGET.y + 1.55, hitter: null, label: 'OPP Back', key: 'OPP' },
   ];
+  const s = scene({
+    seed: o.seed ?? 3,
+    hooks: { setLevel: () => o.level ?? 'easy', setByFeel: () => o.byFeel ?? false },
+    drill: {
+      passTarget: () => ({ x: 1, y: 2.35, z: 0.9, apex: 4 }),
+      setOptions: () => options,
+      setPick: () => o.key ?? null,
+      canServe: () => false,
+    },
+  });
+  const { sim } = s;
+  const cs = sim.contact;
+  const ball = sim.ball;
+  // the player's setter, facing the outside (-x), as a setter stands
+  const a = s.athlete('S', 1, { x: SETTER_SPOT.x, z: SETTER_SPOT.z, yaw: Math.PI / 2 }, { user: true });
   if (o.dump) {
     const calls = new SetterCalls();
     calls.frontRow = true;
-    const s = new Athlete('S', 1);
-    s.place(SETTER_SPOT.x, SETTER_SPOT.z, Math.PI / 2);
-    options.push(dumpOption(calls, s, ENV.netTop)!);
+    options.push(dumpOption(calls, a, ENV.netTop)!);
   }
-  const host = {
-    ball: ball as unknown as ContactHost['ball'],
-    simTime: 0,
-    env: ENV,
-    aimAssist: () => 0,
-    aimTargetFor: (_a: Athlete, out: THREE.Vector3) => out,
-    emitContact: (e: ContactEvent) => events.push(e),
-    rand: () => rng.next(),
-    passTarget: () => ({ x: 1, y: 2.35, z: 0.9, apex: 4 }),
-    setOptions: () => options,
-    setPick: () => o.key ?? null,
-    setLevel: () => o.level ?? 'easy',
-    setByFeel: () => o.byFeel ?? false,
-    canServe: () => false,
-  } satisfies ContactHost;
-  const cs = new ContactSystem(host);
-  const a = new Athlete('S', 1);
-  a.isUser = true;
-  // facing the outside (-x), as a setter stands
-  a.place(SETTER_SPOT.x, SETTER_SPOT.z, Math.PI / 2);
+  // where the player looks is their seat's intent
   const look = o.lookAt === 'OPP' ? OPP_TARGET : OH_TARGET;
-  cs.userAimYaw = () => Math.atan2(-(look.x - a.pos.x), -(look.z - a.pos.z));
+  const seat = sim.seatOf(a)!;
   // the pass: through the hands point, coming down
   const P = cs.handsPoint(a, new THREE.Vector3());
   const from = { x: -1, y: 0.85, z: 6.4 };
   const v = { x: 0, y: 0, z: 0 };
-  const arc = solveApex(from, { x: P.x, y: P.y, z: P.z }, 4.4, { x: 0, y: 0, z: 0 }, v);
-  Object.assign(ball.state.p, from);
-  Object.assign(ball.state.v, v);
-  ball.version++;
-  const T = arc.T;
+  const T = solveApex(from, { x: P.x, y: P.y, z: P.z }, 4.4, { x: 0, y: 0, z: 0 }, v).T;
+  s.send({ from, v }, { athlete: null, kind: 'pass', side: 1 });
   const spot = cs.setSpot(a, { x: 0, y: 0, z: 0 });
-  const land = { ...ball.ensurePrediction(ENV, 0).land };
+  const land = { ...ball.ensurePrediction(sim.env, sim.simTime).land };
   const presses = (o.presses ?? [0]).map((p) => T + p);
   let set: ContactEvent | null = null;
   let setT = -1;
@@ -670,13 +625,13 @@ function setRep(o: {
   let pre: SetPreview | null = null;
   let crossY = -1;
   for (let i = 0; i < SIM.hz * 5; i++) {
-    host.simTime += DT;
-    const t = host.simTime;
+    // The player's hands act between two steps, as a frame's input does, and the step that follows
+    // plays them at `t`. A press and a release carry their own moment (a seat's `inputTime`).
+    const t = sim.simTime + DT;
     // shuffle on the spot (a few cm each way) until `runFor` before the ball arrives
     const running = o.runFor !== undefined && t < T - o.runFor;
     a.cmd = { moveX: running ? 0.5 * Math.sign(Math.sin(t * 12)) : 0, moveZ: 0, sprint: false, faceYaw: Math.PI / 2 };
-    a.step(DT, t);
-    if (!pre && t >= T - 0.2) pre = cs.setPreview(a);
+    seat.intent.yaw = Math.atan2(-(look.x - a.pos.x), -(look.z - a.pos.z));
     while (presses.length && t >= presses[0]) {
       // a press lands on the frame's time (exactly when asked, here)
       cs.pressSet(a, presses.shift()!);
@@ -696,20 +651,20 @@ function setRep(o: {
         act.releaseT = rel;
       }
     }
-    if (act && !act.resolved && act.kind === 'set') cs.trySet(a, act);
-    if (!set && events.length) {
-      set = events[0];
-      setT = t;
+    const zBefore = ball.pos.z;
+    s.step();
+    if (!pre && t >= T - 0.2) pre = cs.setPreview(a);
+    if (!set && s.touches.length) {
+      set = s.touches[0].ev;
+      setT = s.touches[0].t;
     }
-    const zBefore = ball.state.p.z;
-    stepBall(ball.state, DT, ENV);
-    if (set && crossY < 0 && zBefore > 0 && ball.state.p.z <= 0) crossY = ball.state.p.y;
+    if (set && crossY < 0 && zBefore > 0 && ball.pos.z <= 0) crossY = ball.pos.y;
     if (set) {
-      apex = Math.max(apex, ball.state.p.y);
+      apex = Math.max(apex, ball.pos.y);
       // down to the hitter's contact height (a dump: down to their floor; a lift: no set went, to the floor)
       const downTo = cs.lastSet?.target.y ?? 0;
-      if ((ball.state.v.y < 0 && ball.state.p.y <= downTo) || ball.state.p.y <= BALL.radius + 0.03) {
-        landed = new THREE.Vector3(ball.state.p.x, ball.state.p.y, ball.state.p.z);
+      if ((ball.vel.y < 0 && ball.pos.y <= downTo) || ball.pos.y <= BALL.radius + 0.03) {
+        landed = new THREE.Vector3(ball.pos.x, ball.pos.y, ball.pos.z);
         break;
       }
     }
@@ -724,7 +679,7 @@ function setRep(o: {
     act: pressAct,
     pre,
     crossY,
-    lastTouch: ball.lastTouch as { kind: string } | null,
+    lastTouch: ball.lastTouch,
     T,
     P,
     spot,

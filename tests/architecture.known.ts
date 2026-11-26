@@ -21,16 +21,10 @@ export const KNOWN_DOM: readonly string[] = [];
 export const KNOWN_SCENE: readonly string[] = [];
 
 /** tests that fake the game with a cast (to `Game`, or to the `AiHost` the brains see), because a real one cannot be built without a browser */
-export const KNOWN_FAKE_GAME: readonly string[] = [
-  'tests/greenBite.test.ts',
-  'tests/greenSet.test.ts',
-  'tests/jumpSet.test.ts',
-  'tests/middleBlock.test.ts',
-  'tests/serve.test.ts',
-  'tests/serveRun.ts',
-  'tests/setterCall.test.ts',
-  'tests/teamDefence.test.ts',
-];
+export const KNOWN_FAKE_GAME: readonly string[] = [];
+
+/** tests that hand-make a ball (an object with its own `ensurePrediction`) or cast a host for the contact system, when tests/scene.ts gives them a real one */
+export const KNOWN_HAND_MADE: readonly string[] = [];
 
 /** files in the layers that must be repeatable (physics, the simulation, the brains, the drills) that read a clock or roll dice of their own */
 export const KNOWN_CLOCK: readonly string[] = [];
