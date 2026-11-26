@@ -27,7 +27,6 @@ export const KNOWN_FAKE_GAME: readonly string[] = [
   'tests/jumpSet.test.ts',
   'tests/middleBlock.test.ts',
   'tests/serveRun.ts',
-  'tests/setterCall.test.ts',
   'tests/teamDefence.test.ts',
 ];
 
@@ -42,7 +41,6 @@ export const KNOWN_HAND_MADE: readonly string[] = [
   'tests/playerServe.test.ts',
   'tests/reception.test.ts',
   'tests/serveRun.ts',
-  'tests/setterCall.test.ts',
   'tests/setting.test.ts',
   'tests/teamDefence.test.ts',
 ];
