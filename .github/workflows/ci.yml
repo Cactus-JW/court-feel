@@ -25,8 +25,9 @@
 # scripts/brings-a-check.mjs). Every other type says of itself that nothing changes for the
 # player, and has to play exactly like the commit it goes into (trace:
 # scripts/same-play-as-base.mjs). The title and the description are read as they are when the
-# step runs, and an edit of either starts no run: after one, run the failed job again
-# (`gh run rerun <run id> --failed`). Each failure says so, with the run's id.
+# step runs, and an edit of either starts no run: after one, run the whole run again
+# (`gh run rerun <run id>`, not only the failed jobs: two jobs read the title, and each has to
+# judge the new one), or push a commit. Each failure says so, with the run's id.
 name: CI
 
 on:
@@ -102,7 +103,7 @@ jobs:
         # test that fails on the base branch's code (scripts/red-on-base.mjs), a trace run, or a line
         # `Unchecked: <reason>` in the description (scripts/brings-a-check.mjs, docs/verification.md). Any other
         # title is asked nothing. It runs when an earlier step failed too, so one run shows everything to fix,
-        # and it reads the title and the description as they are now: after editing them, run the job again.
+        # and it reads the title and the description as they are now: after editing them, run the whole run again.
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         run: node scripts/brings-a-check.mjs HEAD^1
         env:
@@ -168,7 +169,7 @@ jobs:
         # `npm run trace:compare`, for every pull request. A feat or a fix may play differently: what is printed
         # is its difference, and it does not fail. Every other type has to print `same play`
         # (scripts/same-play-as-base.mjs, docs/verification.md). The title is read as it is now: after a
-        # change of title, run the job again.
+        # change of title, run the whole run again, so that the check job reads the new title too.
         if: github.event_name == 'pull_request'
         run: |
           # the script that does the judging is the base branch's too, where it has one

@@ -13,7 +13,7 @@
 //     verify-court-feel feature file (or a trace run), or the same line.
 // Any other title is asked nothing here.
 
-// What a title's type is, and how a failure says to run the job again, are the same for every rule
+// What a title's type is, and how a failure says to run the run again, are the same for every rule
 // that reads a pull request (scripts/pull-request.rule.mjs, as pure as this file).
 import { rerunAfter, typeOf } from './pull-request.rule.mjs';
 
@@ -225,8 +225,10 @@ function described(body) {
 /**
  * How a failure ends: with the way to have the gate look again, which depends on what mends it.
  * A new test or trace run is a commit, and the push runs every job again. An edit to the description
- * starts no run (the workflow does not listen for one), so the job has to be run again by hand: the
- * command is given, with the id of the run the failure is printed in when there is one.
+ * starts no run (the workflow does not listen for one), so the run has to be run again by hand: the
+ * command is given, with the id of the run the failure is printed in when there is one. It is the
+ * command for the whole run, because whoever retitles the pull request on the way needs every job
+ * to read the new title (scripts/pull-request.rule.mjs, `rerunAfter`).
  */
 const AFTER_PUSH = 'then push the commit: that runs this again';
 const afterEdit = (runId) => rerunAfter(runId, 'a description');

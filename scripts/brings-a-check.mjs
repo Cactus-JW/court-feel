@@ -89,7 +89,7 @@ if (asksRedOnBase({ title: pr.title, paths, removed })) {
   );
 }
 
-// in CI a failure names this run in the command that runs the job again
+// in CI a failure names this run in the command that runs it again
 const verdict = decide({ title: pr.title, paths, removed, redOnBase: red, body: pr.body, runId: process.env.GITHUB_RUN_ID });
 /** `src/config.ts#AI` as a reader says it, and a long list cut short */
 const said = (files, most = 12) =>

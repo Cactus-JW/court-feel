@@ -7,11 +7,12 @@
 // comparison (scripts/title-has-a-type.mjs, scripts/same-play-as-base.mjs), and these decide.
 import { describe, expect, it } from 'vitest';
 import trace from '../scripts/trace.mjs?raw';
-import { MAY_DIFFER, PHRASES, TYPES, compared, outcomeOf, titled, typeOf } from '../scripts/pull-request.rule.mjs';
+import { MAY_DIFFER, PHRASES, TYPES, compared, outcomeOf, rerunAfter, titled, typeOf } from '../scripts/pull-request.rule.mjs';
 
 /** the id of the CI run a failure is printed in, and the pull request's number */
 const IN_CI = { runId: '45871704444', number: 144 };
-const RERUN = /run `gh run rerun 45871704444 --failed`: editing a title starts no run\.$/;
+const RERUN =
+  /run the whole run again, `gh run rerun 45871704444`, or push a commit: editing a title starts no run, and every job has to read it as it is now, not only the one that failed\.$/;
 
 describe('the type a title starts with', () => {
   it('is one of the eight AGENTS.md lists, before a colon, with or without an area', () => {
@@ -72,7 +73,7 @@ describe('a title starts with a known type', () => {
   it('outside CI the commands show where the number and the run id go', () => {
     const [failure] = titled({ title: 'Circle the block' }).failures;
     expect(failure).toMatch(/`gh pr edit <number> --title /);
-    expect(failure).toMatch(/`gh run rerun <run id> --failed`/);
+    expect(failure).toMatch(/`gh run rerun <run id>`/);
   });
 });
 
@@ -206,5 +207,44 @@ describe('only a feat or a fix may play differently from the branch it goes into
       expect(sentences.length, failure).toBeGreaterThanOrEqual(2);
       expect(sentences.length, failure).toBeLessThanOrEqual(3);
     }
+  });
+});
+
+// The title is read by two jobs: the title check and the gate in `check`, the comparison in
+// `trace`. A command that runs only the failed job again leaves the other one with the title it
+// read before the edit. A docs retitled feat would pass the comparison and never meet the gate; a
+// fix retitled docs would be asked nothing by the gate and keep the comparison's pass as a fix.
+describe('after a title is edited, every job judges the new title', () => {
+  const run = { runId: '45871704444', number: 153, base: '0696e3a' };
+  const WHOLE = /run the whole run again, `gh run rerun 45871704444`, or push a commit/;
+
+  it('a docs that is to be retitled feat: the failure of the comparison gives the command for the whole run, so the check job reads the feat too', () => {
+    const [failure] = compared({ title: 'docs: the readme says how fast the ball falls', outcome: 'differs', ...run }).failures;
+    expect(failure).toMatch(/retitle it with `gh pr edit 153 --title "feat: the readme says how fast the ball falls"`/);
+    expect(failure).toMatch(WHOLE);
+    expect(failure).toMatch(/every job has to read it as it is now, not only the one that failed\.$/);
+  });
+
+  it('a title that is to be given its type: the failure of the title check gives the command for the whole run', () => {
+    const [failure] = titled({ title: 'Block: the ball comes off the hands the way it met them', ...run }).failures;
+    expect(failure).toMatch(WHOLE);
+  });
+
+  it('no failure gives the command that runs only the failed jobs again', () => {
+    const failures = [
+      ...compared({ title: 'docs: the readme', outcome: 'differs', ...run }).failures,
+      ...compared({ title: 'Block: the hands', outcome: 'differs', ...run }).failures,
+      ...titled({ title: 'Block: the hands', ...run }).failures,
+      ...titled({ title: 'Block: the hands' }).failures,
+    ];
+    expect(failures).toHaveLength(4);
+    for (const failure of failures) expect(failure).not.toMatch(/--failed/);
+  });
+
+  it('someone who may not run a workflow again (a fork) is told the other way: push a commit', () => {
+    expect(rerunAfter('45871704444', 'a title')).toMatch(/, or push a commit: editing a title starts no run/);
+    expect(rerunAfter(undefined, 'a description')).toMatch(
+      /`gh run rerun <run id>`, or push a commit: editing a description starts no run/,
+    );
   });
 });

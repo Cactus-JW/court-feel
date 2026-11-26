@@ -27,12 +27,19 @@ export function typeOf(title) {
 const either = (words) => words.join(', ').replace(/, ([^,]*)$/, ' or $1');
 
 /**
- * How a failure that an edit on GitHub mends ends: with the command that runs the failed job
- * again. An edit of a title or a description starts no run (the workflow does not listen for one),
- * and the checks read both as they are when the job runs. `runId`: the run the failure is printed
- * in (`GITHUB_RUN_ID`), when there is one.
+ * How a failure that an edit on GitHub mends ends: with the command that runs the whole run again,
+ * or a push for someone who may not run one (a fork). An edit of a title or a description starts no
+ * run (the workflow does not listen for one), and the checks read both as they are when a job runs.
+ *
+ * The whole run, and not only the jobs that failed (`--failed`): the title is read by two jobs, the
+ * title check and the gate in `check`, the comparison in `trace`. Run again alone, the job that
+ * failed would judge the new title and the other would keep its verdict on the old one. A docs
+ * retitled feat would pass the comparison and never meet the gate. A fix retitled docs would be
+ * asked nothing by the gate, and keep the pass the comparison gave it as a fix.
+ * `runId`: the run the failure is printed in (`GITHUB_RUN_ID`), when there is one.
  */
-export const rerunAfter = (runId, edited) => `then run \`gh run rerun ${runId || '<run id>'} --failed\`: editing ${edited} starts no run`;
+export const rerunAfter = (runId, edited) =>
+  `then run the whole run again, \`gh run rerun ${runId || '<run id>'}\`, or push a commit: editing ${edited} starts no run, and every job has to read it as it is now, not only the one that failed`;
 /** how a failure that a commit mends ends: a push runs every job again */
 const AFTER_PUSH = 'then push the commit: that runs this again';
 

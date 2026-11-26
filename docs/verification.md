@@ -128,7 +128,8 @@ Ask these in order and stop at the first yes.
   `check` job): one of the eight in `AGENTS.md`. The comparison above and the
   gate below read the kind of change off the title, so a title with no type
   fails, with the command that retitles it. An edit of a title starts no run:
-  the failure gives the command that runs the job again. What it cannot tell:
+  the failure gives the command that runs the whole run again, since two jobs
+  read the title and each has to judge the new one. What it cannot tell:
   whether the type is the true one. A change to the play titled `chore` is
   caught by the comparison where a run reaches it, and by nothing where none
   does.
@@ -312,8 +313,8 @@ title, the changed paths, the tests that are red on the base and the
 description, and `tests/bringsACheck.test.ts` holds it case by case. Like the
 architecture rules, the gate that judges a pull request is the base branch's.
 Every failure says what to do and ends with how to have the gate look again: a
-push, when a test or a run mends it, or the command that runs the job again,
-when the description does (an edit to a description starts no run).
+push, when a test or a run mends it, or the command that runs the whole run
+again, when the description does (an edit to a description starts no run).
 
 What it cannot tell:
 
