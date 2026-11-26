@@ -5,6 +5,8 @@
 //   - every drill's bot makes its contacts, mostly Perfect; rallies produce points
 //   - spike-drill set calls take effect (each call sets its own play); the serve drill's three serves too
 //   - the Perfect-spike replay starts; touch controls drive the athlete
+//   - with nobody playing for the player: the feet step onto a set and the body goes up for it (and neither at
+//     their settings' 0 and off), and a player who is not back on their spot in time is put there with a dip
 //   - bad quick-start links and corrupted saved settings still load and play; menus are keyboard-usable;
 //     a crash leaves the crash screen in control of the keyboard and mouse
 //   - GPU resources (geometries, textures, shader programs) do not grow over a soak
@@ -431,6 +433,151 @@ for (const pos of ['OH', 'MB', 'OPP']) {
     serves[0]?.serveKmh < serves[1]?.serveKmh && serves[1]?.serveKmh < serves[2]?.serveKmh,
     'serve drill: the jump float is faster than the float, and the jump serve faster than both',
     serves.map((m) => m?.serveKmh),
+  );
+}
+
+// ---- what the game does for a person and not for an autopilot: the last steps onto a set, the jump set, the walk back
+// An autopilot says where its feet go outright, so none of this runs in a drill it plays. Here nobody
+// plays for the player: no autopilot, and real keys where there are any. These are the facts that hold
+// whatever the code looks like; that a refactor leaves them exactly as they were is the trace's to say
+// (the runs with a person's keys in scripts/trace.mjs).
+phase('keys');
+{
+  // The Setter Drill with the hands off everything, for half a minute. Every pass, as it comes down to the
+  // hands: how far it was from them as they stood when it left the passer (`from`, m), how far it is
+  // from them now (`at`, m), and whether the body is in the air. `moved`: the furthest the feet got
+  // from where they started (m). `offFloor`: frames the body was off the floor.
+  const handsOff = (settings) =>
+    page.evaluate((settings) => {
+      const g = window.__court;
+      const kept = { ...g.settings };
+      Object.assign(g.settings, { replays: false }, settings);
+      window.start('setter', 'S', false, null);
+      const me = g.me;
+      const start = { x: me.pos.x, z: me.pos.z };
+      const passes = [];
+      let stood = null;
+      let down = false;
+      let moved = 0;
+      let offFloor = 0;
+      // where the hands are: a little in front of the feet (HANDS_FWD, HANDS_UP in src/game/setJump.ts)
+      const hands = (feet) => ({ x: feet.x - Math.sin(me.yaw) * 0.14, z: feet.z - Math.cos(me.yaw) * 0.14 });
+      for (let f = 0; f < 30 * 60; f++) {
+        g.play(1 / 60);
+        const b = g.ball.state;
+        if (me.state !== 'ground') offFloor++;
+        moved = Math.max(moved, Math.hypot(me.pos.x - start.x, me.pos.z - start.z));
+        if (!g.mode.userSetsNext()) {
+          stood = null;
+          down = false;
+          continue;
+        }
+        stood ??= hands(me.pos);
+        if (down || b.v.y >= 0 || b.p.y > me.pos.y + me.height + 0.17) continue;
+        down = true;
+        const now = hands(me.pos);
+        passes.push({
+          from: +Math.hypot(b.p.x - stood.x, b.p.z - stood.z).toFixed(3),
+          at: +Math.hypot(b.p.x - now.x, b.p.z - now.z).toFixed(3),
+          air: me.state === 'air',
+        });
+      }
+      Object.assign(g.settings, kept);
+      return { passes, moved: +moved.toFixed(4), offFloor };
+    }, settings);
+
+  // Set aim assist at 1 reaches ASSIST.setStep.radius (1.2 m) from the spot: a pass that comes down within
+  // 0.9 m of the hands is well inside it, and the feet stop within ASSIST.setStep.stop (3 cm) of the spot
+  const full = await handsOff({ setAimAssist: 1, autoJumpSet: false });
+  const near = full.passes.filter((p) => p.from < 0.9);
+  check(near.length >= 3, 'setter, hands off: passes come down within 0.9 m of the setter', full);
+  check(
+    near.every((p) => p.at < 0.1),
+    'setter, hands off, Set aim assist 1: the feet step onto every pass within 0.9 m, and the hands are under it when it arrives',
+    full,
+  );
+  check(full.offFloor === 0, 'setter, hands off, Auto jump set off: the body stays on the floor', full);
+  const none = await handsOff({ setAimAssist: 0, autoJumpSet: false });
+  check(none.passes.length >= 3 && none.moved === 0, 'setter, hands off, Set aim assist 0: nothing moves the body', none);
+  const jumps = await handsOff({ setAimAssist: 1, autoJumpSet: true });
+  check(
+    jumps.passes.filter((p) => p.air && p.at < 0.1).length >= 2,
+    'setter, hands off, Auto jump set on: the body goes up for a pass in system, and the hands are under it in the air',
+    jumps,
+  );
+
+  // The walk back between reps. The player runs off their spot and lets go, and from the moment they
+  // are walked back keeps jumping (a body off the floor is not jogged), so the walk back cannot arrive.
+  // `stick`: they also take the stick for a moment, which makes the walk back theirs. The first walk back:
+  // how long it lasted (`frames`), how often the screen dipped in it, the longest way the body went in
+  // one frame (m: a placement is a jump of metres) and how far from where the drill first put them it
+  // ended (`fromSpot`, m).
+  const walkBack = (mode, pos, stick) =>
+    page.evaluate(
+      ([mode, pos, stick]) => {
+        const g = window.__court;
+        const kept = g.settings.replays;
+        g.settings.replays = false;
+        window.start(mode, pos, false, null);
+        let dips = 0;
+        const dip = g.hud.dip;
+        g.hud.dip = function (...args) {
+          dips++;
+          return dip.apply(this, args);
+        };
+        const key = (code, on) => (on ? g.input.down(code) : g.input.up(code));
+        const spot = { x: g.me.pos.x, z: g.me.pos.z };
+        const walks = [];
+        let walk = null;
+        for (let f = 0; f < 60 * 60 && !walks.length; f++) {
+          key('KeyW', f >= 30 && f < 90);
+          key('ShiftLeft', f >= 30 && f < 90);
+          key('Space', g.userReturning && f % 4 < 2);
+          key('KeyA', stick && !!walk && walk.frames >= 20 && walk.frames < 30);
+          const me = g.me;
+          const before = { x: me.pos.x, z: me.pos.z };
+          const dipsBefore = dips;
+          const walking = g.userReturning;
+          g.play(1 / 60);
+          if (!walking && !g.userReturning) continue;
+          walk ??= { frames: 0, dips: 0, longest: 0 };
+          walk.frames++;
+          walk.dips += dips - dipsBefore;
+          walk.longest = +Math.max(walk.longest, Math.hypot(me.pos.x - before.x, me.pos.z - before.z)).toFixed(3);
+          if (g.userReturning) continue;
+          walk.fromSpot = +Math.hypot(me.pos.x - spot.x, me.pos.z - spot.z).toFixed(3);
+          walks.push(walk);
+          walk = null;
+        }
+        for (const code of ['KeyW', 'ShiftLeft', 'Space', 'KeyA']) key(code, false);
+        delete g.hud.dip;
+        g.settings.replays = kept;
+        return walks;
+      },
+      [mode, pos, stick],
+    );
+  const late = await walkBack('spike', 'OH', false);
+  check(
+    late.length >= 1 && late[0].dips === 1 && late[0].longest > 1 && late[0].fromSpot < 0.05,
+    'spike drill: a player who is not back in time is put on their spot, and the screen dips once',
+    late,
+  );
+  const theirs = await walkBack('spike', 'OH', true);
+  check(
+    theirs.length >= 1 && theirs.every((w) => w.dips === 0 && w.longest < 0.5),
+    'spike drill: a player who takes the stick during the walk back is never put anywhere, and the screen does not dip',
+    theirs,
+  );
+  check(
+    late.length >= 1 && theirs.length >= 1 && theirs[0].frames > late[0].frames,
+    'spike drill: the game waits longer for a player who took the stick than for one who did not',
+    { late, theirs },
+  );
+  const rally = await walkBack('rally', 'L', false);
+  check(
+    late.length >= 1 && rally.length >= 1 && rally[0].dips === 1 && rally[0].frames < late[0].frames,
+    'mini rally: a libero who is not back is put on their spot sooner than a drill would, and the screen dips',
+    { rally, late },
   );
 }
 
