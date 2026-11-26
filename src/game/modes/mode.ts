@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { PositionId, ServeKind, Settings } from '../../config';
+import type { DrillSettings, PositionId, ServeKind } from '../../config';
 import type { Emitter } from '../../core/events';
 import type { Athlete } from '../athlete';
 import type { AiHost, Brain } from '../brains';
@@ -77,7 +77,7 @@ export interface DrillHost extends AiHost {
   readonly me: Athlete;
   /** a command key was pressed (`COMMAND_KEYS`: the calls, their block, the next feed). True once for each press */
   keyPressed(code: string): boolean;
-  readonly settings: Settings;
+  readonly settings: DrillSettings;
   /** the serve the user has picked: the Serve Drill sets it, the contact system reads it */
   serveKind: ServeKind;
   /** an autopilot plays the user's athlete (the start screen's demo) */

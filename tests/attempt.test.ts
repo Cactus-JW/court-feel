@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { COURT, FX } from '../src/config';
+import { CONTACT, COURT } from '../src/config';
 import { AttemptTracker, drillBall, type AttemptAction } from '../src/game/attempt';
 import { SETTER_KEY_LABELS, TOUCH_KEY_LABELS } from '../src/ui/touchControls';
 import { translateKeyMarkup } from '../src/ui/hud';
@@ -113,7 +113,7 @@ describe('the last attempt (what R replays)', () => {
     const tr = new AttemptTracker();
     tr.contact(0.2, 'spike', 'Good', REACH, FEET, BALL);
     const far = (t: number) => v(0, 2.5, -6 - t); // on the other side of the net
-    expect(far(0).distanceTo(REACH)).toBeGreaterThan(FX.attemptRange);
+    expect(far(0).distanceTo(REACH)).toBeGreaterThan(CONTACT.attemptRange);
     let t = fly(tr, act('pass'), 0.5, 1.2, far, REACH, FEET);
     tr.step(t, null, UP, far(t), REACH, FEET);
     // a swing at a ball that is already down (between reps)
@@ -129,7 +129,7 @@ describe('the last attempt (what R replays)', () => {
     const high = (t: number) => v(4 - t, 6, 0.8); // the set, still on its way
     const swing = act('swing');
     const t = fly(tr, swing, 0.5, 0.8, high, REACH, FEET);
-    expect(high(t).distanceTo(REACH)).toBeGreaterThan(FX.attemptRange);
+    expect(high(t).distanceTo(REACH)).toBeGreaterThan(CONTACT.attemptRange);
     swing.resolved = true;
     tr.contact(t, 'spike', 'Miss', REACH, FEET, BALL);
     expect(tr.last).toMatchObject({ kind: 'whiff' });
@@ -211,7 +211,7 @@ describe('the last attempt (what R replays)', () => {
     const theirs = (t: number) => v(2 + t, 5, 0.6); // the set, at the net
     const swing = act('swing');
     const t = fly(tr, swing, 2, 2.3, theirs, REACH, FEET, true, 2, false);
-    expect(theirs(t).distanceTo(REACH)).toBeGreaterThan(FX.attemptRange);
+    expect(theirs(t).distanceTo(REACH)).toBeGreaterThan(CONTACT.attemptRange);
     swing.resolved = true;
     tr.contact(t, 'spike', 'Miss', REACH, FEET, BALL);
     expect(tr.last).toMatchObject({ t: 1, kind: 'pass' });
@@ -225,7 +225,7 @@ describe('the last attempt (what R replays)', () => {
     tr.ballDown(t, 0, COURT.halfLength + 1, FEET, { ...HOME, touchT: 0 });
     // still holding: ball B (touched at t = 8) never comes near and lands in at t = 9
     const far = (tt: number) => v(4, 2, 8 - (tt - 8));
-    expect(far(8).distanceTo(REACH)).toBeGreaterThan(FX.attemptRange);
+    expect(far(8).distanceTo(REACH)).toBeGreaterThan(CONTACT.attemptRange);
     fly(tr, hold, 8, 9, far, REACH, FEET, true, 8);
     expect(tr.last).toMatchObject({ kind: 'whiff' }); // ball A, on record once ball B is in the air
     expect(tr.last!.t).toBeCloseTo(1, 2);

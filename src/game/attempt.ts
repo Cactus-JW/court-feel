@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COURT, FX } from '../config';
+import { CONTACT, COURT } from '../config';
 import type { Grade } from './athlete';
 import type { TouchKind } from './ballEntity';
 import type { V3 } from '../physics/ball';
@@ -91,7 +91,8 @@ export class AttemptTracker {
       // the game graded it a MISS: a rep if the ball was theirs to hit (however far off the swing
       // was), or anyone's ball within a step and a reach. A click with no ball up, at their own
       // ball just played, or while teammates play it far away is not
-      if (o && (o.d <= FX.attemptRange || (o.mine && o.d < Infinity))) this.set(t, 'whiff', point, body, _b.set(ball.x, ball.y, ball.z));
+      if (o && (o.d <= CONTACT.attemptRange || (o.mine && o.d < Infinity)))
+        this.set(t, 'whiff', point, body, _b.set(ball.x, ball.y, ball.z));
       return;
     }
     const good = grade === 'Perfect' || grade === 'Good';
@@ -189,7 +190,7 @@ export class AttemptTracker {
 
   /** a platform, hands or a block the ball came close to and never met: on record, unless something newer is */
   private missed(o: { t: number; d: number; point: THREE.Vector3; body: THREE.Vector3; ball: THREE.Vector3 }): boolean {
-    if (o.d > FX.attemptRange || (this.last && o.t < this.last.t)) return false;
+    if (o.d > CONTACT.attemptRange || (this.last && o.t < this.last.t)) return false;
     this.set(o.t, 'whiff', o.point, o.body, o.ball);
     return true;
   }

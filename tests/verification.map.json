@@ -578,7 +578,7 @@
       "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
     },
     "CONTACT": {
-      "unit": ["defenceForms", "float", "gameplay", "menu", "playerServe", "setting"],
+      "unit": ["attempt", "defenceForms", "float", "gameplay", "menu", "playerServe", "setting"],
       "trace": ["free/OH/good"],
       "note": "Measured: with every number of the section moved by 2%, this is the first run of the trace to play differently. Others may too: the comparison explains only the first."
     },

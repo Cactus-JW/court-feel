@@ -10,6 +10,7 @@
 
 import { ASSIST, type SetLevel } from './skills';
 import type { BodyOverride, Hand, PositionId } from './body';
+import type { DrillSettings } from './drills';
 import type { VenueId } from './venues';
 import { AUDIO, CAMERA } from './display';
 
@@ -121,7 +122,7 @@ export const QUALITY: {
 };
 
 /** user-adjustable settings (persisted) */
-export interface Settings {
+export interface Settings extends DrillSettings {
   sensitivity: number;
   fov: number;
   /** the field of view while the touch controls are on (a phone) */
@@ -132,8 +133,6 @@ export interface Settings {
   slowmoAssist: boolean;
   /** time slows for your set's catch and release (on by default; the same on every level) */
   setSlowmo: boolean;
-  /** your body jumps by itself to set a pass in system (the jump set; on by default). Off: the jump is yours (Space) */
-  autoJumpSet: boolean;
   /**
    * your set's timing cues: the ring that closes on the ball as it reaches your hands, the bar
    * beside it and its pips, and the load tone. Off, you set by feel and the windows are wider (ASSIST.setByFeel)
@@ -145,22 +144,15 @@ export interface Settings {
   setAimAssist: number;
   /** set difficulty: how wide the green, the good band and the clean catch are (SET_LEVELS) */
   setLevel: SetLevel;
-  /** when you set: the hitter you picked stays picked for the next ball (off: back to the outside) */
-  keepSetPick: boolean;
-  /** when you set: rings on the floor where your hitters hit from (off by default: the marker over the hitter and the arc say it) */
-  hitterSpots: boolean;
   /** aim assist (0..1) for every touch but your set: a little more reach, a drift towards the ball in the air */
   aimAssist: number;
   /** the ring where the ball will land */
   landingMarker: boolean;
-  /** the Spike and Serve Drills: the spot your run-up takes off from, and GO when to start it */
-  runUpGuide: boolean;
   /** in the air, the collar around the crosshair: where a swing now would land in the timing window */
   spikeCollar: boolean;
   replays: boolean;
   shake: number;
   volume: number;
-  firstPerson: boolean;
   /**
    * the key hint line at the bottom of the screen. Off by default (2026-11-22: the screen is for
    * the court). Saved before then as `showHints`, which was on for everyone: that is not carried over.
