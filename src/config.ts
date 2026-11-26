@@ -1139,6 +1139,73 @@ export const RECEIVE_DRILL = {
   slack: 1.2,
 } as const;
 
+/**
+ * The Spike drill (src/game/modes/spikeDrill.ts): the coach tosses to your setter (`COACH_TOSS`),
+ * the setter sets your lane and you attack a target zone. Tuned by play and first seen in the
+ * drill's first commit (8c7183c, 2026-11-02), apart from the ones said otherwise.
+ * - `cast`: your setter's and the coach's kit seeds, and where the coach stands on your court,
+ *   turned `coach.yaw` rad when placed.
+ * - `zones`: the target zones on their court, each a rectangle from `x0` to `x1` and `z0` to `z1`.
+ *   `pin` is for a left-side attacker and is mirrored for the opposite and the setter. A middle
+ *   hits zone 1 or zone 5 (`middle`, 729d7bb, 2026-11-02).
+ * - `block` (ce94650, 2026-11-03): key B puts up a pin blocker fronting your lane (`pin`) and then
+ *   a middle closing next to them (`middle`). Each may shuffle `range` m along the net from home,
+ *   and the middle closes `closeInside` m inside the attack point. They stand at z = `homeZ`, and
+ *   one that is off is parked at `park` in their free zone (mirrored for the first). The shadow on
+ *   their floor is drawn for hands reaching `handsAboveNet` m over the tape.
+ * - `feed.setterApexAbove`: as the setter you attack the coach's toss, which tops out this much
+ *   higher than a set to that lane would.
+ * - `guide`: a set that tops out less than `fastSetApex` m over your contact needs the run to
+ *   start before the set, so its run is planned from the pass. GO is given only for a run that
+ *   ends within `goError` m of the spot (659dff6, 2026-11-02); its pulse is `RUN_UP_GO`.
+ * - `timing`: the first rep starts `intro` s after the drill does (`lessonIntro` in the first-run
+ *   lesson, 1dd9e8a, 2026-11-04). The coach's arm starts `toss` s into a rep and the ball leaves
+ *   at `release`. A rep nobody ended is over `liveMax` s after the toss and the result
+ *   stays up `result` s.
+ * - `points`: by the grade of your contact (`perfect`, `good`, `other`), one for every km/h over
+ *   `speedOver`, `kill` when it lands in their court and `onTarget` more inside the zone. A ball
+ *   tooled off their block scores the grade plus `tooled` (ce94650).
+ * - `crowd`: for a kill off a Perfect contact, any other good kill, and everything else.
+ * - `say`: the opening line, the line when you change the block (ce94650) and when you call a set
+ *   (729d7bb).
+ * - `slack` (142263c, 2026-11-02, and the same from 729d7bb when you call another set).
+ * Two numbers stay in the drill: the 3 block levels B cycles through and the conversion from m/s
+ * to km/h.
+ */
+export const SPIKE_DRILL = {
+  cast: {
+    seed: { setter: 11, coach: 3 },
+    coach: { x: 3.6, z: 6.4, yaw: 0.35 },
+  },
+  zones: {
+    pin: [
+      { name: 'Deep line', x0: -4.5, x1: -1.8, z0: -9, z1: -6 },
+      { name: 'Deep cross', x0: 1.8, x1: 4.5, z0: -9, z1: -6 },
+      { name: 'Seam', x0: -1.5, x1: 1.5, z0: -7.5, z1: -4.5 },
+      { name: 'Sharp cut', x0: 1.5, x1: 4.5, z0: -4.2, z1: -1.5 },
+      { name: 'Line short', x0: -4.5, x1: -2, z0: -4.5, z1: -2 },
+    ],
+    middle: [
+      { name: 'Zone 1 (deep left)', x0: -4.5, x1: -1.5, z0: -9, z1: -5.6 },
+      { name: 'Zone 5 (deep right)', x0: 1.5, x1: 4.5, z0: -9, z1: -5.6 },
+    ],
+  },
+  block: {
+    pin: { range: 1.5, closeInside: 0, seed: 47 },
+    middle: { range: 4.6, closeInside: 0.95, seed: 48 },
+    homeZ: -0.5,
+    park: { x: 6.3, z: -2.5 },
+    handsAboveNet: 0.35,
+  },
+  feed: { setterApexAbove: 0.6 },
+  guide: { fastSetApex: 1, goError: 0.6 },
+  timing: { intro: 1.2, lessonIntro: 0.45, toss: 0.35, release: 0.62, liveMax: 7, result: 1.9 },
+  points: { perfect: 100, good: 60, other: 30, tooled: 50, speedOver: 70, kill: 50, onTarget: 100 },
+  crowd: { perfect: 1, good: 0.6, other: 0.1 },
+  say: { intro: 3.6, block: 1.8, call: 1.6 },
+  slack: 0.6,
+} as const;
+
 export const ASSIST = {
   /** 0..1 default aim assist strength */
   aim: 0.55,
