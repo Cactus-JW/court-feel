@@ -742,7 +742,10 @@ describe('left-handed players (settings: hitting hand)', () => {
     const { s, events } = court();
     const cs = s.sim.contact;
     const ball = s.sim.ball;
-    const a = s.athlete('OPP', 1, { x: 1, z: 9.6, yaw: 0 }, { build: { hand } });
+    // a hitting hand is a player's setting, so the server is a player: no aim assist, and the hand
+    // reaches `CONTACT.spikeReach` and no further (an athlete nobody plays has `ASSIST.ai` more)
+    const a = s.athlete('OPP', 1, { x: 1, z: 9.6, yaw: 0 }, { user: true, build: { hand } });
+    expect(cs.reach(a)).toBe(CONTACT.spikeReach);
     expect(cs.serveToss(a)).toBe(true);
     const tossX = ball.pos.x - a.pos.x;
     const info = cs.ideal(a, s.sim.simTime, 2.0)!;
