@@ -5,7 +5,7 @@ import { SetterBrain } from '../src/ai/setter';
 import { Athlete, FEET_OFF_NET } from '../src/game/athlete';
 import type { ContactEvent, SetOption } from '../src/game/contact';
 import { SETTER_SPOT } from '../src/game/plays';
-import { autoSetJump, HANDS_FWD, hopDrift, planSetJump, setHop, takeoffSpot } from '../src/game/setJump';
+import { HANDS_FWD, hopDrift, planSetJump, setHop, takeoffSpot } from '../src/game/setJump';
 import { setTouch, setWindow, type SetShape } from '../src/game/setTiming';
 import type { V3 } from '../src/physics/ball';
 import { DT, scene } from './scene';
@@ -22,14 +22,12 @@ function stage(o: { to?: { x: number; z: number }; steep?: boolean; aim?: V3; ai
   const options: SetOption[] = [{ target: OH_TARGET, apex: OH_TARGET.y + 1.65, hitter: null, label: 'OH High', key: 'OH' }];
   /** the body and the ball as an AI setter's set leaves the hands */
   const aiSets: { t: number; feetY: number; vy: number; ballY: number }[] = [];
+  /** Settings: Auto jump set. The player's seat sends the body up by itself for a ball that is theirs to set */
+  const settings = { autoJumpSet: false };
   const s = scene({
     seed: o.seed ?? 3,
     hooks: {
       setLevel: () => 'easy',
-      // Settings: Auto jump set, as the game runs it (Game.userSetJump): the player's body goes up by itself
-      userSetJump: () => {
-        if (a.jumpSets) autoSetJump(a, cs.setCatch(a)?.jump ?? null, sim.simTime);
-      },
       aiContact: (b) => aiSets.push({ t: sim.simTime, feetY: b.pos.y, vy: b.vel.y, ballY: ball.pos.y }),
     },
     drill: {
@@ -37,17 +35,24 @@ function stage(o: { to?: { x: number; z: number }; steep?: boolean; aim?: V3; ai
       setOptions: () => options,
       setPick: () => 'OH',
       canServe: () => false,
+      // the pass is the player's to set: their arms get ready for a set, and their seat may send them up for it
+      userSetsNext: () => true,
     },
   });
   const { sim } = s;
   const ball = sim.ball;
   const cs = sim.contact;
-  const a = s.athlete('S', 1, { x: SETTER_SPOT.x, z: SETTER_SPOT.z, yaw: Math.PI / 2 }, { user: !o.ai });
+  const a = s.athlete(
+    'S',
+    1,
+    { x: SETTER_SPOT.x, z: SETTER_SPOT.z, yaw: Math.PI / 2 },
+    { user: o.ai ? false : { autoJumpSet: () => settings.autoJumpSet } },
+  );
   const to = o.to ?? { x: SETTER_SPOT.x - HANDS_FWD, z: SETTER_SPOT.z };
   // (steep: popped up from close by, so it comes almost straight down)
   const from = o.steep ? { x: to.x + 0.3, y: 0.85, z: to.z + 0.6 } : { x: -1, y: 0.85, z: 6.4 };
   s.send({ from, to: o.aim ?? { x: to.x, y: a.height + 0.17, z: to.z }, apex: 4.4 }, { athlete: null, kind: 'pass', side: 1 });
-  return { s, sim, ball, cs, a, aiSets };
+  return { s, sim, ball, cs, a, aiSets, settings };
 }
 
 /**
@@ -56,9 +61,10 @@ function stage(o: { to?: { x: number; z: number }; steep?: boolean; aim?: V3; ai
  * floor spot, presses as the ball reaches the hands and releases at the top of the bar.
  */
 function rep(o: { jump?: boolean; space?: number; to?: { x: number; z: number }; steep?: boolean; aim?: V3 } = {}) {
-  const { s, sim, ball, cs, a } = stage(o);
+  const { s, sim, ball, cs, a, settings } = stage(o);
+  settings.autoJumpSet = !!o.jump;
+  // (the seat says so itself from the first step on: the floor spot is asked for before that step)
   a.jumpSets = !!o.jump;
-  a.airIntent = 'set';
   // stand on the floor spot (it is where the ball comes down onto the hands for the set you will take)
   const spot = cs.setSpot(a, { x: 0, y: 0, z: 0 })!;
   a.place(spot.x, spot.z, Math.PI / 2);
@@ -221,7 +227,8 @@ describe('an AI setter jump-sets too', () => {
 describe('running into a jump set', () => {
   /** the setter arrives at the take-off spot at the moment to plant, still moving at `speed` m/s along the net */
   function runIn(speed: number, off = 0) {
-    const { s, sim, ball, cs, a } = stage();
+    const { s, sim, ball, cs, a, settings } = stage();
+    settings.autoJumpSet = true;
     a.jumpSets = true;
     const plan = planSetJump(a, ball.ensurePrediction(sim.env, sim.simTime), sim.simTime)!;
     // the pass flies until the next step is the moment to plant

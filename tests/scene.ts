@@ -5,6 +5,7 @@ import type { Touch } from '../src/game/ballEntity';
 import type { Brain } from '../src/game/brains';
 import type { ContactEvent } from '../src/game/contact';
 import type { Outcome } from '../src/game/judge';
+import type { SeatHost } from '../src/game/seat';
 import { Simulation, type SimDrill, type SimulationHooks } from '../src/game/simulation';
 import type { V3 } from '../src/physics/ball';
 import { solveApex, solveFixedTime, solveSpeedToFloor } from '../src/physics/solve';
@@ -71,14 +72,15 @@ export interface Scene {
   teams: TeamAI[];
   /**
    * An athlete on the court, facing the net unless `yaw` says otherwise. `user` gives them a seat
-   * (the first one is `sim.me`); `brain` makes the brain the simulation steps for them; `build` is
-   * the athlete's own body and hand.
+   * (the first one is `sim.me`), and may be what that seat's host answers (the player's settings:
+   * auto jump set); `brain` makes the brain the simulation steps for them; `build` is the
+   * athlete's own body and hand.
    */
   athlete(
     role: PositionId,
     side: 1 | -1,
     at: { x: number; z: number; yaw?: number },
-    o?: { user?: boolean; brain?: (a: Athlete) => Brain; build?: ConstructorParameters<typeof Athlete>[2] },
+    o?: { user?: boolean | SeatHost; brain?: (a: Athlete) => Brain; build?: ConstructorParameters<typeof Athlete>[2] },
   ): Athlete;
   /**
    * Six athletes under a real TeamAI, stepped as the game steps it: after the ball and the judge,
@@ -148,7 +150,7 @@ export function scene(o: SceneOptions = {}): Scene {
     const a = new Athlete(role, side, opts.build);
     a.place(at.x, at.z, at.yaw ?? a.yaw);
     sim.athletes.push(a);
-    if (opts.user) sim.addSeat(a);
+    if (opts.user) sim.addSeat(a, opts.user === true ? {} : opts.user);
     if (opts.brain) sim.setBrain(a, opts.brain(a));
     return a;
   };
