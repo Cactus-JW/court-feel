@@ -195,7 +195,9 @@ starts with `feat` or `fix`:
   trace's runs, or a line `Unchecked: <reason>` stands under "What no check
   holds". `scripts/red-on-base.mjs` is what tries the tests: this checkout, with
   `src/` as it is on the base. A test of a function the base does not have
-  cannot run there, and that is red too.
+  cannot run there, and that is red too. So is a test that does not end there:
+  the run is stopped after two minutes and the file is named, because a fix for
+  a loop that never ends comes with the test that states it.
 - **It touches only what is shown and heard** (the HUD, the menus, effects,
   sound, the camera, the world, the look and sound sections of config). Then a
   test, the end-to-end run, a `verify-court-feel` feature file or a trace run
@@ -207,7 +209,9 @@ that nobody has listed is the play. The decision is a pure function of the
 title, the changed paths, the tests that are red on the base and the
 description, and `tests/bringsACheck.test.ts` holds it case by case. Like the
 architecture rules, the gate that judges a pull request is the base branch's.
-Every failure ends with what to do next.
+Every failure says what to do and ends with how to have the gate look again: a
+push, when a test or a run mends it, or the command that runs the job again,
+when the description does (an edit to a description starts no run).
 
 What it cannot tell:
 

@@ -220,8 +220,16 @@ function described(body) {
 
 // ---- the decision
 
-const RERUN = 'Then run this job again.';
+/**
+ * How a failure ends: with the way to have the gate look again, which depends on what mends it.
+ * A new test or trace run is a commit, and the push runs every job again. An edit to the description
+ * starts no run (the workflow does not listen for one), so the job has to be run again by hand: the
+ * command is given, with the id of the run the failure is printed in when there is one.
+ */
+const AFTER_PUSH = 'then push the commit: that runs this again';
+const afterEdit = (runId) => `then run \`gh run rerun ${runId || '<run id>'} --failed\`: editing a description starts no run`;
 const SAY_WHY = `write a line "Unchecked: <why no check can hold it>" under "## ${NOT_HELD}" in the description`;
+const sentence = (text) => `${text[0].toUpperCase()}${text.slice(1)}.`;
 
 /** `src/config.ts#AI` as a reader says it */
 const said = (path) => path.replace(/#(.*)$/, ' ($1)');
@@ -255,7 +263,7 @@ export function asksRedOnBase({ title, paths, removed = [] }) {
   return GATED.includes(typeOf(title)) && paths.some((path) => tierOf(path) === 'play') && changedTests(paths, removed).length > 0;
 }
 
-export function decide({ title, paths, removed = [], redOnBase = [], body }) {
+export function decide({ title, paths, removed = [], redOnBase = [], body, runId }) {
   const verdict = { gated: false, tier: null, touched: [], heldBy: [], unchecked: [], notes: [], failures: [] };
   const type = typeOf(title);
   if (!GATED.includes(type)) {
@@ -269,16 +277,18 @@ export function decide({ title, paths, removed = [], redOnBase = [], body }) {
   verdict.gated = true;
   const { held, unchecked, stray } = described(body);
   verdict.unchecked = unchecked;
+  /** the ending of a failure that only an edit to the description mends */
+  const rerun = sentence(afterEdit(runId));
 
   // ---- the description says how the change is held
   for (const section of SECTIONS) {
     const text = held.get(section.toLowerCase());
     if (text === undefined)
       verdict.failures.push(
-        `The description has no "## ${section}" section. Add it from .github/pull_request_template.md and ${SECTION_ASKS[section]}. ${RERUN}`,
+        `The description has no "## ${section}" section. Add it from .github/pull_request_template.md and ${SECTION_ASKS[section]}. ${rerun}`,
       );
     else if (text.trim() === '')
-      verdict.failures.push(`"## ${section}" still holds only its placeholder comment. In its place, ${SECTION_ASKS[section]}. ${RERUN}`);
+      verdict.failures.push(`"## ${section}" still holds only its placeholder comment. In its place, ${SECTION_ASKS[section]}. ${rerun}`);
   }
 
   // ---- the change brings a check, or says why not
@@ -296,7 +306,8 @@ export function decide({ title, paths, removed = [], redOnBase = [], body }) {
   const red = tests.filter((path) => redOnBase.includes(path));
   const runs = present.filter((path) => isCheck('trace', path));
   if (verdict.tier === 'play') {
-    if (red.length) verdict.heldBy.push(`${listed(red)} ${red.length > 1 ? 'fail' : 'fails'} on the base branch's code`);
+    // red: it fails there, cannot run there or does not end there (scripts/red-on-base.mjs says which)
+    if (red.length) verdict.heldBy.push(`${listed(red)} ${red.length > 1 ? 'are' : 'is'} red on the base branch's code`);
   } else {
     const checks = [...tests, ...present.filter((path) => isCheck('e2e', path) || isCheck('feature', path))];
     if (checks.length) verdict.heldBy.push(`a check changed with it: ${listed(checks)}`);
@@ -307,23 +318,27 @@ export function decide({ title, paths, removed = [], redOnBase = [], body }) {
   if (verdict.heldBy.length) return verdict;
 
   const moveIt = `There is an "Unchecked:" line in the description, but not where it is looked for: move it under "## ${NOT_HELD}".`;
+  /** the way out that is a commit, and then the one that is a line in the description: each ends with how the gate looks again */
+  const ways = (commit) => `${sentence(`${commit}, ${AFTER_PUSH}`)} ${sentence(`or ${SAY_WHY}, ${afterEdit(runId)}`)}`;
   if (verdict.tier === 'play') {
     const what = `This ${type} changes the play (${listed(play)})`;
-    const orElse = `or add a run to the trace (${where('trace')}), or ${SAY_WHY}`;
+    const orARun = `or add a run to the trace (${where('trace')})`;
     verdict.failures.push(
       stray
-        ? `${what} and brings no check. ${moveIt} ${RERUN}`
+        ? `${what} and brings no check. ${moveIt} ${rerun}`
         : tests.length
           ? `${what} and its changed tests (${listed(tests)}) pass on the base branch's code too, so none of them shows the change. ` +
-            `Make one state the new fact so that it fails there (\`node scripts/red-on-base.mjs origin/main\` says which do), ${orElse}. ${RERUN}`
-          : `${what} and brings no check. Add or change a test in tests/ that fails on the base branch's code, ${orElse}. ${RERUN}`,
+            ways(
+              `make one state the new fact so that it fails there (\`node scripts/red-on-base.mjs origin/main\` says which do), ${orARun}`,
+            )
+          : `${what} and brings no check. ${ways(`add or change a test in tests/ that fails on the base branch's code, ${orARun}`)}`,
     );
   } else {
     const what = `This ${type} changes what the player sees and hears (${listed(shown)}) and brings no check.`;
     verdict.failures.push(
       stray
-        ? `${what} ${moveIt} ${RERUN}`
-        : `${what} Add or change a test in tests/, a check in ${where('e2e')} or a feature file in ${where('feature')}, or ${SAY_WHY}. ${RERUN}`,
+        ? `${what} ${moveIt} ${rerun}`
+        : `${what} ${ways(`add or change a test in tests/, a check in ${where('e2e')} or a feature file in ${where('feature')}`)}`,
     );
   }
   return verdict;

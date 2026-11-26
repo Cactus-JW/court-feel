@@ -19,6 +19,8 @@ export interface Change {
   redOnBase?: readonly string[];
   /** the pull request's description, as written (markdown) */
   body: string | null;
+  /** the id of the CI run this is decided in (`GITHUB_RUN_ID`): a failure names it in the command that runs the job again */
+  runId?: string;
 }
 
 export interface Verdict {

@@ -121,7 +121,7 @@ console.log(`  against: ${base.slice(0, 7)}, ${changed.paths.length} changed fil
 
 let red = [];
 if (asksRedOnBase({ title: pr.title, paths, removed })) {
-  const results = redOnBase(base, changedTests(paths, removed));
+  const results = await redOnBase(base, changedTests(paths, removed));
   red = results.filter((r) => r.red).map((r) => r.file);
   console.log(`  its changed tests, against src/ as it is on ${base.slice(0, 7)}:`);
   console.log(
@@ -131,7 +131,8 @@ if (asksRedOnBase({ title: pr.title, paths, removed })) {
   );
 }
 
-const verdict = decide({ title: pr.title, paths, removed, redOnBase: red, body: pr.body });
+// in CI a failure names this run in the command that runs the job again
+const verdict = decide({ title: pr.title, paths, removed, redOnBase: red, body: pr.body, runId: process.env.GITHUB_RUN_ID });
 /** `src/config.ts#AI` as a reader says it, and a long list cut short */
 const said = (files, most = 12) =>
   files

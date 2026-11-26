@@ -384,15 +384,55 @@ describe('a feat or a fix says how it is held and what no check holds', () => {
   });
 });
 
-describe('every failure says what to do next', () => {
-  it('ends by saying how to have the gate look again', () => {
-    const failures = [
-      ...feat([PLAY]).failures,
-      ...feat([SHOWN]).failures,
-      ...feat([PLAY, TEST]).failures,
-      ...decide({ title: 'fix: x', paths: [], body: '' }).failures,
-    ];
-    expect(failures.length).toBeGreaterThan(4);
-    for (const failure of failures) expect(failure).toMatch(/Then run this job again\.$/);
+describe('every failure ends with how to have the gate look again', () => {
+  /** the id of the CI run a failure is printed in (`GITHUB_RUN_ID`) */
+  const RUN = '45871704444';
+  const RERUN = /run `gh run rerun 45871704444 --failed`: editing a description starts no run\.$/;
+  const inCi = (paths: string[], more: { body?: string | null; title?: string } = {}) =>
+    decide({ title: 'feat(block): the ball comes off the hands the way it met them', paths, body: described(), runId: RUN, ...more });
+
+  /** the failures only an edit to the description mends: two sections missing, one empty, an `Unchecked:` line in the wrong place */
+  const ofTheDescription = () => [
+    ...inCi([], { title: 'fix: the whistle', body: '' }).failures,
+    ...inCi([], { title: 'fix: the whistle', body: '## How it is held\n## What no check holds\nNothing.' }).failures,
+    ...inCi([PLAY], { body: described('Nothing.').replace('The block reads the hands.', 'Unchecked: the feel.') }).failures,
+  ];
+  /** the failures a new test or trace run mends: the play with no check, the play with tests that are green on the base, the shown tier with no check */
+  const ofTheChecks = () => [...inCi([PLAY]).failures, ...inCi([PLAY, TEST]).failures, ...inCi([SHOWN]).failures];
+
+  it('a failure only the description can mend ends with the command that runs the job again, with the id of the run it failed in', () => {
+    const failures = ofTheDescription();
+    expect(failures).toHaveLength(4);
+    for (const failure of failures) {
+      expect(failure).toMatch(RERUN);
+      // a push would run it again too, but nothing here needs a commit
+      expect(failure).not.toMatch(/push/);
+    }
+  });
+
+  it('a failure a new test or trace run mends says that pushing the commit runs it again, and keeps the command for the way out through the description', () => {
+    const failures = ofTheChecks();
+    expect(failures).toHaveLength(3);
+    for (const failure of failures) {
+      expect(failure).toMatch(/, then push the commit: that runs this again\. Or write a line "Unchecked: <why no check can hold it>"/);
+      expect(failure).toMatch(RERUN);
+    }
+  });
+
+  it('outside CI there is no run to name, and the command shows where its id goes', () => {
+    for (const failure of [...feat([PLAY]).failures, ...decide({ title: 'fix: x', paths: [], body: '' }).failures])
+      expect(failure).toMatch(/`gh run rerun <run id> --failed`/);
+  });
+
+  it('no failure says "run this job again" without saying how', () => {
+    for (const failure of [...ofTheDescription(), ...ofTheChecks()]) expect(failure).not.toMatch(/run this job again/i);
+  });
+
+  it('every failure says what is wrong, then one or two sentences to act on', () => {
+    for (const failure of [...ofTheDescription(), ...ofTheChecks()]) {
+      const sentences = failure.split(/\. (?=[A-Z])/);
+      expect(sentences.length, failure).toBeGreaterThanOrEqual(2);
+      expect(sentences.length, failure).toBeLessThanOrEqual(3);
+    }
   });
 });
