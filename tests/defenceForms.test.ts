@@ -4,6 +4,7 @@ import { BlockerBrain } from '../src/ai/blocker';
 import { Athlete, type PassForm } from '../src/game/athlete';
 import type { Brain } from '../src/game/brains';
 import type { ContactEvent } from '../src/game/contact';
+import contactSource from '../src/game/contact.ts?raw';
 import { Rng, yawFromDir } from '../src/core/mathx';
 import { makeBall, stepBall, type V3 } from '../src/physics/ball';
 import { solveFixedTime } from '../src/physics/solve';
@@ -13,11 +14,17 @@ import { DT, scene } from './scene';
 const H = new Athlete('L', 1).height;
 const TARGET = { x: 1, y: 2.35, z: 0.9, apex: 4 };
 /**
- * How far from the middle of the arms a diving defender nobody plays still reaches the ball (m):
- * the pass radius, what the aim assist the game gives an AI player adds (`ASSIST.ai`, 0.25 m for a
- * whole one: `ContactSystem.tryPass`), and the one arm out of a dive.
+ * What a whole aim assist adds to the reach of a pass (m). In the source it is an inline number of
+ * `ContactSystem.tryPass` (`assist * 0.25`) with no name in config, so it is copied here, and the
+ * first dive test fails when the line it is copied from changes.
  */
-const DIVE_REACH = CONTACT.passRadius + ASSIST.ai * 0.25 + CONTACT.diveOut.reach;
+const ASSIST_PASS_REACH = 0.25;
+/**
+ * How far from the middle of the arms a diving defender nobody plays still reaches the ball (m):
+ * the pass radius, what the aim assist the game gives an AI player adds (`ASSIST.ai`), and the one
+ * arm out of a dive.
+ */
+const DIVE_REACH = CONTACT.passRadius + ASSIST.ai * ASSIST_PASS_REACH + CONTACT.diveOut.reach;
 
 /**
  * A home defender standing at (0, 6) facing the net. A ball from `from` reaches `to` `T` s from now;
@@ -169,6 +176,13 @@ const spread = (xs: number[]) => Math.sqrt(mean(xs.map((x) => (x - mean(xs)) ** 
 const OVER = { x: 0, y: 0.5, z: -6.5, apex: 5.2 };
 
 describe('a dive (PLAYER.dive*, CONTACT.diveOut)', () => {
+  it('the reach these tests place the ball by is the reach the contact system gives a diving defender', () => {
+    // (`ASSIST_PASS_REACH` is a copy of an inline number: when it moves, or gets a name, read it from there)
+    expect(contactSource).toContain(
+      `CONTACT.passRadius) + assist * ${ASSIST_PASS_REACH} + hard * CONTACT.digLunge + (diving ? CONTACT.diveOut.reach : 0);`,
+    );
+  });
+
   it('slides along the floor: from a sprint about 3 m on the chest, and the diver is up only once the slide has stopped', () => {
     const slide = (run: number) => {
       const a = new Athlete('L', 1);
